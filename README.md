@@ -69,20 +69,30 @@ Required:
 
 Positional arguments:
   samfile               Input SAM can be added as the first positional argument after flagged options. 
-                         If not set teloclip will read from stdin.
+                          If not set teloclip will read from stdin.
 
 Optional:
-  --minClip MINCLIP    Require soft-clip to extend past ref contig end by at
-                       least N bases.
-  --maxBreak MAXBREAK  Tolerate max N unaligned bases at contig ends.
+  --minClip MINCLIP    Require clip to extend past ref contig end by at least N bases.
+                         Default: 1
+  --maxBreak MAXBREAK  Tolerate max N unaligned bases at contig ends. 
+                         Default: 50
   --motifs MOTIFS      If set keep only reads containing given motif/s from a comma delimited list 
-                         of strings. i.e. TTAGGG,CCCTAA
+                         of strings. By default also search for reverse complement of motifs. 
+                         i.e. TTAGGG,TTAAGGG will also match CCCTAA,CCCTTAA
+                         Default: None
+  --norev NOREV        If set do NOT search for reverse complement of specified motifs. 
+                         Default: False
+  --matchAny MATCHANY  If set motif match may occur in unclipped region of alignment.
+                         Defaut: False
   --version            Show program's version number and exit.
 ```
 
 ## Example usage
 
 ```
+# Create index of reference fasta
+samtools faidx ref.fa
+
 # Read input from file and write output to stout
 % teloclip --ref ref.fa.fai in.sam
 
@@ -92,14 +102,18 @@ Optional:
 # Filter alignments from BAM file, write sorted output to file
 % samtools view -h in.bam | teloclip --ref ref.fa.fai | samtools sort > out.bam
 
-# Map PacBio long-reads to ref assembly and filter for 
+# Map PacBio long-reads to ref assembly, filter for alignments clipped at contig ends, write to sorted bam
 % minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai | samtools sort > out.bam 
+
+# Map reads, exclude unmapped reads and non-primary/supplementary alignments. Report clipped reads as sorted bam.
+% minimap2 -ax map-pb ref.fa pacbio.fq.gz | samtools view -h -F 0x2308 | teloclip --ref ref.fa.fai | samtools sort > out.bam 
 
 # Map long-reads with MiniMap2 and retain only reads which extend past a cotig end
 # AND contain >=1 copy of the telomeric repeat "TTAGGG" or its reverse complement "CCCTAA"
 % minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai --motifs TTAGGG,CCCTAA | samtools sort > out.bam 
 
 ```
+
 
 ## Issues
 

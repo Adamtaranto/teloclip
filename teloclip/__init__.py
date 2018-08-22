@@ -34,6 +34,14 @@ def read_fai(fai):
 			ContigDict[li[0]]=int(li[1])
 	return ContigDict
 
+def addRevComplement(motifList):
+    revcompl = lambda x: ''.join([{'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N':'N'}[B] for B in x][::-1])
+    setList = list()
+    for motif in motifList:
+    	setList.append(motif)
+    	setList.append(revcompl(motif))
+    return set(setList)
+
 def splitCIGAR(SAM_CIGAR):
 	CIGARlist = list()
 	for x in re.findall('[0-9]*[A-Z]',SAM_CIGAR):
@@ -48,13 +56,23 @@ def checkClips(SAM_CIGAR):
 	rightClipLen = None
 	CIGARlist = splitCIGAR(SAM_CIGAR)
 	# Check if first segment is soft-clipped
-	if CIGARlist[0][1] == "S":
+	if CIGARlist[0][1] == "S" :
 		leftClipLen = int(CIGARlist[0][0])
 		if CIGARlist[1][1] == "M":
 			alnLen= int(CIGARlist[1][0])
 	# Check if last segment is soft-clipped
-	if CIGARlist[-1][1] == "S":
+	if CIGARlist[-1][1] == "S" :
 		rightClipLen = int(CIGARlist[-1][0])
 		if CIGARlist[-2][1] == "M":
 			alnLen= int(CIGARlist[-2][0])
 	return (leftClipLen, alnLen, rightClipLen)
+
+def isClipMotif(samline,motifList,leftClip,rightClip,leftClipLen,rightClipLen):
+	clipSeq = list()
+	SAM_SEQ	= 9
+	if leftClip:
+		clipSeq.append(samline[SAM_SEQ][0:leftClipLen])
+	if rightClip:
+		clipSeq.append(samline[SAM_SEQ][-rightClipLen:])
+	# True if either clipped end sequence contains at least one instance of any motif
+	return any(s in x for s in motifList for x in clipSeq)

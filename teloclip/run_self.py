@@ -10,13 +10,16 @@ def log(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 def mainArgs():
-	parser = argparse.ArgumentParser(description='Filter SAM file for soft-clipped alignments containing unassembled telomeric repeats.',prog='teloclip')
+	parser = argparse.ArgumentParser(description='Filter SAM file for clipped alignments containing unassembled telomeric repeats.',prog='teloclip')
 	# Input options
 	parser.add_argument('samfile', nargs='?', type=argparse.FileType('rU'), default=sys.stdin)
 	parser.add_argument('--refIdx',type=str,required=True,help='Path to fai index for reference fasta. Index fasta using `samtools faidx FASTA`')
-	parser.add_argument('--minClip',type=int,default=1,help='Require soft-clip to extend past ref contig end by at least N bases.')
+	parser.add_argument('--minClip',type=int,default=1,help='Require clip to extend past ref contig end by at least N bases.')
 	parser.add_argument('--maxBreak',type=int,default=50,help='Tolerate max N unaligned bases at contig ends.')
-	parser.add_argument('--motifs',type=str,default=None, help='If set keep only reads containing given motif/s from comma delimited list of strings. i.e. TTAGGG,CCCTAA')
+	parser.add_argument('--motifs',type=str,default=None, help='If set keep only reads containing given motif/s from comma delimited list of strings. \
+	By default also search for reverse complement of motifs. i.e. TTAGGG,TTAAGGG will also match CCCTAA,CCCTTAA')
+	parser.add_argument('--norev',default=False,action='store_true', help='If set do NOT search for reverse complement of specified motifs.')
+	parser.add_argument('--matchAny',default=False,action='store_true', help='If set motif match may occur in unclipped region of alignment.')
 	parser.add_argument('--version', action='version',version='%(prog)s {version}'.format(version=__version__))
 	args = parser.parse_args()
 	return args
@@ -40,9 +43,13 @@ def main():
 	#
 	if args.motifs:
 		motifList = args.motifs.split(",")
+		if not args.norev:
+			motifList = teloclip.addRevComplement(motifList)
 	# Read SAM from stdin
 	for line in args.samfile:
 		keepLine = False
+		leftClip = False
+		rightClip = False
 		if line[0][0] == "@":
 			sys.stdout.write(line)
 			continue
@@ -55,6 +62,7 @@ def main():
 				if (int(samline[SAM_POS]) <= args.maxBreak) and (leftClipLen >= (int(samline[SAM_POS]) + args.minClip)):
 					# Overhang is on contig left
 					keepLine = True
+					leftClip = True
 					keepCount += 1
 			# Check for right overhang
 			if rightClipLen:
@@ -63,6 +71,7 @@ def main():
 				alnEnd = int(samline[SAM_POS]) + alnLen 
 				# Check if overhang is on contig right end
 				if ((ContigLen - alnEnd) <= args.maxBreak) and (alnEnd + rightClipLen >= ContigLen +1 ):
+					rightClip = True
 					# Check if already found left OH
 					if not keepLine:
 						keepLine = True
@@ -72,8 +81,14 @@ def main():
 						log(str(samline[SAM_QNAME]) + " overhang on both ends of " + str(samline[SAM_RNAME]))
 						bothCount += 1
 			# Optional check for Telomeric repeat motifs
-			if args.motifs and keepLine:
+			if args.motifs and keepLine and args.matchAny:
 				if any(s in samline[SAM_SEQ] for s in motifList):
+					sys.stdout.write(line)
+					motifCount += 1
+				else:
+					removeCount += 1
+			elif args.motifs and keepLine:
+				if teloclip.isClipMotif(samline,motifList,leftClip,rightClip,leftClipLen,rightClipLen):
 					sys.stdout.write(line)
 					motifCount += 1
 				else:
