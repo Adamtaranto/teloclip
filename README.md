@@ -1,8 +1,13 @@
 # teloclip
 
-Filter SAM file for soft-clipped alignments containing unassembled telomeric repeats.
+Find soft-clipped alignments containing unassembled telomeric repeats.
+
+
+![teloclip_example](docs/teloclip_example_graphic.png)
+
 
 # Table of contents
+
 * [About teloclip](#about-teloclip)
 * [Options and usage](#options-and-usage)
     * [Installation](#installation)
