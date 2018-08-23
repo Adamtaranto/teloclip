@@ -2,10 +2,9 @@
 #python 3
 #Contact, Adam Taranto, aptaranto@ucdavis.edu
 
-######################################################################
-# Filter SAM file for soft-clipped alignments containing unassembled #
-# telomeric repeats.                                                 #
-######################################################################
+##########################################################################
+# Find soft-clipped alignments containing unassembled telomeric repeats. #
+##########################################################################
 
 import os
 import sys
