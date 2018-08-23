@@ -7,8 +7,7 @@ Find soft-clipped alignments containing unassembled telomeric repeats.
 * [About teloclip](#about-teloclip)
 * [Options and usage](#options-and-usage)
     * [Installation](#installation)
-    * [Usage](usage)
-        * [Examples](examples)
+    * [Example Usage](example-usage)
     * [Options](teloclip-options)
 * [Issues](issues)
 * [License](#license)
@@ -57,30 +56,7 @@ teloclip 0.0.1
 % teloclip --help
 ```
 
-## Usage
-
-![teloclip_example](docs/teloclip_example_graphic.png)
-
-*Additional filters*  
-
-  - Consider pre-filtering alignments with "samtools view" to remove non-primary 
-    / low quality alignments.
-  - Users may wish to exclude reads below a minimum length or read quality score 
-    to reduce the risk of incorrect alignments.
-
-*Extending contigs*  
-
-  - Before using terminal alignments identified by teloclip to extend contigs, 
-    inspect alignments in a genome browser that displays information about clipped 
-    reads, such as [IGV](https://github.com/igvteam/igv). Check for conflicting 
-    clipped sequences.
-  - After manually extending contigs the revised assembly should be re-polished 
-    using available long and short read data to correct indels present in the raw 
-    long-reads.
-  - Validate the final assembly by re-mapping long-read data and checking for 
-    alignments that extend into revised contig ends.
-
-### Examples
+## Example Usage
 
 teloclip requires an indexed reference fasta
 ```
@@ -113,6 +89,31 @@ Stream SAM records from aligner
 % minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai --motifs TTAGGG | samtools sort > out.bam 
 
 ```
+### Basic usage case
+
+![teloclip_example](docs/teloclip_example_graphic.png)
+
+### Recommended Quality Control
+
+**Additional filters**  
+
+  - Consider pre-filtering alignments with "samtools view" to remove non-primary 
+    / low quality alignments.
+  - Users may wish to exclude reads below a minimum length or read quality score 
+    to reduce the risk of incorrect alignments.
+
+**Extending contigs**  
+
+  - Before using terminal alignments identified by teloclip to extend contigs, 
+    inspect alignments in a genome browser that displays information about clipped 
+    reads, such as [IGV](https://github.com/igvteam/igv). Check for conflicting 
+    clipped sequences.
+  - After manually extending contigs the revised assembly should be re-polished 
+    using available long and short read data to correct indels present in the raw 
+    long-reads.
+  - Validate the final assembly by re-mapping long-read data and checking for 
+    alignments that extend into revised contig ends.
+
 
 ## Options
 
