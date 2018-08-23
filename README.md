@@ -8,6 +8,9 @@ Find soft-clipped alignments containing unassembled telomeric repeats.
 * [Options and usage](#options-and-usage)
     * [Installation](#installation)
     * [Example Usage](example-usage)
+        * [Basic use case](basic-use-case)
+        * [Example commands](example-commands)
+        * [Recommended Quality Control](recommended-quality-control)
     * [Options](teloclip-options)
 * [Issues](issues)
 * [License](#license)
@@ -58,13 +61,19 @@ teloclip 0.0.1
 
 ## Example Usage
 
-teloclip requires an indexed reference fasta
+### Basic use case
+
+![teloclip_example](docs/teloclip_example_graphic.png)
+
+### Example commands 
+
+First index the reference assembly
 ```
 # Create index of reference fasta
 % samtools faidx ref.fa
 ```
 
-Read alignments from SAM file
+Reading alignments from SAM file
 ```
 # Read input from file and write output to stout
 % teloclip --ref ref.fa.fai in.sam
@@ -76,7 +85,7 @@ Read alignments from SAM file
 % samtools view -h in.bam | teloclip --ref ref.fa.fai | samtools sort > out.bam
 ```
 
-Stream SAM records from aligner
+Streaming SAM records from aligner
 ```
 # Map PacBio long-reads to ref assembly, filter for alignments clipped at contig ends, write to sorted bam
 % minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai | samtools sort > out.bam 
@@ -89,9 +98,6 @@ Stream SAM records from aligner
 % minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai --motifs TTAGGG | samtools sort > out.bam 
 
 ```
-### Basic usage case
-
-![teloclip_example](docs/teloclip_example_graphic.png)
 
 ### Recommended Quality Control
 
