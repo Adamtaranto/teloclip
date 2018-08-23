@@ -2,17 +2,14 @@
 
 Find soft-clipped alignments containing unassembled telomeric repeats.
 
-
-![teloclip_example](docs/teloclip_example_graphic.png)
-
-
 # Table of contents
 
 * [About teloclip](#about-teloclip)
 * [Options and usage](#options-and-usage)
     * [Installation](#installation)
+    * [Usage](usage)
+        * [Examples](examples)
     * [Options](teloclip-options)
-    * [Example usage](example-usage)
 * [Issues](issues)
 * [License](#license)
 
@@ -60,6 +57,63 @@ teloclip 0.0.1
 % teloclip --help
 ```
 
+## Usage
+
+![teloclip_example](docs/teloclip_example_graphic.png)
+
+*Additional filters*  
+
+  - Consider pre-filtering alignments with "samtools view" to remove non-primary 
+    / low quality alignments.
+  - Users may wish to exclude reads below a minimum length or read quality score 
+    to reduce the risk of incorrect alignments.
+
+*Extending contigs*  
+
+  - Before using terminal alignments identified by teloclip to extend contigs, 
+    inspect alignments in a genome browser that displays information about clipped 
+    reads, such as [IGV](https://github.com/igvteam/igv). Check for conflicting 
+    clipped sequences.
+  - After manually extending contigs the revised assembly should be re-polished 
+    using available long and short read data to correct indels present in the raw 
+    long-reads.
+  - Validate the final assembly by re-mapping long-read data and checking for 
+    alignments that extend into revised contig ends.
+
+### Examples
+
+teloclip requires an indexed reference fasta
+```
+# Create index of reference fasta
+% samtools faidx ref.fa
+```
+
+Read alignments from SAM file
+```
+# Read input from file and write output to stout
+% teloclip --ref ref.fa.fai in.sam
+
+# Read input from stdin and write stdout to file
+% teloclip --ref ref.fa.fai < in.sam > out.sam
+
+# Filter alignments from BAM file, write sorted output to file
+% samtools view -h in.bam | teloclip --ref ref.fa.fai | samtools sort > out.bam
+```
+
+Stream SAM records from aligner
+```
+# Map PacBio long-reads to ref assembly, filter for alignments clipped at contig ends, write to sorted bam
+% minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai | samtools sort > out.bam 
+
+# Map reads, exclude unmapped reads and non-primary/supplementary alignments. Report clipped reads as sorted bam.
+% minimap2 -ax map-pb ref.fa pacbio.fq.gz | samtools view -h -F 0x2308 | teloclip --ref ref.fa.fai | samtools sort > out.bam 
+
+# Map long-reads with MiniMap2 and retain only reads which extend past a cotig end
+# AND contain >=1 copy of the telomeric repeat "TTAGGG" (or its reverse complement "CCCTAA")
+% minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai --motifs TTAGGG | samtools sort > out.bam 
+
+```
+
 ## Options
 
 Run `teloclip --help` to view the programs' most commonly used options:
@@ -90,33 +144,6 @@ Optional:
   --matchAny MATCHANY  If set motif match may occur in unclipped region of alignment.
                          Defaut: False
   --version            Show program's version number and exit.
-```
-
-## Example usage
-
-```
-# Create index of reference fasta
-samtools faidx ref.fa
-
-# Read input from file and write output to stout
-% teloclip --ref ref.fa.fai in.sam
-
-# Read input from stdin and write stdout to file
-% teloclip --ref ref.fa.fai < in.sam > out.sam
-
-# Filter alignments from BAM file, write sorted output to file
-% samtools view -h in.bam | teloclip --ref ref.fa.fai | samtools sort > out.bam
-
-# Map PacBio long-reads to ref assembly, filter for alignments clipped at contig ends, write to sorted bam
-% minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai | samtools sort > out.bam 
-
-# Map reads, exclude unmapped reads and non-primary/supplementary alignments. Report clipped reads as sorted bam.
-% minimap2 -ax map-pb ref.fa pacbio.fq.gz | samtools view -h -F 0x2308 | teloclip --ref ref.fa.fai | samtools sort > out.bam 
-
-# Map long-reads with MiniMap2 and retain only reads which extend past a cotig end
-# AND contain >=1 copy of the telomeric repeat "TTAGGG" (or its reverse complement "CCCTAA")
-% minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai --motifs TTAGGG | samtools sort > out.bam 
-
 ```
 
 ## Issues
