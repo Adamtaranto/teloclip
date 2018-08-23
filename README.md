@@ -109,11 +109,10 @@ samtools faidx ref.fa
 % minimap2 -ax map-pb ref.fa pacbio.fq.gz | samtools view -h -F 0x2308 | teloclip --ref ref.fa.fai | samtools sort > out.bam 
 
 # Map long-reads with MiniMap2 and retain only reads which extend past a cotig end
-# AND contain >=1 copy of the telomeric repeat "TTAGGG" or its reverse complement "CCCTAA"
-% minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai --motifs TTAGGG,CCCTAA | samtools sort > out.bam 
+# AND contain >=1 copy of the telomeric repeat "TTAGGG" (or its reverse complement "CCCTAA")
+% minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai --motifs TTAGGG | samtools sort > out.bam 
 
 ```
-
 
 ## Issues
 
