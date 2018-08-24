@@ -10,10 +10,12 @@ Find soft-clipped alignments containing unassembled telomeric repeats.
     * [Example Usage](example-usage)
         * [Basic use case](basic-use-case)
         * [Example commands](example-commands)
-        * [Recommended Quality Control](recommended-quality-control)
+        * [Optional Quality Control](optional-quality-control)
+        * [Alternative use cases](alternative-use-cases)
     * [Options](teloclip-options)
 * [Issues](issues)
 * [License](#license)
+* [Citing teloclip](citations)
 
 
 ## About teloclip
@@ -46,6 +48,17 @@ Clone from this repository and install as a local Python package.
 
 ```bash
 % git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e .
+```
+
+Install from PyPi.
+
+```bash
+% pip install teloclip
+```
+
+Install from Bioconda.
+```bash
+% conda install -c bioconda teloclip
 ```
 
 Test installation.
@@ -99,7 +112,7 @@ Streaming SAM records from aligner
 
 ```
 
-### Recommended Quality Control
+### Optional Quality Control
 
 **Additional filters**  
 
@@ -107,7 +120,29 @@ Streaming SAM records from aligner
     / low quality alignments.
   - Users may wish to exclude reads below a minimum length or read quality score 
     to reduce the risk of incorrect alignments.
+  - In some cases it may be useful to prioritise primary alignments that do not have the 
+    secondary alignment "SA" tag set.
 
+    ```
+    # Exclude secondary alignments and primary alignments with SA tag set.
+    % samtools view -h -F 0x2308 in.sam | awk '!/SA:/ {print $0;}' | teloclip --ref ref.fa.fai > noSA.sam 
+    ```
+
+**Pre-corrected Data**  
+
+Users may find improved specificity of alignments using pre-corrected long-read data.
+  
+  - The genome assembler [Canu](https://github.com/marbl/canu) preforms pre-correction 
+    of long-reads through iterative overlapping and correction prior to assembly.
+    Corrected reads are trimmed based on coverage to remove low-confidence ends.
+    The corrected reads are stored by Canu as *PREFIX.correctedReads.fasta.gz*, and 
+    the trimmed corrected reads as *PREFIX.trimmedReads.fasta.gz*.
+  - Single molecule long-reads can also be corrected with tools such as [LoRDEC](https://github.com/lanl001/halc) 
+    or [HALC](http://www.atgc-montpellier.fr/lordec/).
+
+Note: Long reads may loose ends containing telomeres as a result of trimming. Give it 
+a go, try the raw reads if unsuccessful.
+  
 **Extending contigs**  
 
   - Before using terminal alignments identified by teloclip to extend contigs, 
@@ -120,6 +155,35 @@ Streaming SAM records from aligner
   - Validate the final assembly by re-mapping long-read data and checking for 
     alignments that extend into revised contig ends.
 
+### Alternative use cases
+
+**Illumina data**  
+
+  - Teloclip will also work fine with aligned short read data, which has a far lower 
+    error rate than single-molecule long-read data. However, there are obvious limits 
+    to the distance that a contig may be extended with shorter reads.
+
+**Hybridising existing assemblies**  
+  
+  - You may have assemblies for your genome generated with different assemblers/configurations
+    or data types (i.e. 10X linked-reads, Illumina, PacBio, ONP) which vary in their success 
+    in assembling individual telomeres. 
+  - These alternative assemblies can be treated as long reads and aligned to a reference 
+    using [Minimap2](https://github.com/lh3/minimap2). Teloclip will identify aligned contigs 
+    that can be used to extend those in the reference set. 
+  - Be cautious of short contigs that may align to may repetative sub-telomeric regions.
+
+Align alternative assembly contigs to reference and report overhang alignments.
+  ```
+  % minimap2 -ax asm5 ref.fa asm.fa | samtools view -h -F 0x2308 | teloclip --ref ref.fa.fai | samtools sort > asm2ref.bam 
+  ```
+**Circularising Mitochondrial / Bacterial genomes**
+
+  - Using default settings, teloclip will report alignments with clipped regions extending past 
+    linear contig ends.
+  - Reads can be extracted from these alignments using [circlator's bam2reads](https://github.com/sanger-pathogens/circlator/wiki/Task%3A-bam2reads) 
+    and re-aligned to an assembly graph in [Bandage](https://github.com/rrwick/Bandage) to help 
+    identify uncircularised contigs.
 
 ## Options
 
@@ -161,6 +225,6 @@ Submit feedback to the [Issue Tracker](https://github.com/Adamtaranto/teloclip/i
 
 Software provided under MIT license.
 
-## Author
+## Citations
 
-[Adam Taranto](https://github.com/Adamtaranto)
+*TBC*
