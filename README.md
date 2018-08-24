@@ -1,3 +1,5 @@
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  [![DOI](https://zenodo.org/badge/145183771.svg)](https://zenodo.org/badge/latestdoi/145183771)
+
 # teloclip
 
 Find soft-clipped alignments containing unassembled telomeric repeats.
@@ -15,7 +17,7 @@ Find soft-clipped alignments containing unassembled telomeric repeats.
     * [Options](teloclip-options)
 * [Issues](issues)
 * [License](#license)
-* [Citing teloclip](citations)
+* [Citations](citations)
 
 
 ## About teloclip
@@ -227,4 +229,5 @@ Software provided under MIT license.
 
 ## Citations
 
-If you use teloclip in your work please cite using the DOI at [![DOI](https://zenodo.org/badge/145183771.svg)](https://zenodo.org/badge/latestdoi/145183771)
+If you use teloclip in your work please cite using the DOI at:
+[![DOI](https://zenodo.org/badge/145183771.svg)](https://zenodo.org/badge/latestdoi/145183771)
