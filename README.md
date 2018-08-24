@@ -227,4 +227,4 @@ Software provided under MIT license.
 
 ## Citations
 
-*TBC*
+If you use teloclip in your work please cite using the DOI at [![DOI](https://zenodo.org/badge/145183771.svg)](https://zenodo.org/badge/latestdoi/145183771)
