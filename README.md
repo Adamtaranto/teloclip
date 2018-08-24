@@ -68,7 +68,7 @@ Test installation.
 ```bash
 # Print version number and exit.
 % teloclip --version
-teloclip 0.0.1
+teloclip 0.0.2
 
 # Get usage information
 % teloclip --help
