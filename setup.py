@@ -1,7 +1,6 @@
 from setuptools import setup
 
 pypi_classifiers = [
-    'Programming Language :: Python :: 2.7',
     'Programming Language :: Python :: 3',
     "Development Status :: 4 - Beta",
     "Environment :: Console",
@@ -16,7 +15,7 @@ pypi_classifiers = [
 desc = """Filter SAM file for soft-clipped alignments containing unassembled telomeric repeats."""
 
 setup(name='teloclip',
-      version='0.0.2',
+      version='0.0.3',
       description=desc,
       url='https://github.com/Adamtaranto/teloclip',
       author='Adam Taranto',
@@ -30,6 +29,7 @@ setup(name='teloclip',
       entry_points={
         'console_scripts': [
             'teloclip=teloclip.run_self:main',
+            'teloclip-extract=teloclip.run_extract:main',
         ],
     },
     )

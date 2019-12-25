@@ -1,23 +1,31 @@
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)  [![DOI](https://zenodo.org/badge/145183771.svg)](https://zenodo.org/badge/latestdoi/145183771)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-# teloclip
+<p align="center">
+  <img src="docs/teloclip_hexlogo.jpg"  width="350" height="350" title="teloclip_hex">
+</p>
 
-Find soft-clipped alignments containing unassembled telomeric repeats.
+# Teloclip
+
+A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
+
+Current version: 0.0.3
 
 # Table of contents
 
-* [About teloclip](#about-teloclip)
-* [Options and usage](#options-and-usage)
+* [About Teloclip](#about-teloclip)
+* [Options and Usage](#options-and-usage)
     * [Installation](#installation)
-    * [Example Usage](example-usage)
-        * [Basic use case](basic-use-case)
-        * [Example commands](example-commands)
-        * [Optional Quality Control](optional-quality-control)
-        * [Alternative use cases](alternative-use-cases)
-    * [Options](teloclip-options)
-* [Issues](issues)
+    * [Example Usage](#example-usage)
+        * [Basic Use Cases](#basic-use-cases)
+        * [Example commands](#example-commands)
+        * [Optional Quality Control](#optional-quality-control)
+        * [Alternative use cases](#alternative-use-cases)
+    * [Options](#options)
+        * [Teloclip Options](#teloclip-options)
+        * [Teloclip-extract Options](#teloclip-extract-options)
+* [Issues](#issues)
 * [License](#license)
-* [Citations](citations)
+* [Citations](#citations)
 
 
 ## About teloclip
@@ -43,8 +51,14 @@ and report only those containing a match.
 Teloclip is based on concepts from Torsten Seemann's excellent tool [samclip](https://github.com/tseemann/samclip).
 Samclip can be used to remove clipped alignments from a samfile prior to variant calling.
 
+Teloclip hex-sticker was designed by [@Super_Coleider](www.instagram.com/Super_Coleider).
 
-## Installation
+## Options and Usage
+
+### Installation
+
+Requires Python => v3.6  
+
 
 Clone from this repository and install as a local Python package.
 
@@ -68,15 +82,15 @@ Test installation.
 ```bash
 # Print version number and exit.
 % teloclip --version
-teloclip 0.0.2
+teloclip 0.0.3
 
 # Get usage information
 % teloclip --help
 ```
 
-## Example Usage
+### Example Usage
 
-### Basic use case
+### Basic use cases
 
 ![teloclip_example](docs/teloclip_example_graphic.png)
 
@@ -105,13 +119,30 @@ Streaming SAM records from aligner
 # Map PacBio long-reads to ref assembly, filter for alignments clipped at contig ends, write to sorted bam
 % minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai | samtools sort > out.bam 
 
-# Map reads, exclude unmapped reads and non-primary/supplementary alignments. Report clipped reads as sorted bam.
+# Map reads, exclude unmapped reads and non-primary/supplementary alignments. Report clipped alignments as sorted bam.
 % minimap2 -ax map-pb ref.fa pacbio.fq.gz | samtools view -h -F 0x2308 | teloclip --ref ref.fa.fai | samtools sort > out.bam 
+```
 
-# Map long-reads with MiniMap2 and retain only reads which extend past a cotig end
-# AND contain >=1 copy of the telomeric repeat "TTAGGG" (or its reverse complement "CCCTAA")
-% minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai --motifs TTAGGG | samtools sort > out.bam 
+Report clipped alignments containing target motifs
+```
+# Report alignments which are clipped at a contig end
+# AND contain >=1 copy of the telomeric repeat "TTAGGG" (or its reverse complement "CCCTAA") in the clipped region.
+% samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGG | samtools sort > out.bam 
 
+# Report alignments which are clipped at a contig end
+# AND contain >=1 copy of the telomeric repeat "TTAGGG" (or its reverse complement "CCCTAA") ANYWHERE in the read.
+% samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGG --matchAny | samtools sort > out.bam
+
+# Compress homopolymers in query motifs and clipped regions to compensate for errors in raw PacBio or ONP data.
+# i.e. The motif 'TTAGGGTTAGGG' becomes 'TAGTAG' and will match 'TTTTTAAAGGTTTAAGGG'.
+% samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGGTTAGGGTTAGGGTTAGGGTTAGGG | samtools sort > out.bam
+```
+
+Extract clipped reads
+```
+# Find clipped alignments containing motif 'TTAGGG' and write reads to separate fasta files for each reference contig end.
+# Clipped region of each read is masked as lowercase in output fasta files.
+% samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGG | teloclip-extract --refIdx data/test.fna.fai --extractReads --extractDir SplitOverhangs
 ```
 
 ### Optional Quality Control
@@ -189,11 +220,13 @@ Align alternative assembly contigs to reference and report overhang alignments.
 
 ## Options
 
+### Teloclip Options
+
 Run `teloclip --help` to view the programs' most commonly used options:
 
 ```
-Usage: teloclip [-h] --refIdx REFIDX [--minClip MINCLIP] [--maxBreak MAXBREAK]
-                [--motifs MOTIFS]
+Usage: teloclip [-h] [--version] --refIdx REFIDX [--minClip MINCLIP] [--maxBreak MAXBREAK]
+                [--motifs MOTIFS] [--noRev NOREV] [--noPoly NOPOLY] [--matchAny MATCHANY]
                 [samfile]
 
 Required:
@@ -204,19 +237,49 @@ Positional arguments:
                           If not set teloclip will read from stdin.
 
 Optional:
-  --minClip MINCLIP    Require clip to extend past ref contig end by at least N bases.
+  --minClip            Require clip to extend past ref contig end by at least N bases.
                          Default: 1
-  --maxBreak MAXBREAK  Tolerate max N unaligned bases at contig ends. 
+  --maxBreak           Tolerate max N unaligned bases at contig ends. 
                          Default: 50
-  --motifs MOTIFS      If set keep only reads containing given motif/s from a comma delimited list 
+  --motifs             If set keep only reads containing given motif/s from a comma delimited list 
                          of strings. By default also search for reverse complement of motifs. 
                          i.e. TTAGGG,TTAAGGG will also match CCCTAA,CCCTTAA
                          Default: None
-  --norev NOREV        If set do NOT search for reverse complement of specified motifs. 
-                         Default: False
-  --matchAny MATCHANY  If set motif match may occur in unclipped region of alignment.
+  --noRev              If set do NOT search for reverse complement of specified motifs. 
+                         Default: Find motifs on both strands.
+  --noPoly             If set collapse homopolymer tracks within motifs before searching overhangs.
+                        i.e. "TTAGGGTTAGGGTTAGGGTTAGGGTTAGGG" -> "TAGTAGTAGTAGTAG".
+                        Useful for PacBio or ONP long reads homopolymer length errors. Defaut: Off.            
+  --matchAny           If set motif match may occur in unclipped region of alignment.
                          Defaut: False
   --version            Show program's version number and exit.
+```
+
+### Teloclip-extract Options
+
+Run `teloclip-extract --help` to view the programs' most commonly used options:
+
+```
+Usage: teloclip-extract [-h] --refIdx REFIDX [--prefix PREFIX]
+                        [--extractReads] [--extractDir EXTRACTDIR]
+                        [--minClip MINCLIP] [--maxBreak MAXBREAK] [--version]
+                        [samfile]
+
+positional arguments:
+  samfile               If not set, will read sam from stdin.
+
+optional arguments:
+  -h, --help            Show this help message and exit
+  --refIdx              Path to fai index for reference fasta. Index fasta
+                        using `samtools faidx FASTA`
+  --prefix              Use this prefix for output files. Default: None.
+  --extractReads        If set, write overhang reads to fasta by contig.
+  --extractDir
+                        Write extracted reads to this directory. Default: cwd.
+  --minClip             Require clip to extend past ref contig end by at least
+                        N bases.
+  --maxBreak            Tolerate max N unaligned bases at contig ends.
+  --version             Show program's version number and exit
 ```
 
 ## Issues
@@ -226,8 +289,3 @@ Submit feedback to the [Issue Tracker](https://github.com/Adamtaranto/teloclip/i
 ## License
 
 Software provided under MIT license.
-
-## Citations
-
-If you use teloclip in your work please cite using the DOI at:
-[![DOI](https://zenodo.org/badge/145183771.svg)](https://zenodo.org/badge/latestdoi/145183771)
