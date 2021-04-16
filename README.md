@@ -158,7 +158,7 @@ Extract clipped reads
 
     ```
     # Exclude secondary alignments and primary alignments with SA tag set.
-    % samtools view -h -F 0x2308 in.sam | awk '!/SA:/ {print $0;}' | teloclip --ref ref.fa.fai > noSA.sam 
+    % samtools view -h -F 0x100 in.sam | awk '!/SA:/ {print $0;}' | teloclip --ref ref.fa.fai > noSA.sam 
     ```
 
 **Pre-corrected Data**  
