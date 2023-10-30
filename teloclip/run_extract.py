@@ -21,7 +21,7 @@ if not sys.version_info[0] > 2:
 def mainArgs():
     parser = argparse.ArgumentParser(description='Extract overhanging reads for each end of each reference contig. Write to fasta.',prog='teloclip-extract')
     # Input options
-    parser.add_argument('samfile', nargs='?', type=argparse.FileType('rU'), default=sys.stdin)
+    parser.add_argument('samfile', nargs='?', type=argparse.FileType('r'), default=sys.stdin)
     parser.add_argument('--refIdx',type=str,required=True,help='Path to fai index for reference fasta. Index fasta using `samtools faidx FASTA`')
     #parser.add_argument('--refSeq',type=str,required=True,help='Path to reference fasta.')
     # Output options
