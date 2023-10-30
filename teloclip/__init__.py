@@ -244,7 +244,7 @@ def read_fai(fai):
     # Init empty dict
     ContigDict = dict()
     # Read fai_file to dict
-    with open(path, "rU") as f:
+    with open(path, "r") as f:
         for line in f.readlines():
             li = line.strip().split()
             ContigDict[li[0]]=int(li[1])
