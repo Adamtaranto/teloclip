@@ -1,0 +1,68 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teloclip"
+authors = [{ name = "Adam Taranto", email = "adam.p.taranto@gmail.com" }]
+
+description = "A tool for the recovery of unassembled telomeres from soft-clipped read alignments."
+readme = "README.md"
+requires-python = ">=3.7"
+license = { text = "MIT" }
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "License :: OSI Approved :: MIT License",
+]
+
+dynamic = ["version", "dependencies"]
+
+[tool.setuptools.dynamic]
+version = { attr = "teloclip.__version__" }
+dependencies = { file = "requirements.txt" }
+
+[project.urls]
+homepage = "https://github.com/adamtaranto/teloclip"
+documentation = "https://github.com/adamtaranto/teloclip"
+repository = "https://github.com/adamtaranto/teloclip"
+
+[project.scripts]
+teloclip = "teloclip.app:main"
+
+
+#pypi_classifiers = [
+#    'Programming Language :: Python :: 3',
+#    "Development Status :: 4 - Beta",
+#    "Environment :: Console",
+#    "Operating System :: OS Independent",
+#    'Intended Audience :: Science/Research',
+#    'Natural Language :: English',
+#    'Topic :: Scientific/Engineering :: Bio-Informatics',
+#    "Topic :: Software Development :: Libraries :: Python Modules",
+#    'License :: OSI Approved :: MIT License',
+#]
+#
+#
+#
+#setup(name='teloclip',
+#      version='0.0.3',
+#      description=desc,
+#      url='https://github.com/Adamtaranto/teloclip',
+#      author='Adam Taranto',
+#      author_email='aptaranto@ucdavis.edu',
+#      license='MIT',
+#      packages=['teloclip'],
+#      classifiers=pypi_classifiers,
+#      keywords=["samfile","telomere","alignment"],
+#      include_package_data=True,
+#      zip_safe=False,
+#      entry_points={
+#        'console_scripts': [
+#            'teloclip=teloclip.run_self:main',
+#            'teloclip-extract=teloclip.run_extract:main',
+#        ],
+#    },
+#    )
