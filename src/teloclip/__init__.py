@@ -1,11 +1,11 @@
 #!/usr/bin/env python
 
-import os
-import sys
-import re
-import shutil
 import tempfile 
+import sys
 import subprocess
+import shutil
+import re
+import os
 from itertools import groupby
 from datetime import datetime
 from collections import Counter

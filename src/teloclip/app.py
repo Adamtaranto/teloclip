@@ -1,17 +1,17 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
-from teloclip import __version__
-from teloclip import log
+
 import teloclip
-import argparse
 import sys
+import argparse
+from teloclip import log
+from teloclip import __version__
 
 def mainArgs():
     parser = argparse.ArgumentParser(description='Filter SAM file for clipped alignments containing unassembled telomeric repeats.',prog='teloclip')
     # Input options
-    parser.add_argument('samfile', nargs='?', type=argparse.FileType('r
-    '), default=sys.stdin)
+    parser.add_argument('samfile', nargs='?', type=argparse.FileType('r'), default=sys.stdin)
     parser.add_argument('--refIdx',type=str,required=True,help='Path to fai index for reference fasta. Index fasta using `samtools faidx FASTA`')
     parser.add_argument('--minClip',type=int,default=1,help='Require clip to extend past ref contig end by at least N bases.')
     parser.add_argument('--maxBreak',type=int,default=50,help='Tolerate max N unaligned bases at contig ends.')
