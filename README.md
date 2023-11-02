@@ -24,6 +24,7 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
   - [Run with Gitpod](#run-with-gitpod)
 - [Example Usage](#example-usage)
   - [Optional Quality Control](#optional-quality-control)
+  - [Extending contigs](#extending-contigs)
   - [Alternative use cases](#alternative-use-cases)
 - [Options](#options)
   - [Teloclip Options](#teloclip-options)
@@ -81,7 +82,8 @@ teloclip --help
 
 ### Run with Gitpod
 
-Alternatively, [click here](https://gitpod.io/#https://github.com/adamtaranto/teloclip) to launch a Gitpod Workspace with `teloclip`, `samtools`, and `minimap2` pre-installed. 
+Alternatively, [launch a Gitpod Workspace](https://gitpod.io/#https://github.com/adamtaranto/teloclip) with `teloclip`, `samtools`, and `minimap2` pre-installed. 
+
 
 ## Example Usage
 
@@ -174,7 +176,7 @@ However, long-reads that have been error-corrected using Illumina data with tool
 
 Generally speaking, raw long-reads will be fine for extending your contigs. Any errors in the extended region can be corrected with a round of polishing with short-read data using [Pilon](https://github.com/broadinstitute/pilon).
   
-**Extending contigs**  
+### Extending contigs
 
 Before using terminal alignments identified by Teloclip to extend contigs you should inspect the alignments in a genome browser that displays information about clipped reads, such as [IGV](https://github.com/igvteam/igv). 
 
