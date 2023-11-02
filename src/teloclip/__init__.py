@@ -216,7 +216,7 @@ def dochecks(args):
     # Make temp directory
     os.makedirs(os.path.join(tempParent,"temp_" + getTimestring()))
     # Return full path to temp directory
-    return tempDir
+    return tempParent
 
 
 def missing_tool(tool_name):
