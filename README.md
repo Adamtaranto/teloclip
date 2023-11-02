@@ -1,9 +1,11 @@
-<a href="https://gitpod.io/#https://github.com/adamtaranto/teloclip">
-  <img src="https://gitpod.io/button/open-in-gitpod.svg" align="right" height="35"/>
-</a> 
 <a href="https://opensource.org/licenses/MIT">
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" align="right" height="20"/>
 </a> 
+<a href="https://gitpod.io/#https://github.com/adamtaranto/teloclip">
+  <img src="https://gitpod.io/button/open-in-gitpod.svg" align="right" height="35"/>
+</a> 
+
+<br clear="right"/>
 
 <img src="docs/teloclip_hexlogo.jpg" align="left" width="180px" title="teloclip_hex"/>
 <h1>Teloclip</h1>
@@ -13,13 +15,14 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 
 <br clear="left"/>
 
+![teloclip_example](docs/teloclip_example_graphic.png)
+
 ### Table of contents
 - [About teloclip](#about-teloclip)
 - [Options and Usage](#options-and-usage)
   - [Installation](#installation)
+  - [Run with Gitpod](#run-with-gitpod)
 - [Example Usage](#example-usage)
-  - [Basic use cases](#basic-use-cases)
-  - [Example commands](#example-commands)
   - [Optional Quality Control](#optional-quality-control)
   - [Alternative use cases](#alternative-use-cases)
 - [Options](#options)
@@ -76,17 +79,11 @@ teloclip --version
 teloclip --help
 ```
 
-**Run in Gitpod Workspace**
+### Run with Gitpod
 
 Alternatively, [click here](https://gitpod.io/#https://github.com/adamtaranto/teloclip) to launch a Gitpod Workspace with `teloclip`, `samtools`, and `minimap2` pre-installed. 
 
 ## Example Usage
-
-### Basic use cases
-
-![teloclip_example](docs/teloclip_example_graphic.png)
-
-### Example commands 
 
 **First index the reference assembly**
 
