@@ -1,0 +1,25 @@
+image:
+  file: .gitpod.Dockerfile
+
+tasks:
+  - name: Install dependencies
+    # Update base env with packages from environment.yml
+    # Run on initial workspace start if no prebuild available
+    init: |
+      conda env update -n base --file environment.yml
+    # Run on every workspace start
+    command: |
+      echo 'Installing requirements.txt'
+      pip3 install -r requirements.txt
+      echo 'Installing teloclip in interactive mode.'
+      pip3 install -e .
+      echo 'Finished!'
+
+vscode:
+  extensions:
+    - eamodio.gitlens
+    - ms-python.python
+    - ms-toolsai.jupyter
+    - ms-toolsai.jupyter-keymap
+    - oderwat.indent-rainbow
+    - ms-python.black-formatter

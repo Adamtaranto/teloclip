@@ -1,0 +1,34 @@
+[build-system]
+requires = ["setuptools", "setuptools-scm"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "teloclip"
+authors = [{ name = "Adam Taranto", email = "adam.p.taranto@gmail.com" }]
+
+description = "A tool for the recovery of unassembled telomeres from soft-clipped read alignments."
+readme = "README.md"
+requires-python = ">=3.7"
+license = { text = "MIT" }
+
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Intended Audience :: Science/Research",
+    "Topic :: Scientific/Engineering :: Bio-Informatics",
+    "License :: OSI Approved :: MIT License",
+]
+
+dynamic = ["version", "dependencies"]
+
+[tool.setuptools.dynamic]
+version = { attr = "teloclip.__version__" }
+dependencies = { file = "requirements.txt" }
+
+[project.urls]
+homepage = "https://github.com/adamtaranto/teloclip"
+documentation = "https://github.com/adamtaranto/teloclip"
+repository = "https://github.com/adamtaranto/teloclip"
+
+[project.scripts]
+teloclip = "teloclip.app:main"
+teloclip-extract = "teloclip.app_extract:main"
