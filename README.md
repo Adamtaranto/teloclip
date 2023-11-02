@@ -1,10 +1,10 @@
 <a href="https://opensource.org/licenses/MIT">
-  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" align="right" height="20"/>
+  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" align="left" height="20"/>
 </a> 
+
 <a href="https://gitpod.io/#https://github.com/adamtaranto/teloclip">
   <img src="https://gitpod.io/button/open-in-gitpod.svg" align="right" height="35"/>
 </a> 
-
 <br clear="right"/>
 
 <img src="docs/teloclip_hexlogo.jpg" align="left" width="180px" title="teloclip_hex"/>
@@ -14,8 +14,6 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 </p>
 
 <br clear="left"/>
-
-![teloclip_example](docs/teloclip_example_graphic.png)
 
 ### Table of contents
 - [About teloclip](#about-teloclip)
@@ -84,6 +82,9 @@ teloclip --help
 Alternatively, [click here](https://gitpod.io/#https://github.com/adamtaranto/teloclip) to launch a Gitpod Workspace with `teloclip`, `samtools`, and `minimap2` pre-installed. 
 
 ## Example Usage
+
+Basic use case:
+![teloclip_example](docs/teloclip_example_graphic.png)
 
 **First index the reference assembly**
 
