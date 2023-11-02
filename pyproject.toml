@@ -31,4 +31,4 @@ repository = "https://github.com/adamtaranto/teloclip"
 
 [project.scripts]
 teloclip = "teloclip.app:main"
-#teloclip-extract = "teloclip.run_extract:main"
+teloclip-extract = "teloclip.app_extract:main"
