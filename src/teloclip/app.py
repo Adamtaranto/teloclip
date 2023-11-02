@@ -1,13 +1,13 @@
 #!/usr/bin/env python
 
 from __future__ import print_function
-from teloclip.samops import processSamlines
 
-import teloclip
-import sys
-import argparse
-from teloclip import log
 from teloclip import __version__
+from teloclip.samops import processSamlines
+from teloclip.seqops import read_fai, addRevComplement, crunchHomopolymers
+
+import argparse
+import sys
 
 
 def mainArgs():
@@ -78,16 +78,16 @@ def main():
     args = mainArgs()
 
     # Fetch contig lens
-    ContigDict = teloclip.read_fai(args.refIdx)
+    ContigDict = read_fai(args.refIdx)
 
     # Split motifs into list
     if args.motifs:
         motifList = args.motifs.split(",")
         # Add rev comp motifs to list, make unique set.
         if not args.noRev:
-            motifList = teloclip.addRevComplement(motifList)
+            motifList = addRevComplement(motifList)
         if args.noPoly:
-            motifList = teloclip.crunchHomopolymers(motifList)
+            motifList = crunchHomopolymers(motifList)
     else:
         motifList = []
 
