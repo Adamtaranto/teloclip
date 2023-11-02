@@ -3,7 +3,6 @@
 from __future__ import print_function
 from teloclip import __version__
 from teloclip import log
-#import wrappers
 import teloclip
 import argparse
 import sys
