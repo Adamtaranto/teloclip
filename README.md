@@ -74,7 +74,7 @@ conda install -c bioconda teloclip
 ```bash
 # Print version number and exit.
 teloclip --version
-# > teloclip 0.0.3
+# > teloclip 0.0.4
 
 # Get usage information
 teloclip --help
