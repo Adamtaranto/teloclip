@@ -5,7 +5,9 @@
 <a href="https://gitpod.io/#https://github.com/adamtaranto/teloclip">
   <img src="https://gitpod.io/button/open-in-gitpod.svg" align="right" height="35"/>
 </a> 
+
 <br clear="right"/>
+<br clear="left"/>
 
 <img src="docs/teloclip_hexlogo.jpg" align="left" width="180px" title="teloclip_hex"/>
 <h1>Teloclip</h1>
