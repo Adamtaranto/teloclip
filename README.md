@@ -1,18 +1,17 @@
+<a href="https://gitpod.io/#https://github.com/adamtaranto/teloclip">
+  <img src="https://gitpod.io/button/open-in-gitpod.svg" align="right" height="35"/>
+</a> 
 <a href="https://opensource.org/licenses/MIT">
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" align="right" height="20"/>
 </a> 
-<a href="https://gitpod.io/#https://github.com/adamtaranto/teloclip">
-  <img src="https://gitpod.io/button/open-in-gitpod.svg" align="left" height="40"/>
-</a> 
 
-<br><br>
-
-<img src="docs/teloclip_hexlogo.jpg" align="left" width="150px" title="teloclip_hex"/>
+<img src="docs/teloclip_hexlogo.jpg" align="left" width="180px" title="teloclip_hex"/>
 <h1>Teloclip</h1>
 <p>
 A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
 </p>
 
+<br clear="left"/>
 
 ### Table of contents
 - [About teloclip](#about-teloclip)
