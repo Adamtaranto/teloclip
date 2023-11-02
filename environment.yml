@@ -1,0 +1,15 @@
+name: teloclip-dev
+channels:
+  - conda-forge
+  - bioconda
+  - defaults
+dependencies:
+  - python >=3.12
+  - bioconda::minimap2
+  - bioconda::samtools
+  - pip
+  - pip:
+      - biopython
+      - regex
+      - pysam
+      - black
