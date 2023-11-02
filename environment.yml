@@ -9,7 +9,7 @@ dependencies:
   - bioconda::samtools
   - pip
   - pip:
-      - biopython
-      - regex
-      - pysam
+      #- biopython
+      #- regex
+      #- pysam
       - black
