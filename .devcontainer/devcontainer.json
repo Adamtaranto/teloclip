@@ -5,6 +5,20 @@
     "build": {
         "context": "..",
         "dockerfile": "Dockerfile"
+    },
+    "customizations": {
+        // Configure properties specific to VS Code.
+        "vscode": {
+            // Set *default* container specific settings.json values on container create.
+            "settings": {},
+            "extensions": [
+                "eamodio.gitlens",
+                "ms-python.python",
+                "ms-toolsai.jupyter",
+                "oderwat.indent-rainbow",
+                "ms-python.black-formatter"
+            ]
+        }
     }
     // Features to add to the dev container. More info: https://containers.dev/features.
     // "features": {},
