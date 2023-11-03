@@ -13,3 +13,5 @@ dependencies:
       #- regex
       #- pysam
       - black
+      - setuptools_scm
+      - twine

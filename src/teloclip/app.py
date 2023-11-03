@@ -2,7 +2,7 @@
 
 from __future__ import print_function
 
-from teloclip import __version__
+from teloclip._version import __version__
 from teloclip.samops import processSamlines
 from teloclip.seqops import read_fai, addRevComplement, crunchHomopolymers
 
