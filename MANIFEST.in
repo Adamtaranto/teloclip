@@ -1,1 +1,8 @@
 include LICENSE
+exclude .gitpod.Dockerfile
+exclude .gitpod.yml
+exclude environment.yml
+exclude .devcontainer
+#global-exclude 
+
+
