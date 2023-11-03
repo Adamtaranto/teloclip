@@ -12,6 +12,7 @@ tasks:
       echo 'Installing requirements.txt'
       pip3 install -r requirements.txt
       echo 'Installing teloclip in interactive mode.'
+      python setup.py --version
       pip3 install -e .
       echo 'Finished!'
 
