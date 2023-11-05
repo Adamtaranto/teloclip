@@ -1,5 +1,21 @@
 #!/usr/bin/env python
 
+"""
+
+                                       ██████╗ ██╗      ██╗ ██████╗ 
+                                      ██╔════╝ ██║      ██║ ██╔══██╗
+                                      ██║      ██║      ██║ ██████╔╝
+████████╗ ███████╗ ██╗       ██████╗  ██║      ██║      ██║ ██╔═══╝ 
+╚══██╔══╝ ██╔════╝ ██║      ██╔═══██╗ ╚██████╗ ███████╗ ██║ ██║     
+   ██║    █████╗   ██║      ██║   ██║  ╚═════╝ ╚══════╝ ╚═╝ ╚═╝  
+   ██║    ██╔══╝   ██║      ██║   ██║
+   ██║    ███████╗ ███████╗ ╚██████╔╝
+   ╚═╝    ╚══════╝ ╚══════╝  ╚═════╝ 
+
+A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
+
+"""
+
 from __future__ import print_function
 
 from teloclip._version import __version__
