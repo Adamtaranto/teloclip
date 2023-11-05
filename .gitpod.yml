@@ -12,8 +12,10 @@ tasks:
       echo 'Installing requirements.txt'
       pip3 install -r requirements.txt
       echo 'Installing teloclip in interactive mode.'
+      #pip3 install --upgrade setuptools-scm
       python setup.py --version
       pip3 install -e .
+      #python3 -m pip install --upgrade build && python3 -m build
       echo 'Finished!'
 
 vscode:
