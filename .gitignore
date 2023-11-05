@@ -10,6 +10,7 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+src/teloclip/_version.py
 .Python
 build/
 develop-eggs/
