@@ -14,4 +14,5 @@ dependencies:
       #- pysam
       - black
       - setuptools_scm
+      - build
       - twine
