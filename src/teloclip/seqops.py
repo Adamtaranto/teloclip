@@ -13,12 +13,14 @@ def makeMask(killIdx, listlen):
     return mask
 
 
+# NCU
 def filterList(data, exclude):
     # filterList([1,2,3,4,5,6,7,8,9,10],[0,9]) = [2,3,4,5,6,7,8,9]
     mask = makeMask(exclude, len(data))
     return (d for d, s in zip(data, mask) if s)
 
 
+# NCU
 def revComp(seq):
     """Rev comp DNA string."""
     revcompl = lambda x: "".join(
@@ -27,6 +29,7 @@ def revComp(seq):
     return revcompl(seq)
 
 
+# NCU
 def writeClip(idx, zpad, gap, seq, maplen):
     # leftpad idx ID
     padIdx = str(idx).zfill(zpad) + ":"
@@ -37,6 +40,7 @@ def writeClip(idx, zpad, gap, seq, maplen):
     log("\t".join([padIdx, readlen, padseq]))
 
 
+# NCU
 def fasta2dict(fasta_name):
     fh = open(fasta_name)
     faiter = (x[1] for x in groupby(fh, lambda line: line[0] == ">"))
@@ -59,6 +63,7 @@ def writefasta(outfile, name, seq, length=80):
         seq = seq[length:]
 
 
+# NCU
 def manageTemp(record=None, tempPath=None, scrub=False):
     """Create single sequence fasta files or scrub temp files."""
     if scrub and tempPath:

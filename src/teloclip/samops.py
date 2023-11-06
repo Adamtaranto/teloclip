@@ -176,78 +176,6 @@ def lenCIGAR(SAM_CIGAR):
     return alnLen
 
 
-def loadSam(samfile=None, contigs=None, maxBreak=50, minClip=1):
-    SAM_QNAME = 0
-    SAM_RNAME = 2
-    SAM_POS = 3
-    SAM_CIGAR = 5
-    SAM_SEQ = 9
-    # Init dict
-    alnDict = dict()
-    # Add contig names as keys
-    for name in contigs.keys():
-        alnDict[name] = dict()
-        alnDict[name]["L"] = list()
-        alnDict[name]["R"] = list()
-    # Read sam from stdin
-    for line in samfile:
-        # Skip header rows
-        if line[0][0] == "@":
-            continue
-        samline = line.split("\t")
-        # Check that aln contains soft clipping
-        if "S" in samline[SAM_CIGAR] and not "H" in samline[SAM_CIGAR]:
-            # Get L/R clip lengths
-            leftClipLen, rightClipLen = checkClips(samline[SAM_CIGAR])
-            alnLen = lenCIGAR(samline[SAM_CIGAR])
-            # Check for left overhang
-            if leftClipLen:
-                if (int(samline[SAM_POS]) <= maxBreak) and (
-                    leftClipLen >= (int(samline[SAM_POS]) + minClip)
-                ):
-                    # Overhang is on contig left
-                    alnEnd = int(samline[SAM_POS]) + alnLen
-                    try:
-                        alnDict[samline[SAM_RNAME]]["L"].append(
-                            (
-                                samline[SAM_POS],
-                                alnEnd,
-                                leftClipLen,
-                                samline[SAM_SEQ],
-                                samline[SAM_QNAME],
-                            )
-                        )
-                    except:
-                        log(
-                            "Reference sequence not found in FAI file: "
-                            + str(samline[SAM_RNAME])
-                        )
-            # Check for right overhang
-            if rightClipLen:
-                try:
-                    ContigLen = contigs[str(samline[SAM_RNAME])]
-                except:
-                    log(
-                        "Reference sequence not found in FAI file: "
-                        + str(samline[SAM_RNAME])
-                    )
-                alnEnd = int(samline[SAM_POS]) + alnLen
-                # Check if overhang is on contig right end
-                if ((ContigLen - alnEnd) <= maxBreak) and (
-                    alnEnd + rightClipLen >= ContigLen + 1
-                ):
-                    alnDict[samline[SAM_RNAME]]["R"].append(
-                        (
-                            samline[SAM_POS],
-                            alnEnd,
-                            rightClipLen,
-                            samline[SAM_SEQ],
-                            samline[SAM_QNAME],
-                        )
-                    )
-    return alnDict
-
-
 def StreamingSamFilter(samfile=None, contigs=None, maxBreak=50, minClip=1):
     """Rewrite loadSam() as generator."""
     SAM_QNAME = 0
@@ -318,6 +246,9 @@ def StreamingSamFilter(samfile=None, contigs=None, maxBreak=50, minClip=1):
 
 
 def SAMinfo():
+    """
+    Print samfile spec.
+    """
     print(
         """
     # SAM format
@@ -338,6 +269,9 @@ def SAMinfo():
 
 
 def CIGARinfo():
+    """
+    Print CIGAR file spec.
+    """
     print(
         """
     CIGAR Operators
