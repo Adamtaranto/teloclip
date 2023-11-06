@@ -1,6 +1,9 @@
 # Package notes
 pkg-mgt/
 
+# Versioning
+src/teloclip/_version.py
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -10,7 +13,6 @@ __pycache__/
 *.so
 
 # Distribution / packaging
-src/teloclip/_version.py
 .Python
 build/
 develop-eggs/
