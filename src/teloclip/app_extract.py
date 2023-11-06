@@ -21,16 +21,19 @@ def mainArgs():
         description="Extract overhanging reads for each end of each reference contig. Write to fasta.",
         prog="teloclip-extract",
     )
+
     # Input options
     parser.add_argument(
         "samfile", nargs="?", type=argparse.FileType("r"), default=sys.stdin
     )
+
     parser.add_argument(
         "--refIdx",
         type=str,
         required=True,
         help="Path to fai index for reference fasta. Index fasta using `samtools faidx FASTA`",
     )
+
     parser.add_argument(
         "--prefix",
         type=str,
@@ -38,12 +41,14 @@ def mainArgs():
         required=False,
         help="Use this prefix for output files. Default: None.",
     )
+
     parser.add_argument(
         "--extractReads",
         default=False,
         action="store_true",
         help="If set, write overhang reads to fasta by contig.",
     )
+
     parser.add_argument(
         "--extractDir",
         type=str,
@@ -51,29 +56,38 @@ def mainArgs():
         required=False,
         help="Write extracted reads to this directory. Default: cwd.",
     )
+
     parser.add_argument(
         "--minClip",
         type=int,
         default=1,
         help="Require clip to extend past ref contig end by at least N bases.",
     )
+
     parser.add_argument(
         "--maxBreak",
         type=int,
         default=50,
         help="Tolerate max N unaligned bases at contig ends.",
     )
+
     # Version info
     parser.add_argument(
         "--version",
         action="version",
         version="%(prog)s {version}".format(version=__version__),
     )
+
     args = parser.parse_args()
+
     return args
 
 
 def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=None):
+    """
+    Takes alignment line summaries tagged with overhang information from StreamingSamFilter
+    Writes reads into output files for each end of each contig with at least one alignment found.
+    """
     # Note: This method opens and closes the output fasta files for EVERY read processed.
     # Probably inefficient but avoids reading everything into memory
     if outdir:
@@ -88,11 +102,12 @@ def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=No
     # For each aligned read
     for read in alignments:
         readCount += 1
+        # Log update every 10K reads
         if not readCount % 10000:
             log("Alignments processed: %s" % str(readCount))
-        # Check if alignment is a right end overhang
+        # Check if alignment is at right end overhang
         if read[6] == "R":
-            # i.e [(alnStart,alnEnd,rightClipLen,readSeq,readname,contigname,'R')]
+            # i.e [(alnStart,alnEnd,rightClipLen,readSeq,readName,contigName,'R')]
             if prefix:
                 base = "_".join([prefix, str(read[5])])
             else:
@@ -110,6 +125,7 @@ def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=No
                     # Write masked read to fasta
                     writefasta(fileR, str(read[4]), masked)
             else:
+                # If file already exists
                 # Output reads aligned to right end of contig
                 with open(outfileR, "a") as fileR:
                     # Convert overhanging segment of read to lowercase
@@ -136,12 +152,14 @@ def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=No
                     # Write masked read to fasta
                     writefasta(fileL, str(read[4]), masked)
             else:
+                # If file already exists
                 # Output reads aligned to left end of contig
                 with open(outfileL, "a") as fileL:
                     # Convert overhanging segment of read to lowercase
                     masked = read[3][: read[2]].lower() + read[3][read[2] :]
                     # Write masked read to fasta
                     writefasta(fileL, str(read[4]), masked)
+
     log("Total alignments processed: %s" % str(readCount))
 
 
