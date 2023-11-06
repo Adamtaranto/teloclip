@@ -9,13 +9,15 @@
 <br clear="right"/>
 <br clear="left"/>
 
-<img src="docs/teloclip_hexlogo.jpg" align="left" width="180px" title="teloclip_hex"/>
+<p style="text-align:center;"><img src="docs/teloclip_hexlogo.jpg" width="180px" title="teloclip_hex"/>
+</p>
+
 <h1>Teloclip</h1>
 <p>
 A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
 </p>
 
-<br clear="left"/>
+
 
 ### Table of contents
 - [About teloclip](#about-teloclip)
