@@ -35,3 +35,16 @@ repository = "https://github.com/adamtaranto/teloclip"
 [project.scripts]
 teloclip = "teloclip.app:main"
 teloclip-extract = "teloclip.app_extract:main"
+
+
+# Create and push tags
+# git tag -a v0.0.4 
+# git push origin v0.0.4
+
+# Check what setuptools_scm thinks the current version is and create _version.py
+#git describe
+#python -m setuptools_scm
+#python setup.py --version
+
+# Build
+#python3 -m pip install --upgrade build && python3 -m build
