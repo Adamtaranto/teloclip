@@ -21,7 +21,7 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 
 
 ### Table of contents
-- [About teloclip](#about-teloclip)
+- [About Teloclip](#about-teloclip)
 - [Options and Usage](#options-and-usage)
   - [Installation](#installation)
   - [Run with Gitpod](#run-with-gitpod)
@@ -36,7 +36,7 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 - [License](#license)
 
 
-## About teloclip
+## About Teloclip
 
 In most eukaryotic species, chromosomes terminate in repetitive [telomeric](https://en.wikipedia.org/wiki/Telomere) sequences. A complete genome assembly should ideally comprise chromosome-level contigs that possess telomeric repeats at each end. However, genome assemblers frequently fail to recover these repetitive features, instead producing contigs that terminate immediately prior to their location.
 
