@@ -52,22 +52,28 @@ Teloclip is based on concepts from Torsten Seemann's excellent tool [samclip](ht
 
 ### Installation
 
-There are 3 options available for installing Teloclip locally:
+There are 4 options available for installing Teloclip locally:
 
 1) Clone from this repository and install as a local Python package.
-This is the best way to ensure you have the latest version.
+This is the best way to ensure you have the latest development version.
 
 ```bash
 git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e .
 ```
 
-2) Install from PyPi.
+2) Pip install directly from this git repository.
+
+```bash
+pip install git+https://github.com/Adamtaranto/teloclip.git
+```
+
+3) Install from PyPi.
 
 ```bash
 pip install teloclip
 ```
 
-3) Install from Bioconda.
+4) Install from Bioconda.
 ```bash
 conda install -c bioconda teloclip
 ```
