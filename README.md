@@ -10,7 +10,7 @@
 <br clear="left"/>
 
 <p align="center">
-  <img src="docs/teloclip_hexlogo.jpg" width="180px" title="teloclip_hex"/>
+  <img src="https://github.com/Adamtaranto/teloclip/blob/2d9628d453e832ac0de15577c6cdde6835fb6417/docs/teloclip_hexlogo.jpg?raw=true" width="180px" title="teloclip_hex"/>
 </p>
 
 <h1>Teloclip</h1>
@@ -158,7 +158,7 @@ Collections of reads that overhang a contig end can be assembled with `racon` or
 
 ```bash
 # Find clipped alignments containing motif 'TTAGGG' and write reads to separate fasta files for each reference contig end.
-samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGG | teloclip-extract --refIdx data/test.fna.fai --extractReads --extractDir SplitOverhangs
+samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGG | teloclip-extract --refIdx ref.fa.fai --extractReads --extractDir SplitOverhangs
 ```
 
 ### Optional Quality Control
