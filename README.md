@@ -9,7 +9,8 @@
 <br clear="right"/>
 <br clear="left"/>
 
-<p style="text-align:center;"><img src="docs/teloclip_hexlogo.jpg" width="180px" title="teloclip_hex"/>
+<p align="center">
+  <img src="docs/teloclip_hexlogo.jpg" width="180px" title="teloclip_hex"/>
 </p>
 
 <h1>Teloclip</h1>
