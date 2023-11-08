@@ -42,9 +42,15 @@ teloclip-extract = "teloclip.app_extract:main"
 # git push origin v0.0.4
 
 # Check what setuptools_scm thinks the current version is and create _version.py
-#git describe
-#python -m setuptools_scm
-#python setup.py --version
+# git describe
+# python -m setuptools_scm
+# python setup.py --version
 
 # Build
-#python3 -m pip install --upgrade build && python3 -m build
+# python3 -m pip install --upgrade build && python3 -m build
+# OR
+# Build sdist
+# python setup.py sdist 
+
+# Push to pypi
+# twine upload dist/*
