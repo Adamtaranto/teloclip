@@ -109,13 +109,20 @@ samtools faidx ref.fa
 **Reading alignments from SAM file**
 
 ```bash
-# Read input from file and write output to stout
+# Read alignment input from sam file and write overhang-reads to stout
 teloclip --ref ref.fa.fai in.sam
 
-# Read input from stdin and write stdout to file
+# Read alignment input from stdin and write stdout to file
 teloclip --ref ref.fa.fai < in.sam > out.sam
+```
 
-# Filter alignments from BAM file, write sorted output to file
+**Reading and writing BAM alignments**
+
+BAM files are binary sam files, they contain all the same information but take up much less storage space.
+You can use bam files with teloclip like this:
+
+```bash
+# Read alignments from bam file, pipe sam lines to teloclip, sort overhang-read alignments and wite to bam file
 samtools view -h in.bam | teloclip --ref ref.fa.fai | samtools sort > out.bam
 ```
 
@@ -125,13 +132,13 @@ samtools view -h in.bam | teloclip --ref ref.fa.fai | samtools sort > out.bam
 # Map PacBio long-reads to ref assembly,
 # return alignments clipped at contig ends, 
 # write to sorted bam.
-minimap2 -ax map-pb ref.fa pacbio.fq.gz | teloclip --ref ref.fa.fai | samtools sort > out.bam 
+minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz | teloclip --ref ref.fa.fai | samtools sort > out.bam 
 
 # Map reads to reference, 
-# exclude unmapped reads and non-primary/supplementary alignments. 
-# return alignments clipped at contig ends,
+# Exclude non-primary alignments. 
+# Return alignments clipped at contig ends,
 # write to sorted bam.
-minimap2 -ax map-pb ref.fa pacbio.fq.gz | samtools view -h -F 0x2308 | teloclip --ref ref.fa.fai | samtools sort > out.bam 
+minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz | samtools view -h -F 0x100 | teloclip --ref ref.fa.fai | samtools sort > out.bam 
 ```
 
 **Report clipped alignments containing target motifs**
@@ -154,7 +161,7 @@ samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGGTTAGGGTTAGGGT
 
 `teloclip-extract` will write overhanging reads to separate fasta files for each reference contig end. The clipped region of each read is masked as lowercase in output fasta files.
 
-Collections of reads that overhang a contig end can be assembled with `racon` or `miniasm` into a single segment before being used to extend the contig.
+Collections of reads that overhang a contig end can be assembled with `miniasm` into a single segment before being used to extend the contig. The final telemere-extended assembly should be polished (i.e. with `Racon` or `Pilon`) to correct errors in the raw long-read extensions.
 
 ```bash
 # Find clipped alignments containing motif 'TTAGGG' and write reads to separate fasta files for each reference contig end.
@@ -216,7 +223,7 @@ Teloclip can identify aligned contigs that can be used to extend those in the re
 
 Be cautious of short contigs that may align to may repetative sub-telomeric regions and result non-specific extension of contigs.
 
-Also beware of low-complexity telomeric regions on different chromosome aligning to each other and resulting in end-to-end fusions.
+Also beware of low-complexity telomeric regions on different chromosomes aligning to each other and resulting in end-to-end fusions.
 
 
   ```bash
