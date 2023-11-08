@@ -152,9 +152,22 @@ samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGG | samtools s
 # AND contain >=1 copy of the telomeric repeat "TTAGGG" (or its reverse complement "CCCTAA") ANYWHERE in the read.
 samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGG --matchAny | samtools sort > out.bam
 
+# To change the minimum number of consecutive repeats required for a match, simply extend the search motif.
+# In this example 3 TTAGGG are required for a positive match.
+samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGGTTAGGGTTAGGG | samtools sort > out.bam 
+
+```
+
+**Matching noisy target motifs**
+
+Raw long-reads can contain errors in the length of homopolymer tracks. If the `--noPoly` option is set homopolymer tracks within motifs and clipped overhangs will be collapsed before searching for matches. i.e. "TTAGGGTTAGGGTTAGGGTTAGGGTTAGGG" -> "TAGTAGTAGTAGTAG". This should make the search insensitive to homopolymer length errors.
+
+This method may reduce specificity, so test teloclip without the `--nopoly` option first.
+
+```bash
 # Compress homopolymers in query motifs and clipped regions to compensate for errors in raw PacBio or ONP data.
 # i.e. The motif 'TTAGGGTTAGGG' becomes 'TAGTAG' and will match 'TTTTTAAAGGTTTAAGGG'.
-samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGGTTAGGGTTAGGGTTAGGGTTAGGG | samtools sort > out.bam
+samtools view -h in.bam | teloclip --ref ref.fa.fai --noPoly --motifs TTAGGGTTAGGG | samtools sort > out.bam
 ```
 
 **Extract clipped reads**
