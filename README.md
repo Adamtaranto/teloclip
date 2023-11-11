@@ -32,6 +32,8 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 - [Options](#options)
   - [Teloclip Options](#teloclip-options)
   - [Teloclip-extract Options](#teloclip-extract-options)
+- [Citing Teloclip](#citing-teloclip)
+- [Publications using Teloclip](#publications-using-teloclip)
 - [Issues](#issues)
 - [License](#license)
 
@@ -40,7 +42,7 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 
 In most eukaryotic species, chromosomes terminate in repetitive [telomeric](https://en.wikipedia.org/wiki/Telomere) sequences. A complete genome assembly should ideally comprise chromosome-level contigs that possess telomeric repeats at each end. However, genome assemblers frequently fail to recover these repetitive features, instead producing contigs that terminate immediately prior to their location.
 
-Teloclip is designed to recover long-reads that can be used to extend draft contigs and resolve missing telomeres (short-read alignments may also be processed with teloclip). It does this by searching alignments of raw long-read data (i.e. Pacbio or ONP reads mapped with Minimap2) for 'clipped' alignments that occur at the ends of draft contigs. A 'clipped' alignment is produced where the *end* of a read is not part of its best alignment. This can occur when a read extends past the end of an assembled contig.
+Teloclip is designed to recover long-reads that can be used to extend draft contigs and resolve missing telomeres (short-read alignments may also be processed with teloclip). It does this by searching alignments of raw long-read data (i.e. Pacbio or ONT reads mapped with Minimap2) for 'clipped' alignments that occur at the ends of draft contigs. A 'clipped' alignment is produced where the *end* of a read is not part of its best alignment. This can occur when a read extends past the end of an assembled contig.
 
 Information about segments of a read that were aligned or clipped are stored in [SAM formatted](https://en.wikipedia.org/wiki/SAM_(file_format)) alignments as a [CIGAR string](https://www.drive5.com/usearch/manual/cigar.html). Teloclip parses these strings to determine if a read has been clipped at one or both ends of a contig. 
 
@@ -313,6 +315,16 @@ optional arguments:
   --maxBreak            Tolerate max N unaligned bases at contig ends.
   --version             Show program's version number and exit
 ```
+
+## Citing Teloclip
+
+If you use Teloclip in your work please cite this git repo directly and note the release version you used.
+
+## Publications using Teloclip
+
+van Westerhoven, A., Mehrabi, R., Talebi, R., Steentjes, M., Corcolon, B., Chong, P., Kema, G. and Seidl, M.F., 2023. A chromosome-level genome assembly of Zasmidium syzygii isolated from banana leaves. bioRxiv, pp.2023-08.
+
+Yang, H.P., Wenzel, M., Hauser, D.A., Nelson, J.M., Xu, X., Eliáš, M. and Li, F.W., 2021. Monodopsis and Vischeria genomes shed new light on the biology of eustigmatophyte algae. Genome biology and evolution, 13(11), p.evab233.
 
 ## Issues
 
