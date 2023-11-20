@@ -3,6 +3,7 @@
 import os
 from itertools import groupby
 from teloclip.utils import log, isfile
+from teloclip.motifs import check_sequence_for_patterns
 
 
 def makeMask(killIdx, listlen):
@@ -130,23 +131,22 @@ def crunchHomopolymers(motifList):
     return list(set(crunchList))
 
 
-def isClipMotif(
-    samline, motifList, leftClip, rightClip, leftClipLen, rightClipLen, noPoly
-):
+def isMotifInClip(samline, motifList, leftClip, rightClip, leftClipLen, rightClipLen):
     """
     Extract terminal soft-clipped blocks from read sequence and test for presence of any DNA motif in motifList.
     """
-    clipSeq = list()
+    # Sam seq field
     SAM_SEQ = 9
-    if noPoly:
-        if leftClip:
-            clipSeq.append(crunchHomopolymers([samline[SAM_SEQ][0:leftClipLen]])[0])
-        if rightClip:
-            clipSeq.append(crunchHomopolymers([samline[SAM_SEQ][-rightClipLen:]])[0])
-    else:
-        if leftClip:
-            clipSeq.append(samline[SAM_SEQ][0:leftClipLen])
-        if rightClip:
-            clipSeq.append(samline[SAM_SEQ][-rightClipLen:])
+
+    # Search motif/s as regex in the clipped segment
+    if leftClip:
+        leftcheck = check_sequence_for_patterns(
+            samline[SAM_SEQ][0:leftClipLen], motifList
+        )
+    if rightClip:
+        rightcheck = check_sequence_for_patterns(
+            samline[SAM_SEQ][-rightClipLen:], motifList
+        )
+
     # True if either clipped end sequence contains at least one instance of any motif.
-    return any(s in x for s in motifList for x in clipSeq)
+    return any(leftcheck, rightcheck)
