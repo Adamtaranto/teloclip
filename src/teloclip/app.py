@@ -20,7 +20,7 @@ from __future__ import print_function
 from teloclip._version import __version__
 from teloclip.samops import processSamlines
 from teloclip.seqops import read_fai, addRevComplement, crunchHomopolymers
-
+from teloclip.utils import log
 import argparse
 import sys
 
@@ -66,6 +66,13 @@ def mainArgs():
         help="If set do NOT search for reverse complement of specified motifs.",
     )
     parser.add_argument(
+        "--fuzzy",
+        default=False,
+        action="store_true",
+        help="If set tolerate +/- 1 variation in motif homopolymer runs \
+            i.e. TTAGGG -> T{1,3}AG{2,4}. Default: Off",
+    )
+    parser.add_argument(
         "--noPoly",
         default=False,
         action="store_true",
@@ -106,6 +113,20 @@ def main():
     else:
         motifList = []
 
+    # Log depreciation warning if using --noPoly option
+    if args.noPoly:
+        log(
+            "WARNING: Option --noPoly is depreciated and should not be used. \
+            Switching to option --fuzzy instead to find inexact motif matches."
+        )
+        args.fuzzy = True
+
+    if args.fuzzy:
+        log(
+            "INFO: Using option --fuzzy to find inexact motif matches. \
+                Tolerate +/- 1 base variance in motif homopolymers."
+        )
+
     processSamlines(
         args.samfile,
         ContigDict,
@@ -113,6 +134,6 @@ def main():
         matchAnywhere=args.matchAny,
         maxBreak=args.maxBreak,
         minClip=args.minClip,
-        noPoly=args.noPoly,
         noRev=args.noRev,
+        fuzzy=args.fuzzy,
     )
