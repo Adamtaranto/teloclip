@@ -51,9 +51,9 @@ def test_count_patterns_in_sequence():
     dna_sequence = "ATCGGATCGAGCGCGAATCG"
     regex_patterns = ["ATC", "GAT", "CGA"]
     assert count_patterns_in_sequence(dna_sequence, regex_patterns) == {
-        "ATC": 4,
-        "GAT": 2,
-        "CGA": 3,
+        "ATC": 3,
+        "GAT": 1,
+        "CGA": 2,
     }
 
 
@@ -80,6 +80,7 @@ def test_count_continuous_runs():
         ("T", 3),
         ("G", 2),
         ("C", 3),
+        ("G", 1),
     ]
 
     # Test case with an empty string
@@ -121,7 +122,7 @@ def test_construct_regex_pattern():
     # Additional test case with a more complex motif
     motif_sequence = "AAAAGGGTTTCCCC"
     motif_tuples = count_continuous_runs(motif_sequence)
-    assert construct_regex_pattern(motif_tuples) == r"A{3,5}G{3,5}T{3,5}C{3,5}"
+    assert construct_regex_pattern(motif_tuples) == r"A{3,5}G{2,4}T{2,4}C{3,5}"
 
 
 # Run the tests
