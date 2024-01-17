@@ -8,7 +8,7 @@ authors = [{ name = "Adam Taranto", email = "adam.p.taranto@gmail.com" }]
 
 description = "A tool for the recovery of unassembled telomeres from soft-clipped read alignments."
 readme = "README.md"
-requires-python = ">=3.7"
+requires-python = ">=3.8"
 license = { text = "MIT" }
 
 classifiers = [
