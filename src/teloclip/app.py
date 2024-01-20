@@ -1,5 +1,3 @@
-#!/usr/bin/env python
-
 """
                                        ██████╗ ██╗      ██╗ ██████╗ 
                                       ██╔════╝ ██║      ██║ ██╔══██╗
@@ -15,13 +13,13 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 
 """
 
-from __future__ import print_function
-
 from teloclip._version import __version__
 from teloclip.samops import processSamlines
 from teloclip.seqops import read_fai, addRevComplement, crunchHomopolymers
+from teloclip.utils import CustomFormatter
 
 import argparse
+import logging
 import sys
 
 
@@ -89,6 +87,11 @@ def mainArgs():
 
 
 def main():
+    # Set up logging
+    fmt = "%(asctime)s | %(levelname)8s | %(module)s:%(lineno)s:%(funcName)20s() | %(message)s"
+    handler_sh = logging.StreamHandler(sys.stdout)
+    handler_sh.setFormatter(CustomFormatter(fmt))
+    logging.basicConfig(format=fmt, level=logging.INFO, handlers=[handler_sh])
     # Get cmd line args
     args = mainArgs()
 
