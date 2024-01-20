@@ -14,5 +14,6 @@ dependencies:
       #- biopython
       #- regex
       #- pysam
+      - pytest
       - build
       - twine
