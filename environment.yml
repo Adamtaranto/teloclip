@@ -3,17 +3,16 @@ channels:
   - conda-forge
   - bioconda
   - defaults
+  - nanoporetech # Has minimap and samtools for Apple Silicon
 dependencies:
   - python >=3.12
-  - bioconda::minimap2
-  - bioconda::samtools
-  - bioconda::winnowmap
+  - minimap2
+  - samtools
+  #- bioconda::winnowmap
   - pip
   - pip:
       #- biopython
       #- regex
       #- pysam
-      - black
-      - setuptools_scm
       - build
       - twine
