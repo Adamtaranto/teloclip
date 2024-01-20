@@ -54,19 +54,22 @@ Teloclip is based on concepts from Torsten Seemann's excellent tool [samclip](ht
 
 ### Installation
 
+Teloclip requires Python >= 3.8.
+
 There are 4 options available for installing Teloclip locally:
 
-1) Clone from this repository and install as a local Python package.
+1) Pip install directly from this git repository.   
 This is the best way to ensure you have the latest development version.
 
 ```bash
-git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e .
+pip install git+https://github.com/Adamtaranto/teloclip.git
 ```
 
-2) Pip install directly from this git repository.
+2) Clone from this repository and install as a local Python package.   
+Do this if you want to edit the code.
 
 ```bash
-pip install git+https://github.com/Adamtaranto/teloclip.git
+git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e .
 ```
 
 3) Install from PyPi.

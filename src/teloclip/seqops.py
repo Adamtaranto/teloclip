@@ -1,8 +1,7 @@
-#!/usr/bin/env python
+from teloclip.utils import isfile
 
-import os
 from itertools import groupby
-from teloclip.utils import log, isfile
+from teloclip.utils import isfile
 from teloclip.motifs import check_sequence_for_patterns
 
 
@@ -38,7 +37,7 @@ def writeClip(idx, zpad, gap, seq, maplen):
     padseq = "-" * gap + seq
     # Format length of ref covered by alingment
     readlen = "LEN=" + str(maplen).rjust(6)
-    log("\t".join([padIdx, readlen, padseq]))
+    print("\t".join([padIdx, readlen, padseq]))
 
 
 # NCU

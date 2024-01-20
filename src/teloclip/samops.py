@@ -1,7 +1,6 @@
-#!/usr/bin/env python
+from teloclip.seqops import crunchHomopolymers, isMotifInClip
 
-from teloclip.utils import log
-from teloclip.seqops import crunchHomopolymers, isClipMotif
+import logging
 import re
 import sys
 
@@ -15,6 +14,7 @@ def processSamlines(
     minClip=1,
     noPoly=False,
     noRev=False,
+    fuzzy=False,
 ):
     # SAM line index keys
     SAM_QNAME = 0
@@ -76,7 +76,7 @@ def processSamlines(
                         keepCount += 1
                     else:
                         # Print to stderr
-                        log(
+                        logging.info(
                             str(samline[SAM_QNAME])
                             + " overhang on both ends of "
                             + str(samline[SAM_RNAME])
@@ -100,7 +100,7 @@ def processSamlines(
                     else:
                         removeCount += 1
             elif motifList and keepLine:
-                if isClipMotif(
+                if isMotifInClip(
                     samline,
                     motifList,
                     leftClip,
@@ -118,14 +118,14 @@ def processSamlines(
             else:
                 removeCount += 1
     if motifList:
-        log(
+        logging.info(
             f"Processed {samlineCount} SAM records.\n"
             f"Found {keepCount} alignments soft-clipped at contig ends.\n"
             f"Output {motifCount} alignments containing motif matches.\n"
             f"Discarded {removeCount} terminal alignments after filtering."
         )
     else:
-        log(
+        logging.info(
             f"Processed {samlineCount} SAM records.\n"
             f"Found {keepCount} alignments soft-clipped at contig ends.\n"
             f"Found {bothCount} alignments spanning entire contigs.\n"
@@ -214,7 +214,7 @@ def StreamingSamFilter(samfile=None, contigs=None, maxBreak=50, minClip=1):
                             )
                         )
                     except:
-                        log(
+                        logging.warning(
                             "Reference sequence not found in FAI file: "
                             + str(samline[SAM_RNAME])
                         )
@@ -223,7 +223,7 @@ def StreamingSamFilter(samfile=None, contigs=None, maxBreak=50, minClip=1):
                 try:
                     ContigLen = contigs[str(samline[SAM_RNAME])]
                 except:
-                    log(
+                    logging.warning(
                         "Reference sequence not found in FAI file: "
                         + str(samline[SAM_RNAME])
                     )

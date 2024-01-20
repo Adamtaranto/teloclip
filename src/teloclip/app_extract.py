@@ -1,13 +1,12 @@
-#!/usr/bin/env python
-
-from __future__ import print_function
 from teloclip._version import __version__
-from teloclip.utils import log
-from teloclip.seqops import writefasta, read_fai
 from teloclip.samops import StreamingSamFilter
+from teloclip.seqops import writefasta, read_fai
+from teloclip.utils import log
+
 import argparse
-import sys
+import logging
 import os
+import sys
 
 
 """
@@ -104,7 +103,7 @@ def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=No
         readCount += 1
         # Log update every 10K reads
         if not readCount % 10000:
-            log("Alignments processed: %s" % str(readCount))
+            logging.info("Alignments processed: %s" % str(readCount))
         # Check if alignment is at right end overhang
         if read[6] == "R":
             # i.e [(alnStart,alnEnd,rightClipLen,readSeq,readName,contigName,'R')]
@@ -116,7 +115,7 @@ def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=No
             outfileR = os.path.join(outdir, "_".join([base, "R"]) + ".fasta")
             # Check if need to create new outfile or append to existing file.
             if outfileR not in outpaths:
-                log("Creating new outfile: %s" % str(outfileR))
+                logging.info("Creating new outfile: %s" % str(outfileR))
                 outpaths.append(outfileR)
                 # Output reads aligned to right end of contig
                 with open(outfileR, "w") as fileR:
@@ -143,7 +142,7 @@ def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=No
             outfileL = os.path.join(outdir, "_".join([base, "L"]) + ".fasta")
             # Check if need to create new outfile or append to existing file.
             if outfileL not in outpaths:
-                log("Creating new outfile: %s" % str(outfileL))
+                logging.info("Creating new outfile: %s" % str(outfileL))
                 outpaths.append(outfileL)
                 # Output reads aligned to left end of contig
                 with open(outfileL, "w") as fileL:
@@ -160,7 +159,7 @@ def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=No
                     # Write masked read to fasta
                     writefasta(fileL, str(read[4]), masked)
 
-    log("Total alignments processed: %s" % str(readCount))
+    logging.info("Total alignments processed: %s" % str(readCount))
 
 
 def main():
@@ -168,12 +167,12 @@ def main():
     args = mainArgs()
 
     # Load ref contigs lengths as dict
-    log("Importing reference contig info from: %s " % str(args.refIdx))
+    logging.info("Importing reference contig info from: %s " % str(args.refIdx))
     contigInfo = read_fai(args.refIdx)
 
     # Load alignments from samfile or stdin
     # {'contig':{"L":[(alnStart,alnEnd,leftClipLen,readSeq,readname)],"R":[(alnStart,alnEnd,rightClipLen,readSeq,readname)]}}
-    log("Processing alignments. Searching for overhangs.")
+    logging.info("Processing alignments. Searching for overhangs.")
 
     alignments = StreamingSamFilter(
         samfile=args.samfile,
@@ -183,7 +182,7 @@ def main():
     )
 
     if args.extractReads:
-        log("Writing overhang reads by contig.")
+        logging.info("Writing overhang reads by contig.")
         # splitbycontig(alignments=alignments,contigs=contigInfo,prefix=args.prefix,outdir=args.extractDir)
         StreamingSplitByContig(
             alignments=alignments,
