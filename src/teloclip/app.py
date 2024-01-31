@@ -14,9 +14,9 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 """
 
 from teloclip._version import __version__
-from teloclip.samops import processSamlines
-from teloclip.seqops import read_fai, addRevComplement, crunchHomopolymers
 from teloclip.logs import init_logging
+from teloclip.samops import processSamlines
+from teloclip.seqops import read_fai, addRevComplement
 
 import argparse
 import logging
@@ -48,7 +48,7 @@ def mainArgs():
         "--maxBreak",
         type=int,
         default=50,
-        help="Tolerate max N unaligned bases at contig ends.",
+        help="Tolerate max N unaligned bases before contig end.",
     )
     parser.add_argument(
         "--motifs",
@@ -67,24 +67,30 @@ def mainArgs():
         "--fuzzy",
         default=False,
         action="store_true",
-        help="If set tolerate +/- 1 variation in motif homopolymer runs \
+        help="If set, tolerate +/- 1 variation in motif homopolymer runs \
             i.e. TTAGGG -> T{1,3}AG{2,4}. Default: Off",
+    )
+    parser.add_argument(
+        "-r",
+        "--min_repeats",
+        default=3,
+        type=int,
+        help="Minimum number of sequential pattern matches required for a hit to be reported. Default: 3",
     )
     parser.add_argument(
         "--noPoly",
         default=False,
         action="store_true",
-        help='If set collapse homopolymer tracks within motifs before searching overhangs. \
-                        i.e. "TTAGGGTTAGGGTTAGGGTTAGGGTTAGGG" -> "TAGTAGTAGTAGTAG". \
-                        Useful for PacBio or ONP long reads homopolymer length errors. Default: Off',
+        help='WARNING: OPTION DEPRECIATED, USE --FUZZY. Default: False',
     )
     parser.add_argument(
-        "--matchAny",
+        "--matchAnywhere",
         default=False,
         action="store_true",
-        help="If set motif match may occur in unclipped region of alignment.",
+        help="If set, motif match may occur in unclipped region of alignment.",
     )
     parser.add_argument(
+        "-v",
         "--version",
         action="version",
         version="%(prog)s {version}".format(version=__version__),
@@ -109,8 +115,9 @@ def main():
         # Add rev comp motifs to list, make unique set.
         if not args.noRev:
             motifList = addRevComplement(motifList)
-        if args.noPoly:
-            motifList = crunchHomopolymers(motifList)
+        if args.fuzzy:
+            motifList = motifList # TODO: Implement convert to regex
+            #convert to regex pattern(motifList)
     else:
         motifList = []
 
@@ -132,9 +139,10 @@ def main():
         args.samfile,
         ContigDict,
         motifList,
-        matchAnywhere=args.matchAny,
+        matchAnywhere=args.matchAnywhere,
         maxBreak=args.maxBreak,
         minClip=args.minClip,
         noRev=args.noRev,
         fuzzy=args.fuzzy,
+        minRepeats=args.min_repeats,
     )

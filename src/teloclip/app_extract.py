@@ -1,7 +1,7 @@
 from teloclip._version import __version__
+from teloclip.logs import init_logging
 from teloclip.samops import StreamingSamFilter
 from teloclip.seqops import writefasta, read_fai
-from teloclip.logs import init_logging
 
 import argparse
 import logging
@@ -67,11 +67,12 @@ def mainArgs():
         "--maxBreak",
         type=int,
         default=50,
-        help="Tolerate max N unaligned bases at contig ends.",
+        help="Tolerate max N unaligned bases before contig end.",
     )
 
     # Version info
     parser.add_argument(
+        "-v",
         "--version",
         action="version",
         version="%(prog)s {version}".format(version=__version__),
