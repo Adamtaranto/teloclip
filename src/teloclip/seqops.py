@@ -1,8 +1,7 @@
+from teloclip.motifs import check_sequence_for_patterns
 from teloclip.utils import isfile
 
 from itertools import groupby
-from teloclip.utils import isfile
-from teloclip.motifs import check_sequence_for_patterns
 
 
 def makeMask(killIdx, listlen):
