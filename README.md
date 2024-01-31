@@ -166,9 +166,10 @@ samtools view -h in.bam | teloclip --ref ref.fa.fai --motifs TTAGGGTTAGGGTTAGGG 
 
 **Matching noisy target motifs**
 
-Raw long-reads can contain errors in the length of homopolymer tracks. If the `--noPoly` option is set homopolymer tracks within motifs and clipped overhangs will be collapsed before searching for matches. i.e. "TTAGGGTTAGGGTTAGGGTTAGGGTTAGGG" -> "TAGTAGTAGTAGTAG". This should make the search insensitive to homopolymer length errors.
+Raw long-reads can contain errors in the length of homopolymer tracks. If the `--fuzzy` option is set, motifs will be converted to regex patterns that allow the number of repeated bases to vary by +/- 1.   
+i.e. "TTAGGG" -> "T{1,3}AG{2,4}". This pattern will match TTAGG TTAGGGG TAGG TTTAGGG etc.
 
-This method may reduce specificity, so test teloclip without the `--nopoly` option first.
+To reduce off target matching you can increase to minimum required number of motif matches with "--min_repeats".
 
 ```bash
 # Compress homopolymers in query motifs and clipped regions to compensate for errors in raw PacBio or ONP data.
