@@ -1,7 +1,7 @@
 from teloclip._version import __version__
 from teloclip.samops import StreamingSamFilter
 from teloclip.seqops import writefasta, read_fai
-from teloclip.utils import log
+from teloclip.logs import init_logging
 
 import argparse
 import logging
@@ -163,6 +163,9 @@ def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=No
 
 
 def main():
+    # Set up logging
+    init_logging()
+    
     # Get cmd line args
     args = mainArgs()
 

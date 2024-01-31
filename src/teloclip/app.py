@@ -16,7 +16,7 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 from teloclip._version import __version__
 from teloclip.samops import processSamlines
 from teloclip.seqops import read_fai, addRevComplement, crunchHomopolymers
-from teloclip.utils import CustomFormatter
+from teloclip.logs import init_logging
 
 import argparse
 import logging
@@ -95,10 +95,8 @@ def mainArgs():
 
 def main():
     # Set up logging
-    fmt = "%(asctime)s | %(levelname)8s | %(module)s:%(lineno)s:%(funcName)20s() | %(message)s"
-    handler_sh = logging.StreamHandler(sys.stdout)
-    handler_sh.setFormatter(CustomFormatter(fmt))
-    logging.basicConfig(format=fmt, level=logging.INFO, handlers=[handler_sh])
+    init_logging()
+    
     # Get cmd line args
     args = mainArgs()
 
@@ -118,14 +116,14 @@ def main():
 
     # Log depreciation warning if using --noPoly option
     if args.noPoly:
-        log(
+        logging.warning(
             "WARNING: Option --noPoly is depreciated and should not be used. \
             Switching to option --fuzzy instead to find inexact motif matches."
         )
         args.fuzzy = True
 
     if args.fuzzy:
-        log(
+        logging.info(
             "INFO: Using option --fuzzy to find inexact motif matches. \
                 Tolerate +/- 1 base variance in motif homopolymers."
         )
