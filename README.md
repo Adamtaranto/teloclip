@@ -58,29 +58,30 @@ Teloclip requires Python >= 3.8.
 
 There are 4 options available for installing Teloclip locally:
 
-1) Pip install directly from this git repository.   
+1) Install from PyPi.   
+This or Bioconda will get you the latest stable release.
+
+```bash
+pip install teloclip
+```
+
+2) Install from Bioconda.
+```bash
+conda install -c bioconda teloclip
+```
+
+3) Pip install directly from this git repository.   
 This is the best way to ensure you have the latest development version.
 
 ```bash
 pip install git+https://github.com/Adamtaranto/teloclip.git
 ```
 
-2) Clone from this repository and install as a local Python package.   
+4) Clone from this repository and install as a local Python package.   
 Do this if you want to edit the code.
 
 ```bash
 git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e .
-```
-
-3) Install from PyPi.
-
-```bash
-pip install teloclip
-```
-
-4) Install from Bioconda.
-```bash
-conda install -c bioconda teloclip
 ```
 
 **Verify installation**
