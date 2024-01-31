@@ -104,7 +104,7 @@ def addRevComplement(motifList):
         setList.append(revcompl(motif))
     return set(setList)
 
-
+# Depreciated
 def crunchHomopolymers(motifList):
     """
     Take as input a list of target motifs, collapse poly-nucleotide tracks, return list of collapsed motifs.
@@ -128,7 +128,7 @@ def crunchHomopolymers(motifList):
     # Convert to set to remove duplicates and return
     return list(set(crunchList))
 
-
+# TODO: support min pattern matches
 def isMotifInClip(samline, motifList, leftClip, rightClip, leftClipLen, rightClipLen):
     """
     Extract terminal soft-clipped blocks from read sequence and test for presence of any DNA motif in motifList.

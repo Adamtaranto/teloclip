@@ -1,10 +1,10 @@
-from teloclip.seqops import crunchHomopolymers, isMotifInClip
+from teloclip.seqops import isMotifInClip
 
 import logging
 import re
 import sys
 
-
+    
 def processSamlines(
     samfile,
     ContigDict,
@@ -12,9 +12,9 @@ def processSamlines(
     matchAnywhere=False,
     maxBreak=0,
     minClip=1,
-    noPoly=False,
     noRev=False,
     fuzzy=False,
+    minRepeats=1,
 ):
     # SAM line index keys
     SAM_QNAME = 0
@@ -84,21 +84,21 @@ def processSamlines(
                         bothCount += 1
             # Optional check for Telomeric repeat motifs
             if motifList and keepLine and matchAnywhere:
-                if noPoly:
-                    if any(
-                        s in crunchHomopolymers([samline[SAM_SEQ]])[0]
-                        for s in motifList
-                    ):
-                        sys.stdout.write(line)
-                        motifCount += 1
-                    else:
-                        removeCount += 1
+                #if noPoly:
+                #    if any(
+                #        s in crunchHomopolymers([samline[SAM_SEQ]])[0]
+                #        for s in motifList
+                #    ):
+                #        sys.stdout.write(line)
+                #        motifCount += 1
+                #    else:
+                #        removeCount += 1
+                #else:
+                if any(s in samline[SAM_SEQ] for s in motifList): # TODO: Mod to allow regex pattern search
+                    sys.stdout.write(line)
+                    motifCount += 1
                 else:
-                    if any(s in samline[SAM_SEQ] for s in motifList):
-                        sys.stdout.write(line)
-                        motifCount += 1
-                    else:
-                        removeCount += 1
+                    removeCount += 1
             elif motifList and keepLine:
                 if isMotifInClip(
                     samline,
@@ -107,7 +107,6 @@ def processSamlines(
                     rightClip,
                     leftClipLen,
                     rightClipLen,
-                    noPoly,
                 ):
                     sys.stdout.write(line)
                     motifCount += 1
