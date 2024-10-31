@@ -4,7 +4,23 @@ import logging
 import re
 import sys
 
-    
+# TODO:
+"""
+- Create a samline class
+- Create a CIGAR class based on https://github.com/brentp/cigar/blob/master/cigar.py
+- sam fields as attributes
+- calculate clip regions
+- note if left/right clips present
+- Remove nopoly
+- Add min_repeat threshold
+- Add min_anchor
+- support mix of regex and plain pattern
+- Split L/R into helper functions
+- log when create motifs inc rev
+- Add function: Count Cigar len to left / right of softclip 20S20M2D10M2S = 30 bases of read aligned to ref
+    - ? Should we calc total align len on reference, or total based of read which are aligned?
+"""
+
 def processSamlines(
     samfile,
     ContigDict,
@@ -14,7 +30,7 @@ def processSamlines(
     minClip=1,
     noRev=False,
     fuzzy=False,
-    minRepeats=1,
+    minRepeats=1, # Add minAnchor=500
 ):
     # SAM line index keys
     SAM_QNAME = 0
@@ -42,7 +58,7 @@ def processSamlines(
         samlineCount += 1
         samline = line.split("\t")
         # Check if line contains soft-clip and no hard-clipping.
-        if "S" in samline[SAM_CIGAR] and not "H" in samline[SAM_CIGAR]:
+        if "S" in samline[SAM_CIGAR] and not "H" in samline[SAM_CIGAR]: # TODO: Move this condidtion up and flip logic. Continue if not passed.
             # Get length of left and right overhangs
             leftClipLen, rightClipLen = checkClips(samline[SAM_CIGAR])
             alnLen = lenCIGAR(samline[SAM_CIGAR])
