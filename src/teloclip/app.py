@@ -1,26 +1,26 @@
 """
-                                       ██████╗ ██╗      ██╗ ██████╗ 
+                                       ██████╗ ██╗      ██╗ ██████╗
                                       ██╔════╝ ██║      ██║ ██╔══██╗
                                       ██║      ██║      ██║ ██████╔╝
-████████╗ ███████╗ ██╗       ██████╗  ██║      ██║      ██║ ██╔═══╝ 
-╚══██╔══╝ ██╔════╝ ██║      ██╔═══██╗ ╚██████╗ ███████╗ ██║ ██║     
-   ██║    █████╗   ██║      ██║   ██║  ╚═════╝ ╚══════╝ ╚═╝ ╚═╝  
+████████╗ ███████╗ ██╗       ██████╗  ██║      ██║      ██║ ██╔═══╝
+╚══██╔══╝ ██╔════╝ ██║      ██╔═══██╗ ╚██████╗ ███████╗ ██║ ██║
+   ██║    █████╗   ██║      ██║   ██║  ╚═════╝ ╚══════╝ ╚═╝ ╚═╝
    ██║    ██╔══╝   ██║      ██║   ██║
    ██║    ███████╗ ███████╗ ╚██████╔╝
-   ╚═╝    ╚══════╝ ╚══════╝  ╚═════╝ 
+   ╚═╝    ╚══════╝ ╚══════╝  ╚═════╝
 
 A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
 
 """
 
+import argparse
+import logging
+import sys
+
 from teloclip._version import __version__
 from teloclip.logs import init_logging
 from teloclip.samops import processSamlines
 from teloclip.seqops import read_fai, addRevComplement
-
-import argparse
-import logging
-import sys
 
 
 def mainArgs():
@@ -81,7 +81,7 @@ def mainArgs():
         "--noPoly",
         default=False,
         action="store_true",
-        help='WARNING: OPTION DEPRECIATED, USE --FUZZY. Default: False',
+        help="WARNING: OPTION DEPRECIATED, USE --FUZZY. Default: False",
     )
     parser.add_argument(
         "--matchAnywhere",
@@ -102,7 +102,7 @@ def mainArgs():
 def main():
     # Set up logging
     init_logging()
-    
+
     # Get cmd line args
     args = mainArgs()
 
@@ -116,8 +116,8 @@ def main():
         if not args.noRev:
             motifList = addRevComplement(motifList)
         if args.fuzzy:
-            motifList = motifList # TODO: Implement convert to regex
-            #convert to regex pattern(motifList)
+            motifList = motifList  # TODO: Implement convert to regex
+            # convert to regex pattern(motifList)
     else:
         motifList = []
 
