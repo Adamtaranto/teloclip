@@ -1,9 +1,7 @@
-name: teloclip-dev
+name: teloclip
 channels:
   - conda-forge
   - bioconda
-  - defaults
-  - nanoporetech # Has minimap and samtools for Apple Silicon
 dependencies:
   - python >=3.12
   - minimap2
@@ -15,5 +13,4 @@ dependencies:
       #- regex
       #- pysam
       - pytest
-      - build
-      - twine
+      - hatch
