@@ -10,7 +10,7 @@
 <br clear="left"/>
 
 <p align="center">
-  <img src="https://github.com/Adamtaranto/teloclip/blob/2d9628d453e832ac0de15577c6cdde6835fb6417/docs/teloclip_hexlogo.jpg?raw=true" width="180px" title="teloclip_hex"/>
+<img src="https://raw.githubusercontent.com/Adamtaranto/teloclip/main/docs/teloclip_hexlogo.jpg" width="180" height="180" title="teloclip_hex" />
 </p>
 
 <h1>Teloclip</h1>
@@ -103,7 +103,10 @@ Alternatively, [launch a Gitpod Workspace](https://gitpod.io/#https://github.com
 ## Example Usage
 
 Basic use case:
-![teloclip_example](docs/teloclip_example_graphic.png)
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/Adamtaranto/teloclip/main/docs/teloclip_example_graphic.png" title="teloclip_example" />
+</p>
 
 **First index the reference assembly**
 
@@ -338,5 +341,3 @@ Submit feedback to the [Issue Tracker](https://github.com/Adamtaranto/teloclip/i
 ## License
 
 Software provided under MIT license.
-
-Teloclip hex-sticker was designed by [@Super_Coleider](www.instagram.com/Super_Coleider).

@@ -1,13 +1,12 @@
-from teloclip._version import __version__
-from teloclip.logs import init_logging
-from teloclip.samops import StreamingSamFilter
-from teloclip.seqops import writefasta, read_fai
-
 import argparse
 import logging
 import os
 import sys
 
+from teloclip._version import __version__
+from teloclip.logs import init_logging
+from teloclip.samops import StreamingSamFilter
+from teloclip.seqops import writefasta, read_fai
 
 """
 Module under development. Currently splits overhang reads of each contig end into separate fata files. 
@@ -166,7 +165,7 @@ def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=No
 def main():
     # Set up logging
     init_logging()
-    
+
     # Get cmd line args
     args = mainArgs()
 

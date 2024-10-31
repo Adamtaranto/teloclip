@@ -1,10 +1,10 @@
-from teloclip.seqops import isMotifInClip
-
 import logging
 import re
 import sys
 
-    
+from teloclip.seqops import isMotifInClip
+
+
 def processSamlines(
     samfile,
     ContigDict,
@@ -84,7 +84,7 @@ def processSamlines(
                         bothCount += 1
             # Optional check for Telomeric repeat motifs
             if motifList and keepLine and matchAnywhere:
-                #if noPoly:
+                # if noPoly:
                 #    if any(
                 #        s in crunchHomopolymers([samline[SAM_SEQ]])[0]
                 #        for s in motifList
@@ -93,8 +93,10 @@ def processSamlines(
                 #        motifCount += 1
                 #    else:
                 #        removeCount += 1
-                #else:
-                if any(s in samline[SAM_SEQ] for s in motifList): # TODO: Mod to allow regex pattern search
+                # else:
+                if any(
+                    s in samline[SAM_SEQ] for s in motifList
+                ):  # TODO: Mod to allow regex pattern search
                     sys.stdout.write(line)
                     motifCount += 1
                 else:

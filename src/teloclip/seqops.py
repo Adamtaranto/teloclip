@@ -1,7 +1,7 @@
+from itertools import groupby
+
 from teloclip.motifs import check_sequence_for_patterns
 from teloclip.utils import isfile
-
-from itertools import groupby
 
 
 def makeMask(killIdx, listlen):
@@ -104,6 +104,7 @@ def addRevComplement(motifList):
         setList.append(revcompl(motif))
     return set(setList)
 
+
 # Depreciated
 def crunchHomopolymers(motifList):
     """
@@ -127,6 +128,7 @@ def crunchHomopolymers(motifList):
         crunchList.append("".join(noReps))
     # Convert to set to remove duplicates and return
     return list(set(crunchList))
+
 
 # TODO: support min pattern matches
 def isMotifInClip(samline, motifList, leftClip, rightClip, leftClipLen, rightClipLen):

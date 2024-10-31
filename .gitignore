@@ -1,6 +1,9 @@
 # Package notes
 pkg-mgt/
 
+# Mac stuff
+.DS_Store
+
 # Versioning
 src/teloclip/_version.py
 

@@ -9,13 +9,8 @@ tasks:
       conda env update -n base --file environment.yml
     # Run on every workspace start
     command: |
-      echo 'Installing requirements.txt'
-      pip3 install -r requirements.txt
       echo 'Installing teloclip in interactive mode.'
-      #pip3 install --upgrade setuptools-scm
-      python setup.py --version
-      pip3 install -e .
-      #python3 -m pip install --upgrade build && python3 -m build
+      pip3 install -e ".[tests]"
       echo 'Finished!'
 
 vscode:
@@ -25,4 +20,3 @@ vscode:
     - ms-toolsai.jupyter
     - ms-toolsai.jupyter-keymap
     - oderwat.indent-rainbow
-    - ms-python.black-formatter

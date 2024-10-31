@@ -1,15 +1,16 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "teloclip"
-authors = [{ name = "Adam Taranto", email = "adam.p.taranto@gmail.com" }]
-
 description = "A tool for the recovery of unassembled telomeres from soft-clipped read alignments."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
+authors = [
+    { name = "Adam Taranto", email = "adam.p.taranto@gmail.com" }
+]
 
 classifiers = [
     "Programming Language :: Python :: 3",
@@ -18,14 +19,9 @@ classifiers = [
     "License :: OSI Approved :: MIT License",
 ]
 
-dynamic = ["version", "dependencies"]
+#dependencies = ["biopython"]
 
-[tool.setuptools_scm]
-write_to = "src/teloclip/_version.py"
-
-[tool.setuptools.dynamic]
-#version = { attr = "teloclip.__version__" }
-dependencies = { file = "requirements.txt" }
+dynamic = ["version"]
 
 [project.urls]
 homepage = "https://github.com/adamtaranto/teloclip"
@@ -36,21 +32,26 @@ repository = "https://github.com/adamtaranto/teloclip"
 teloclip = "teloclip.app:main"
 teloclip-extract = "teloclip.app_extract:main"
 
+[tool.hatch.build]
+source = "src"
 
-# Create and push tags
-# git tag -a v0.0.4 
-# git push origin v0.0.4
+exclude = [
+    "environment.yml",
+    ".gitpod.Dockerfile",
+    ".gitpod.yml",
+    ".dockerignore",
+    ".vscode",
+]
 
-# Check what setuptools_scm thinks the current version is and create _version.py
-# git describe
-# python -m setuptools_scm
-# python setup.py --version
+[tool.hatch.version]
+source = "vcs"
 
-# Build
-# python3 -m pip install --upgrade build && python3 -m build
-# OR
-# Build sdist
-# python setup.py sdist 
+[tool.hatch.version.vcs]
+tag-pattern = "v*"  # Git tags starting with 'v' will be used for versioning
+fallback-version = "0.0.0"
 
-# Push to pypi
-# twine upload dist/*
+[tool.hatch.build.hooks.vcs]
+version-file = "src/teloclip/_version.py"
+
+[project.optional-dependencies]
+tests = ["pytest"]

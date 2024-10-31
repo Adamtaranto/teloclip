@@ -1,11 +1,19 @@
 import logging
 import sys
 
+
 def init_logging():
-    fmt = "%(asctime)s | %(levelname)8s | %(module)s:%(lineno)s:%(funcName)20s() | %(message)s"
-    handler_sh = logging.StreamHandler(sys.stdout)
+    # Define the log message format
+    fmt = "%(asctime)s | %(levelname)s | %(module)s:%(lineno)s:%(funcName)s() | %(message)s"
+
+    # Set up a StreamHandler for stderr instead of stdout
+    handler_sh = logging.StreamHandler(sys.stderr)
     handler_sh.setFormatter(CustomFormatter(fmt))
+
+    # Configure the logging with our handler for stderr
     logging.basicConfig(format=fmt, level=logging.DEBUG, handlers=[handler_sh])
+
+
 class CustomFormatter(logging.Formatter):
     """Logging colored formatter, adapted from https://alexandra-zaharia.github.io/posts/make-your-own-custom-color-formatter-with-python-logging"""
 

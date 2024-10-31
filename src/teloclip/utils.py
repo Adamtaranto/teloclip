@@ -2,6 +2,7 @@ import logging
 import os
 import sys
 
+
 def isfile(path):
     """
     Check if file exists.

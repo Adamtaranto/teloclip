@@ -8,7 +8,7 @@ def format_pattern_counts(pattern_counts: Dict[str, int]) -> str:
 
     Parameters:
     - pattern_counts (Dict[str, int]): A dictionary where keys are regex patterns
-                                       and values are counts of each pattern.
+                                    and values are counts of each pattern.
 
     Returns:
     - str: A formatted string with pattern counts.
