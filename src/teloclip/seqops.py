@@ -138,6 +138,10 @@ def isMotifInClip(samline, motifList, leftClip, rightClip, leftClipLen, rightCli
     # Sam seq field
     SAM_SEQ = 9
 
+    # Initialize leftcheck and rightcheck
+    leftcheck = False
+    rightcheck = False
+
     # Search motif/s as regex in the clipped segment
     if leftClip:
         leftcheck = check_sequence_for_patterns(
@@ -149,4 +153,4 @@ def isMotifInClip(samline, motifList, leftClip, rightClip, leftClipLen, rightCli
         )
 
     # True if either clipped end sequence contains at least one instance of any motif.
-    return any(leftcheck, rightcheck)
+    return any([leftcheck, rightcheck])
