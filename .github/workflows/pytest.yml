@@ -24,17 +24,10 @@ jobs:
           auto-update-conda: true  # Optional: update Conda to the latest version
           python-version: ${{ matrix.python-version }}
 
-      # Create and activate the Conda environment using the environment.yml file
-      - name: Create and activate Conda environment
-        run: |
-          conda env create -f environment.yml -n test-env
-          conda activate test-env
-        shell: bash -l {0}  # Use bash with the login shell to activate Conda
-
-      # Install any additional dependencies not listed in environment.yml
+      # Install any additional dependencies not included in the pyproject.toml file
       - name: Install additional dependencies
         run: |
-          conda activate test-env
+          conda install -y -c conda-forge -c bioconda minimap2 samtools
           pip install '.[tests]'  # Install all dependencies, including test-specific ones
         shell: bash -l {0}
 
