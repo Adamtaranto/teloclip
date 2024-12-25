@@ -2,10 +2,6 @@
   <img src="https://img.shields.io/badge/License-MIT-yellow.svg" align="left" height="20"/>
 </a> 
 
-<a href="https://gitpod.io/#https://github.com/adamtaranto/teloclip">
-  <img src="https://gitpod.io/button/open-in-gitpod.svg" align="right" height="35"/>
-</a> 
-
 <br clear="right"/>
 <br clear="left"/>
 
