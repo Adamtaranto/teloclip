@@ -1,6 +1,10 @@
 name: Python Tests
 
-on: [pull_request]
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
   test:
@@ -28,12 +32,19 @@ jobs:
       - name: Install additional dependencies
         run: |
           conda install -y -c conda-forge -c bioconda minimap2 samtools
-          pip install '.[tests]'  # Install all dependencies, including test-specific ones
+          python -m pip install --upgrade pip
+          pip install '.[dev]'  # Install all dependencies, including test-specific ones
         shell: bash -l {0}
 
       # Run pytest on the specified directory
-      - name: Run tests
+      - name: Test with pytest
         run: |
-          pytest tests
-        shell: bash -l {0}
+          pytest --cov=teloclip --cov-branch --cov-report=xml
+
+      # Upload coverage report to Codecov
+      - name: Upload coverage reports to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          slug: Adamtaranto/teloclip
         
