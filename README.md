@@ -1,6 +1,6 @@
-<a href="https://opensource.org/licenses/MIT">
-  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" align="left" height="20"/>
-</a> 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://badge.fury.io/py/teloclip.svg)](https://badge.fury.io/py/teloclip)
+[![codecov](https://codecov.io/gh/adamtaranto/teloclip/branch/main/graph/badge.svg)](https://codecov.io/gh/adamtaranto/teloclip)
 
 <br clear="right"/>
 <br clear="left"/>
@@ -11,12 +11,11 @@
 
 <h1>Teloclip</h1>
 <p>
-A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
+A tool for the recovery of unassembled telomeres from raw long-reads using soft-clipped read alignments.
 </p>
 
-
-
 ### Table of contents
+
 - [About Teloclip](#about-teloclip)
 - [Options and Usage](#options-and-usage)
   - [Installation](#installation)
@@ -32,7 +31,6 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 - [Publications using Teloclip](#publications-using-teloclip)
 - [Issues](#issues)
 - [License](#license)
-
 
 ## About Teloclip
 
@@ -62,18 +60,21 @@ pip install teloclip
 ```
 
 2) Install from Bioconda.
+
 ```bash
 conda install -c bioconda teloclip
 ```
 
-3) Pip install directly from this git repository.   
+3) Pip install directly from this git repository.
+
 This is the best way to ensure you have the latest development version.
 
 ```bash
 pip install git+https://github.com/Adamtaranto/teloclip.git
 ```
 
-4) Clone from this repository and install as a local Python package.   
+4) Clone from this repository and install as a local Python package.
+
 Do this if you want to edit the code.
 
 ```bash
@@ -85,7 +86,7 @@ git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip inst
 ```bash
 # Print version number and exit.
 teloclip --version
-# > teloclip 0.0.4
+# > teloclip 0.1.1
 
 # Get usage information
 teloclip --help
@@ -93,8 +94,7 @@ teloclip --help
 
 ### Run with Gitpod
 
-Alternatively, [launch a Gitpod Workspace](https://gitpod.io/#https://github.com/adamtaranto/teloclip) with `teloclip`, `samtools`, and `minimap2` pre-installed. 
-
+Alternatively, [launch a Gitpod Workspace](https://gitpod.io/#https://github.com/adamtaranto/teloclip) with `teloclip`, `samtools`, and `minimap2` pre-installed.
 
 ## Example Usage
 
