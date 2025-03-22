@@ -1,10 +1,11 @@
 import pytest
+
 from src.teloclip.motifs import (
-    count_continuous_runs,
-    construct_regex_pattern,
-    format_pattern_counts,
-    count_patterns_in_sequence,
     check_sequence_for_patterns,
+    construct_regex_pattern,
+    count_continuous_runs,
+    count_patterns_in_sequence,
+    format_pattern_counts,
 )
 
 

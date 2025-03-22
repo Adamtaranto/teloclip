@@ -20,7 +20,7 @@ import sys
 from teloclip._version import __version__
 from teloclip.logs import init_logging
 from teloclip.samops import processSamlines
-from teloclip.seqops import read_fai, addRevComplement
+from teloclip.seqops import addRevComplement, read_fai
 
 
 def mainArgs():

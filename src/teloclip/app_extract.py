@@ -6,7 +6,7 @@ import sys
 from teloclip._version import __version__
 from teloclip.logs import init_logging
 from teloclip.samops import StreamingSamFilter
-from teloclip.seqops import writefasta, read_fai
+from teloclip.seqops import read_fai, writefasta
 
 """
 Module under development. Currently splits overhang reads of each contig end into separate fata files. 

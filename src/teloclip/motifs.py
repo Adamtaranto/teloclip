@@ -1,5 +1,5 @@
 import re
-from typing import List, Tuple, Dict
+from typing import Dict, List, Tuple
 
 
 def format_pattern_counts(pattern_counts: Dict[str, int]) -> str:
