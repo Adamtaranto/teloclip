@@ -35,11 +35,16 @@ jobs:
           python -m pip install --upgrade pip
           pip install '.[dev]'  # Install all dependencies, including test-specific ones
         shell: bash -l {0}
+      
+      - name: Verify pytest installation
+        run: python -m pytest --version
+        shell: bash -l {0}
 
       # Run pytest on the specified directory
       - name: Test with pytest
         run: |
           pytest --cov=teloclip --cov-branch --cov-report=xml
+        shell: bash -l {0}
 
       # Upload coverage report to Codecov
       - name: Upload coverage reports to Codecov
