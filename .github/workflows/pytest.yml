@@ -43,7 +43,7 @@ jobs:
       # Run pytest on the specified directory
       - name: Test with pytest
         run: |
-          pytest --cov=teloclip --cov-branch --cov-report=xml
+          pytest --cov=src/teloclip --cov-branch --cov-report=xml
         shell: bash -l {0}
 
       # Upload coverage report to Codecov

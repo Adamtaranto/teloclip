@@ -56,7 +56,7 @@ version-file = "src/teloclip/_version.py"
 dev = ["hatch", "isort", "ipykernel", "numpydoc-validation", "pre-commit", "pytest", "pytest-cov", "ruff"]
 
 [tool.pytest.ini_options]
-addopts = "-v --cov=teloclip --cov-branch --cov-report=xml --cov-report=term"
+addopts = "-v --cov --cov-branch --cov-report=xml --cov-report=term"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 
