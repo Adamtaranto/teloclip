@@ -9,8 +9,12 @@ dependencies:
   #- bioconda::winnowmap
   - pip
   - pip:
-      #- biopython
-      #- regex
-      #- pysam
-      - pytest
+      - click
       - hatch
+      - isort
+      - numpydoc-validation
+      - pandas
+      - pre-commit
+      - pytest
+      - pytest-cov
+      - ruff
