@@ -78,7 +78,7 @@ pip install git+https://github.com/Adamtaranto/teloclip.git
 Do this if you want to edit the code.
 
 ```bash
-git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e .
+git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e '.[dev]'
 ```
 
 **Verify installation**
