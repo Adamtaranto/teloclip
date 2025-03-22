@@ -1,6 +1,6 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://badge.fury.io/py/teloclip.svg)](https://badge.fury.io/py/teloclip)
-[![codecov](https://codecov.io/gh/adamtaranto/teloclip/branch/main/graph/badge.svg)](https://codecov.io/gh/adamtaranto/teloclip)
+[![codecov](https://codecov.io/gh/adamtaranto/teloclip/graph/badge.svg?token=NBS8YPLZDT)](https://codecov.io/gh/adamtaranto/teloclip)
 
 <br clear="right"/>
 <br clear="left"/>
