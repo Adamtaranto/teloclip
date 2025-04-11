@@ -15,11 +15,11 @@ def format_pattern_counts(pattern_counts: Dict[str, int]) -> str:
     """
     # Use a list comprehension to generate formatted pairs of pattern=count
     formatted_pairs = [
-        f"{pattern}={count}" for pattern, count in pattern_counts.items()
+        f'{pattern}={count}' for pattern, count in pattern_counts.items()
     ]
 
     # Join the formatted pairs with ":" and return the result
-    return ":".join(formatted_pairs)
+    return ':'.join(formatted_pairs)
 
 
 def count_patterns_in_sequence(
@@ -127,6 +127,6 @@ def construct_regex_pattern(motif_tuples: List[Tuple[str, int]]) -> str:
             )  # If count is 1, just escape the character
         else:
             # If count is greater than 1, add a range allowing for plus or minus one
-            pattern_parts.append(rf"{re.escape(char)}{{{count-1},{count+1}}}")
+            pattern_parts.append(rf'{re.escape(char)}{{{count - 1},{count + 1}}}')
 
-    return rf"{''.join(pattern_parts)}"
+    return rf'{"".join(pattern_parts)}'

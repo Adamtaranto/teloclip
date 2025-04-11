@@ -8,7 +8,7 @@ from teloclip.seqops import isMotifInClip
 def processSamlines(
     samfile,
     ContigDict,
-    motifList=[],
+    motifList=None,
     matchAnywhere=False,
     maxBreak=0,
     minClip=1,
@@ -17,6 +17,8 @@ def processSamlines(
     minRepeats=1,
 ):
     # SAM line index keys
+    if motifList is None:
+        motifList = []
     SAM_QNAME = 0
     SAM_RNAME = 2
     SAM_POS = 3
@@ -36,13 +38,13 @@ def processSamlines(
         leftClip = False
         rightClip = False
         # Write headers to stdout
-        if line[0][0] == "@":
+        if line[0][0] == '@':
             sys.stdout.write(line)
             continue
         samlineCount += 1
-        samline = line.split("\t")
+        samline = line.split('\t')
         # Check if line contains soft-clip and no hard-clipping.
-        if "S" in samline[SAM_CIGAR] and not "H" in samline[SAM_CIGAR]:
+        if 'S' in samline[SAM_CIGAR] and 'H' not in samline[SAM_CIGAR]:
             # Get length of left and right overhangs
             leftClipLen, rightClipLen = checkClips(samline[SAM_CIGAR])
             alnLen = lenCIGAR(samline[SAM_CIGAR])
@@ -59,9 +61,9 @@ def processSamlines(
             if rightClipLen:
                 try:
                     ContigLen = ContigDict[str(samline[SAM_RNAME])]
-                except:
+                except KeyError:
                     sys.exit(
-                        "Reference sequence not found in FAI file: "
+                        'Reference sequence not found in FAI file: '
                         + str(samline[SAM_RNAME])
                     )
                 alnEnd = int(samline[SAM_POS]) + alnLen
@@ -78,7 +80,7 @@ def processSamlines(
                         # Print to stderr
                         logging.info(
                             str(samline[SAM_QNAME])
-                            + " overhang on both ends of "
+                            + ' overhang on both ends of '
                             + str(samline[SAM_RNAME])
                         )
                         bothCount += 1
@@ -120,17 +122,17 @@ def processSamlines(
                 removeCount += 1
     if motifList:
         logging.info(
-            f"Processed {samlineCount} SAM records.\n"
-            f"Found {keepCount} alignments soft-clipped at contig ends.\n"
-            f"Output {motifCount} alignments containing motif matches.\n"
-            f"Discarded {removeCount} terminal alignments after filtering."
+            f'Processed {samlineCount} SAM records.\n'
+            f'Found {keepCount} alignments soft-clipped at contig ends.\n'
+            f'Output {motifCount} alignments containing motif matches.\n'
+            f'Discarded {removeCount} terminal alignments after filtering.'
         )
     else:
         logging.info(
-            f"Processed {samlineCount} SAM records.\n"
-            f"Found {keepCount} alignments soft-clipped at contig ends.\n"
-            f"Found {bothCount} alignments spanning entire contigs.\n"
-            f"Discarded {removeCount} terminal alignments after filtering."
+            f'Processed {samlineCount} SAM records.\n'
+            f'Found {keepCount} alignments soft-clipped at contig ends.\n'
+            f'Found {bothCount} alignments spanning entire contigs.\n'
+            f'Discarded {removeCount} terminal alignments after filtering.'
         )
 
 
@@ -138,9 +140,9 @@ def splitCIGAR(SAM_CIGAR):
     """
     Split CIGAR string into list of tuples with format (len,operator)
     """
-    CIGARlist = list()
-    for x in re.findall("[0-9]*[A-Z|=]", SAM_CIGAR):
-        CIGARlist.append((int(re.findall("[0-9]*", x)[0]), re.findall("[A-Z]|=", x)[0]))
+    CIGARlist = []
+    for x in re.findall('[0-9]*[A-Z|=]', SAM_CIGAR):
+        CIGARlist.append((int(re.findall('[0-9]*', x)[0]), re.findall('[A-Z]|=', x)[0]))
     # 174M76S --> [(174,M),(76,S)]
     # 96S154M --> [(96,S),(154,M)]
     return CIGARlist
@@ -154,10 +156,10 @@ def checkClips(SAM_CIGAR):
     rightClipLen = None
     CIGARlist = splitCIGAR(SAM_CIGAR)
     # Check if first segment is soft-clipped
-    if CIGARlist[0][1] == "S":
+    if CIGARlist[0][1] == 'S':
         leftClipLen = int(CIGARlist[0][0])
     # Check if last segment is soft-clipped
-    if CIGARlist[-1][1] == "S":
+    if CIGARlist[-1][1] == 'S':
         rightClipLen = int(CIGARlist[-1][0])
     return (leftClipLen, rightClipLen)
 
@@ -171,7 +173,7 @@ def lenCIGAR(SAM_CIGAR):
     alnLen = 0
     CIGARlist = splitCIGAR(SAM_CIGAR)
     for x in CIGARlist:  # i.e. = [(174,M),(76,S)]
-        if x[1] in set(["D", "M", "N", "X", "="]):
+        if x[1] in {'D', 'M', 'N', 'X', '='}:
             alnLen += x[0]
     # Ignore operators in set('P','H','S','I')
     return alnLen
@@ -187,11 +189,11 @@ def StreamingSamFilter(samfile=None, contigs=None, maxBreak=50, minClip=1):
     # Read sam from stdin
     for line in samfile:
         # Skip header rows
-        if line[0][0] == "@":
+        if line[0][0] == '@':
             continue
-        samline = line.split("\t")
+        samline = line.split('\t')
         # Check that aln contains soft clipping
-        if "S" in samline[SAM_CIGAR] and not "H" in samline[SAM_CIGAR]:
+        if 'S' in samline[SAM_CIGAR] and 'H' not in samline[SAM_CIGAR]:
             # Get L/R clip lengths
             leftClipLen, rightClipLen = checkClips(samline[SAM_CIGAR])
             alnLen = lenCIGAR(samline[SAM_CIGAR])
@@ -211,21 +213,21 @@ def StreamingSamFilter(samfile=None, contigs=None, maxBreak=50, minClip=1):
                                 samline[SAM_SEQ],
                                 samline[SAM_QNAME],
                                 samline[SAM_RNAME],
-                                "L",
+                                'L',
                             )
                         )
-                    except:
+                    except KeyError:
                         logging.warning(
-                            "Reference sequence not found in FAI file: "
+                            'Reference sequence not found in FAI file: '
                             + str(samline[SAM_RNAME])
                         )
             # Check for right overhang
             if rightClipLen:
                 try:
                     ContigLen = contigs[str(samline[SAM_RNAME])]
-                except:
+                except KeyError:
                     logging.warning(
-                        "Reference sequence not found in FAI file: "
+                        'Reference sequence not found in FAI file: '
                         + str(samline[SAM_RNAME])
                     )
                 alnEnd = int(samline[SAM_POS]) + alnLen
@@ -241,7 +243,7 @@ def StreamingSamFilter(samfile=None, contigs=None, maxBreak=50, minClip=1):
                             samline[SAM_SEQ],
                             samline[SAM_QNAME],
                             samline[SAM_RNAME],
-                            "R",
+                            'R',
                         )
                     )
 
@@ -299,6 +301,6 @@ def CIGARinfo():
     =   BAM_CEQUAL  7
     X   BAM_CDIFF   8
     B   BAM_CBACK   9
-    NM  NM tag  10  
+    NM  NM tag  10
     """
     )

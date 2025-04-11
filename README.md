@@ -1,6 +1,8 @@
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![PyPI version](https://badge.fury.io/py/teloclip.svg)](https://badge.fury.io/py/teloclip)
 [![codecov](https://codecov.io/gh/adamtaranto/teloclip/graph/badge.svg?token=NBS8YPLZDT)](https://codecov.io/gh/adamtaranto/teloclip)
+[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/teloclip/README.html)
+[![Downloads](https://pepy.tech/badge/teloclip)](https://pepy.tech/project/teloclip)
 
 <br clear="right"/>
 <br clear="left"/>
@@ -337,3 +339,8 @@ Submit feedback to the [Issue Tracker](https://github.com/Adamtaranto/teloclip/i
 ## License
 
 Software provided under MIT license.
+
+## Star History
+
+[![Star History
+Chart](https://api.star-history.com/svg?repos=adamtaranto/teloclip&type=Date)](https://star-history.com/#adamtaranto/teloclip&Date)

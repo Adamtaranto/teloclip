@@ -15,8 +15,16 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: chartboost/ruff-action@v1
         with:
-          src: './src/teloclip'
-          args: 'format --target-version py310'
+          src: './src/teloclip ./tests'
+          args: 'format'
+      - uses: chartboost/ruff-action@v1
+        with:
+          src: './src/teloclip ./tests'
+          args: 'check'
+      - uses: isort/isort-action@v1
+        with:
+          configuration: "--settings-path=./pyproject.toml"
+          paths: "./src/teloclip ./tests"
       - uses: stefanzweifel/git-auto-commit-action@v5
         id: auto-commit-action
         with:
