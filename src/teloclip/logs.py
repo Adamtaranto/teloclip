@@ -4,7 +4,7 @@ import sys
 
 def init_logging():
     # Define the log message format
-    fmt = "%(asctime)s | %(levelname)s | %(module)s:%(lineno)s:%(funcName)s() | %(message)s"
+    fmt = '%(asctime)s | %(levelname)s | %(module)s:%(lineno)s:%(funcName)s() | %(message)s'
 
     # Set up a StreamHandler for stderr instead of stdout
     handler_sh = logging.StreamHandler(sys.stderr)
@@ -17,12 +17,12 @@ def init_logging():
 class CustomFormatter(logging.Formatter):
     """Logging colored formatter, adapted from https://alexandra-zaharia.github.io/posts/make-your-own-custom-color-formatter-with-python-logging"""
 
-    grey = "\x1b[38;21m"
-    blue = "\x1b[38;5;39m"
-    yellow = "\x1b[38;5;226m"
-    red = "\x1b[38;5;196m"
-    bold_red = "\x1b[31;1m"
-    reset = "\x1b[0m"
+    grey = '\x1b[38;21m'
+    blue = '\x1b[38;5;39m'
+    yellow = '\x1b[38;5;226m'
+    red = '\x1b[38;5;196m'
+    bold_red = '\x1b[31;1m'
+    reset = '\x1b[0m'
 
     def __init__(self, fmt):
         super().__init__()
