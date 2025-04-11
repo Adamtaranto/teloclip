@@ -1,6 +1,6 @@
 import pytest
 
-from src.teloclip.motifs import (
+from teloclip.motifs import (
     check_sequence_for_patterns,
     construct_regex_pattern,
     count_continuous_runs,
