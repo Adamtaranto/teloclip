@@ -23,10 +23,12 @@ def filterList(data, exclude):
 # NCU
 def revComp(seq):
     """Rev comp DNA string."""
+
     def revcompl(x):
         return ''.join(
             [{'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'}[B] for B in x][::-1]
         )
+
     return revcompl(seq)
 
 
@@ -97,10 +99,12 @@ def addRevComplement(motifList):
     """
     Take list of DNA motif strings and return unique set of strings and their reverse complements.
     """
+
     def revcompl(x):
         return ''.join(
             [{'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'}[B] for B in x][::-1]
         )
+
     setList = []
     for motif in motifList:
         setList.append(motif)
