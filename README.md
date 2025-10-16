@@ -1,26 +1,23 @@
-<a href="https://opensource.org/licenses/MIT">
-  <img src="https://img.shields.io/badge/License-MIT-yellow.svg" align="left" height="20"/>
-</a> 
-
-<a href="https://gitpod.io/#https://github.com/adamtaranto/teloclip">
-  <img src="https://gitpod.io/button/open-in-gitpod.svg" align="right" height="35"/>
-</a> 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![PyPI version](https://badge.fury.io/py/teloclip.svg)](https://badge.fury.io/py/teloclip)
+[![codecov](https://codecov.io/gh/adamtaranto/teloclip/graph/badge.svg?token=NBS8YPLZDT)](https://codecov.io/gh/adamtaranto/teloclip)
+[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/teloclip/README.html)
+[![Downloads](https://pepy.tech/badge/teloclip)](https://pepy.tech/project/teloclip)
 
 <br clear="right"/>
 <br clear="left"/>
 
 <p align="center">
-  <img src="https://github.com/Adamtaranto/teloclip/blob/2d9628d453e832ac0de15577c6cdde6835fb6417/docs/teloclip_hexlogo.jpg?raw=true" width="180px" title="teloclip_hex"/>
+<img src="https://raw.githubusercontent.com/Adamtaranto/teloclip/main/docs/teloclip_hexlogo.jpg" width="180" height="180" title="teloclip_hex" />
 </p>
 
 <h1>Teloclip</h1>
 <p>
-A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
+A tool for the recovery of unassembled telomeres from raw long-reads using soft-clipped read alignments.
 </p>
 
-
-
 ### Table of contents
+
 - [About Teloclip](#about-teloclip)
 - [Options and Usage](#options-and-usage)
   - [Installation](#installation)
@@ -36,7 +33,6 @@ A tool for the recovery of unassembled telomeres from soft-clipped read alignmen
 - [Publications using Teloclip](#publications-using-teloclip)
 - [Issues](#issues)
 - [License](#license)
-
 
 ## About Teloclip
 
@@ -66,22 +62,25 @@ pip install teloclip
 ```
 
 2) Install from Bioconda.
+
 ```bash
 conda install -c bioconda teloclip
 ```
 
-3) Pip install directly from this git repository.   
+3) Pip install directly from this git repository.
+
 This is the best way to ensure you have the latest development version.
 
 ```bash
 pip install git+https://github.com/Adamtaranto/teloclip.git
 ```
 
-4) Clone from this repository and install as a local Python package.   
+4) Clone from this repository and install as a local Python package.
+
 Do this if you want to edit the code.
 
 ```bash
-git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e .
+git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e '.[dev]'
 ```
 
 **Verify installation**
@@ -89,7 +88,7 @@ git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip inst
 ```bash
 # Print version number and exit.
 teloclip --version
-# > teloclip 0.0.4
+# > teloclip 0.1.1
 
 # Get usage information
 teloclip --help
@@ -97,13 +96,15 @@ teloclip --help
 
 ### Run with Gitpod
 
-Alternatively, [launch a Gitpod Workspace](https://gitpod.io/#https://github.com/adamtaranto/teloclip) with `teloclip`, `samtools`, and `minimap2` pre-installed. 
-
+Alternatively, [launch a Gitpod Workspace](https://gitpod.io/#https://github.com/adamtaranto/teloclip) with `teloclip`, `samtools`, and `minimap2` pre-installed.
 
 ## Example Usage
 
 Basic use case:
-![teloclip_example](docs/teloclip_example_graphic.png)
+
+<p align="center">
+<img src="https://raw.githubusercontent.com/Adamtaranto/teloclip/main/docs/teloclip_example_graphic.png" title="teloclip_example" />
+</p>
 
 **First index the reference assembly**
 
@@ -327,9 +328,32 @@ If you use Teloclip in your work please cite this git repo directly and note the
 
 ## Publications using Teloclip
 
-van Westerhoven, A., Mehrabi, R., Talebi, R., Steentjes, M., Corcolon, B., Chong, P., Kema, G. and Seidl, M.F., 2023. A chromosome-level genome assembly of Zasmidium syzygii isolated from banana leaves. bioRxiv, pp.2023-08.
+Teloclip has been used to recover and extend telomeric sequences in a wide variety of taxa, including Algae, Plants, Insects, and Fungi
+
+Deng, Y., Zhou, P., Li, F., Wang, J., Xie, K., Liang, H., Wang, C., Liu, B., Zhu, Z., Zhou, W. and Dun, B., 2024. A complete assembly of the sorghum BTx623 reference genome. Plant Communications, 5(6).
+
+He, W., Hu, D., Guo, M., Nie, B., Zhang, G., Jia, Y., Hou, Z., Shu, S., Shao, Y., Simonsen, H.T. and Twamley, A., 2025. The telomere‐to‐telomere genome of Sanicula chinensis unveils genetic underpinnings of low furanocoumarin diversity and content in one basal lineage of Apiaceae. The Plant Journal, 123(1), p.e70311.
+
+Jaiswal, R.K., Garibo Domingo, T., Grunchec, H., Singh, K., Pirooznia, M., Elhaik, E. and Cohn, M., 2025. Subtelomeric elements provide stability to short telomeres in telomerase-negative cells of the budding yeast Naumovozyma castellii. Current Genetics, 71(1), p.19.
+
+Liu, Y., Chen, Y., Ren, Z. et al. Two haplotype-resolved telomere-to-telomere genome assemblies of Xanthoceras sorbifolium. Sci Data 12, 791 (2025).
+
+Loos, A., Doykova, E., Qian, J., Kümmel, F., Ibrahim, H., Kiss, L., Panstruga, R. and Kusch, S., 2025. Saprotrophic Arachnopeziza Species as New Resources to Study the Obligate Biotrophic Lifestyle of Powdery Mildew Fungi. Molecular Ecology Resources, p.e70045.
+
+Loos, A., Doykova, E., Qian, J., Kümmel, F., Ibrahim, H., Kiss, L., Panstruga, R. and Kusch, S., 2025. Resources for molecular studies of unculturable obligate biotrophic fungal plant pathogens using their saprotrophic relatives. bioRxiv, pp.2025-05.
+
+Oberti, H., Sessa, L., Oliveira‐Rizzo, C., Di Paolo, A., Sanchez‐Vallet, A., Seidl, M.F. and Abreo, E., 2025. Novel genomic features in entomopathogenic fungus Beauveria bassiana ILB308: accessory genomic regions and putative virulence genes involved in the infection process of soybean pest Piezodorus guildinii. Pest Management Science, 81(4), pp.2323-2336.
+
+van Westerhoven, A.C., Mehrabi, R., Talebi, R., Steentjes, M.B., Corcolon, B., Chong, P.A., Kema, G.H. and Seidl, M.F., 2024. A chromosome-level genome assembly of Zasmidium syzygii isolated from banana leaves. G3: Genes, Genomes, Genetics, 14(3), p.jkad262.
+
+Wan, L., Deng, C., Liu, B. et al. Telomere-to-telomere genome assemblies of three silkworm strains with long-term pupal characteristics. Sci Data 12, 501 (2025).
+
+Wang, Z.F., Yu, E.P., Fu, L., Deng, H.G., Zhu, W.G., Xu, F.X. and Cao, H.L., 2025. Chromosome-scale assemblies of three Ormosia species: repetitive sequences distribution and structural rearrangement. GigaScience, 14, p.giaf047.
+
+Xu, Z., Wang, G., Zhu, X. et al. Genome assembly of two allotetraploid cotton germplasms reveals mechanisms of somatic embryogenesis and enables precise genome editing. Nat Genet 57, 2028–2039 (2025).
 
 Yang, H.P., Wenzel, M., Hauser, D.A., Nelson, J.M., Xu, X., Eliáš, M. and Li, F.W., 2021. Monodopsis and Vischeria genomes shed new light on the biology of eustigmatophyte algae. Genome biology and evolution, 13(11), p.evab233.
+
 
 ## Issues
 
@@ -339,4 +363,7 @@ Submit feedback to the [Issue Tracker](https://github.com/Adamtaranto/teloclip/i
 
 Software provided under MIT license.
 
-Teloclip hex-sticker was designed by [@Super_Coleider](www.instagram.com/Super_Coleider).
+## Star History
+
+[![Star History
+Chart](https://api.star-history.com/svg?repos=adamtaranto/teloclip&type=Date)](https://star-history.com/#adamtaranto/teloclip&Date)

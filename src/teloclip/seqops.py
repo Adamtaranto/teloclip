@@ -1,7 +1,8 @@
+from itertools import groupby
+import os
+
 from teloclip.motifs import check_sequence_for_patterns
 from teloclip.utils import isfile
-
-from itertools import groupby
 
 
 def makeMask(killIdx, listlen):
@@ -22,43 +23,46 @@ def filterList(data, exclude):
 # NCU
 def revComp(seq):
     """Rev comp DNA string."""
-    revcompl = lambda x: "".join(
-        [{"A": "T", "C": "G", "G": "C", "T": "A", "N": "N"}[B] for B in x][::-1]
-    )
+
+    def revcompl(x):
+        return ''.join(
+            [{'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'}[B] for B in x][::-1]
+        )
+
     return revcompl(seq)
 
 
 # NCU
 def writeClip(idx, zpad, gap, seq, maplen):
     # leftpad idx ID
-    padIdx = str(idx).zfill(zpad) + ":"
+    padIdx = str(idx).zfill(zpad) + ':'
     # If gap between aln end(R) or start(L) and contig end, left pad softclip with '-'
-    padseq = "-" * gap + seq
+    padseq = '-' * gap + seq
     # Format length of ref covered by alingment
-    readlen = "LEN=" + str(maplen).rjust(6)
-    print("\t".join([padIdx, readlen, padseq]))
+    readlen = 'LEN=' + str(maplen).rjust(6)
+    print('\t'.join([padIdx, readlen, padseq]))
 
 
 # NCU
 def fasta2dict(fasta_name):
     fh = open(fasta_name)
-    faiter = (x[1] for x in groupby(fh, lambda line: line[0] == ">"))
-    contigDict = dict()
+    faiter = (x[1] for x in groupby(fh, lambda line: line[0] == '>'))
+    contigDict = {}
     for header in faiter:
         # Drop the ">"
         # Split on whitespace and take first item as name
         header = header.__next__()[1:].strip()
         name = header.split()[0]
         # Join all sequence lines to one.
-        seq = "".join(s.strip() for s in faiter.__next__())
+        seq = ''.join(s.strip() for s in faiter.__next__())
         contigDict[name] = (header, seq)
     return contigDict
 
 
 def writefasta(outfile, name, seq, length=80):
-    outfile.write(">" + str(name) + "\n")
+    outfile.write('>' + str(name) + '\n')
     while len(seq) > 0:
-        outfile.write(seq[:length] + "\n")
+        outfile.write(seq[:length] + '\n')
         seq = seq[length:]
 
 
@@ -71,7 +75,7 @@ def manageTemp(record=None, tempPath=None, scrub=False):
         except OSError:
             pass
     else:
-        with open(tempPath, "w") as f:
+        with open(tempPath, 'w') as f:
             name, seq = record
             writefasta(f, name, seq, length=80)
 
@@ -82,9 +86,9 @@ def read_fai(fai):
     """
     path = isfile(fai)
     # Init empty dict
-    ContigDict = dict()
+    ContigDict = {}
     # Read fai_file to dict
-    with open(path, "r") as f:
+    with open(path, 'r') as f:
         for line in f.readlines():
             li = line.strip().split()
             ContigDict[li[0]] = int(li[1])
@@ -95,14 +99,18 @@ def addRevComplement(motifList):
     """
     Take list of DNA motif strings and return unique set of strings and their reverse complements.
     """
-    revcompl = lambda x: "".join(
-        [{"A": "T", "C": "G", "G": "C", "T": "A", "N": "N"}[B] for B in x][::-1]
-    )
-    setList = list()
+
+    def revcompl(x):
+        return ''.join(
+            [{'A': 'T', 'C': 'G', 'G': 'C', 'T': 'A', 'N': 'N'}[B] for B in x][::-1]
+        )
+
+    setList = []
     for motif in motifList:
         setList.append(motif)
         setList.append(revcompl(motif))
     return set(setList)
+
 
 # Depreciated
 def crunchHomopolymers(motifList):
@@ -110,11 +118,11 @@ def crunchHomopolymers(motifList):
     Take as input a list of target motifs, collapse poly-nucleotide tracks, return list of collapsed motifs.
     """
     # List to catch all collapsed motifs.
-    crunchList = list()
+    crunchList = []
     # For each motif
     for motif in motifList:
         # Create empty list to catch not repeated bases.
-        noReps = list()
+        noReps = []
         # Walk through original motif base-by-base.
         for base in motif:
             # If list of kept bases in empty, add first base.
@@ -124,9 +132,10 @@ def crunchHomopolymers(motifList):
             elif base != noReps[-1]:
                 noReps.append(base)
         # Convert list to string and store new motif
-        crunchList.append("".join(noReps))
+        crunchList.append(''.join(noReps))
     # Convert to set to remove duplicates and return
     return list(set(crunchList))
+
 
 # TODO: support min pattern matches
 def isMotifInClip(samline, motifList, leftClip, rightClip, leftClipLen, rightClipLen):
@@ -135,6 +144,10 @@ def isMotifInClip(samline, motifList, leftClip, rightClip, leftClipLen, rightCli
     """
     # Sam seq field
     SAM_SEQ = 9
+
+    # Initialize leftcheck and rightcheck
+    leftcheck = False
+    rightcheck = False
 
     # Search motif/s as regex in the clipped segment
     if leftClip:
@@ -147,4 +160,4 @@ def isMotifInClip(samline, motifList, leftClip, rightClip, leftClipLen, rightCli
         )
 
     # True if either clipped end sequence contains at least one instance of any motif.
-    return any(leftcheck, rightcheck)
+    return any([leftcheck, rightcheck])

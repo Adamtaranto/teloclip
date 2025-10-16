@@ -1,31 +1,31 @@
 [build-system]
-requires = ["setuptools", "setuptools-scm"]
-build-backend = "setuptools.build_meta"
+requires = ["hatchling", "hatch-vcs"]
+build-backend = "hatchling.build"
 
 [project]
 name = "teloclip"
-authors = [{ name = "Adam Taranto", email = "adam.p.taranto@gmail.com" }]
-
-description = "A tool for the recovery of unassembled telomeres from soft-clipped read alignments."
+description = "A tool for the recovery of unassembled telomeres from raw long-reads using soft-clipped read alignments."
 readme = "README.md"
 requires-python = ">=3.8"
 license = { text = "MIT" }
+authors = [
+    { name = "Adam Taranto"}
+]
 
 classifiers = [
     "Programming Language :: Python :: 3",
     "Intended Audience :: Science/Research",
     "Topic :: Scientific/Engineering :: Bio-Informatics",
-    "License :: OSI Approved :: MIT License",
 ]
 
-dynamic = ["version", "dependencies"]
+dependencies = ["click"]
 
-[tool.setuptools_scm]
-write_to = "src/teloclip/_version.py"
+dynamic = ["version"]
 
-[tool.setuptools.dynamic]
-#version = { attr = "teloclip.__version__" }
-dependencies = { file = "requirements.txt" }
+# Optional dependencies for testing
+[project.optional-dependencies]
+dev = ["hatch", "isort", "ipykernel", "numpydoc-validation", "pre-commit", "pytest", "pytest-cov", "ruff"]
+
 
 [project.urls]
 homepage = "https://github.com/adamtaranto/teloclip"
@@ -36,21 +36,77 @@ repository = "https://github.com/adamtaranto/teloclip"
 teloclip = "teloclip.app:main"
 teloclip-extract = "teloclip.app_extract:main"
 
+[tool.hatch.build]
+source = "src"
 
-# Create and push tags
-# git tag -a v0.0.4 
-# git push origin v0.0.4
+exclude = [
+    "environment.yml",
+    ".github",
+    ".vscode",
+]
 
-# Check what setuptools_scm thinks the current version is and create _version.py
-# git describe
-# python -m setuptools_scm
-# python setup.py --version
+[tool.hatch.version]
+source = "vcs"
 
-# Build
-# python3 -m pip install --upgrade build && python3 -m build
-# OR
-# Build sdist
-# python setup.py sdist 
+[tool.hatch.version.vcs]
+tag-pattern = "v*"  # Git tags starting with 'v' will be used for versioning
+fallback-version = "0.0.0"
 
-# Push to pypi
-# twine upload dist/*
+[tool.hatch.build.hooks.vcs]
+version-file = "src/teloclip/_version.py"
+
+[tool.pytest.ini_options]
+addopts = "-v --cov=teloclip --cov-branch --cov-report=xml --cov-report=term"
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+
+[tool.ruff]
+target-version = "py310"
+line-length = 88
+fix = true
+
+[tool.ruff.lint]
+select = [
+    "C",  # mccabe rules
+    "F",  # pyflakes rules
+    "E",  # pycodestyle error rules
+    "W",  # pycodestyle warning rules
+    "B",  # flake8-bugbear rules
+    "I",  # isort rules
+]
+ignore = [
+    "C901",  # max-complexity-10
+    "E501",  # line-too-long
+    "I001",  # isort-imports
+    "B905",  # `zip()` without an explicit `strict=` parameter
+]
+
+[tool.ruff.format]
+indent-style = "space"
+quote-style = "single"
+
+[tool.isort]
+profile = "black"
+known_third_party = ["Bio","pandas"]
+known_first_party = ["teloclip"]
+default_section = "THIRDPARTY"
+force_sort_within_sections = true
+
+[tool.numpydoc_validation]
+checks = [
+    "all",  # report on all checks
+    "ES01", # but don't require an extended summary
+    "EX01", # or examples
+    "SA01", # or a see also section
+    "SS06", # and don't require the summary to fit on one line
+]
+exclude = [  # don't report on checks for these
+    '\.__init__$',
+    '\.__repr__$',
+    '\.__str__$',
+]
+override_SS05 = [  # allow docstrings to start with these words
+    '^Process ',
+    '^Assess ',
+    '^Access ',
+]
