@@ -4,9 +4,10 @@ Extract sub-command for teloclip CLI.
 Extract overhanging reads for each end of each reference contig and write to FASTA files.
 """
 
-import click
 import logging
 import sys
+
+import click
 
 from teloclip.app_extract import StreamingSplitByContig
 from teloclip.samops import StreamingSamFilter
@@ -19,38 +20,37 @@ from teloclip.seqops import read_fai
     '--ref-idx',
     required=True,
     type=click.Path(exists=True),
-    help='Path to fai index for reference fasta. Index fasta using `samtools faidx FASTA`'
+    help='Path to fai index for reference fasta. Index fasta using `samtools faidx FASTA`',
 )
 @click.option(
-    '--prefix',
-    type=str,
-    help='Use this prefix for output files. Default: None.'
+    '--prefix', type=str, help='Use this prefix for output files. Default: None.'
 )
 @click.option(
     '--extract-reads',
     is_flag=True,
-    help='If set, write overhang reads to fasta by contig.'
+    help='If set, write overhang reads to fasta by contig.',
 )
 @click.option(
     '--extract-dir',
     type=click.Path(),
-    help='Write extracted reads to this directory. Default: cwd.'
+    help='Write extracted reads to this directory. Default: cwd.',
 )
 @click.option(
     '--min-clip',
     default=1,
     type=int,
-    help='Require clip to extend past ref contig end by at least N bases.'
+    help='Require clip to extend past ref contig end by at least N bases.',
 )
 @click.option(
     '--max-break',
     default=50,
     type=int,
-    help='Tolerate max N unaligned bases before contig end.'
+    help='Tolerate max N unaligned bases before contig end.',
 )
 @click.pass_context
-def extract_cmd(ctx, samfile, ref_idx, prefix, extract_reads, extract_dir,
-                min_clip, max_break):
+def extract_cmd(
+    ctx, samfile, ref_idx, prefix, extract_reads, extract_dir, min_clip, max_break
+):
     """
     Extract overhanging reads for each end of each reference contig.
 
@@ -82,8 +82,8 @@ def extract_cmd(ctx, samfile, ref_idx, prefix, extract_reads, extract_dir,
     alignments = StreamingSamFilter(
         samfile=samfile,
         contigs=contig_info,
-        maxBreak=max_break,
-        minClip=min_clip,
+        max_break=max_break,
+        min_clip=min_clip,
     )
 
     if extract_reads:
