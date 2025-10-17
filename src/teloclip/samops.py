@@ -47,6 +47,7 @@ def processSamlines(
     motifCount = 0
     removeCount = 0
     samlineCount = 0
+    anchorFilteredCount = 0
 
     # Read SAM from stdin
     for line in samfile:
@@ -61,6 +62,12 @@ def processSamlines(
         samline = line.split('\t')
         # Check if line contains soft-clip and no hard-clipping.
         if 'S' in samline[SAM_CIGAR] and 'H' not in samline[SAM_CIGAR]:
+            # Check if alignment meets minimum anchor requirement
+            if not validate_min_anchor(samline[SAM_CIGAR], min_anchor):
+                anchorFilteredCount += 1
+                removeCount += 1
+                continue
+
             # Get length of left and right overhangs
             leftClipLen, rightClipLen = checkClips(samline[SAM_CIGAR])
             alnLen = lenCIGAR(samline[SAM_CIGAR])
@@ -131,15 +138,17 @@ def processSamlines(
         logging.info(
             f'Processed {samlineCount} SAM records.\n'
             f'Found {keepCount} alignments soft-clipped at contig ends.\n'
+            f'Filtered {anchorFilteredCount} alignments below min_anchor threshold ({min_anchor}bp).\n'
             f'Output {motifCount} alignments containing motif matches.\n'
-            f'Discarded {removeCount} terminal alignments after filtering.'
+            f'Discarded {removeCount} total alignments after all filtering.'
         )
     else:
         logging.info(
             f'Processed {samlineCount} SAM records.\n'
             f'Found {keepCount} alignments soft-clipped at contig ends.\n'
+            f'Filtered {anchorFilteredCount} alignments below min_anchor threshold ({min_anchor}bp).\n'
             f'Found {bothCount} alignments spanning entire contigs.\n'
-            f'Discarded {removeCount} terminal alignments after filtering.'
+            f'Discarded {removeCount} total alignments after all filtering.'
         )
 
 
@@ -184,6 +193,45 @@ def lenCIGAR(SAM_CIGAR):
             alnLen += x[0]
     # Ignore operators in set('P','H','S','I')
     return alnLen
+
+
+def calculate_aligned_bases(cigar_string):
+    """
+    Calculate the number of bases that are actually aligned/matched to the reference.
+    Only counts M (match), = (sequence match), and X (mismatch) operations.
+    Excludes deletions (D), insertions (I), soft clips (S), hard clips (H),
+    padding (P), and splicing (N) operations.
+
+    This is used for min_anchor validation to ensure sufficient anchoring
+    of the read to the reference sequence.
+
+    Args:
+        cigar_string (str): CIGAR string from SAM alignment
+
+    Returns:
+        int: Number of aligned bases (M + = + X operations only)
+    """
+    aligned_bases = 0
+    cigar_list = splitCIGAR(cigar_string)
+    for length, operation in cigar_list:
+        if operation in {'M', '=', 'X'}:
+            aligned_bases += length
+    return aligned_bases
+
+
+def validate_min_anchor(cigar_string, min_anchor):
+    """
+    Validate that an alignment has sufficient anchored bases to meet min_anchor requirement.
+
+    Args:
+        cigar_string (str): CIGAR string from SAM alignment
+        min_anchor (int): Minimum number of aligned bases required
+
+    Returns:
+        bool: True if alignment meets min_anchor requirement, False otherwise
+    """
+    aligned_bases = calculate_aligned_bases(cigar_string)
+    return aligned_bases >= min_anchor
 
 
 def StreamingSamFilter(samfile=None, contigs=None, max_break=50, min_clip=1):
