@@ -2,40 +2,39 @@ import logging
 import re
 import sys
 
+from teloclip.motifs import check_sequence_for_patterns
 from teloclip.seqops import isMotifInClip
 
 # TODO:
 """
-- Create a samline class
+- Create a samline class to hold sam line data
 - Create a CIGAR class based on https://github.com/brentp/cigar/blob/master/cigar.py
-- sam fields as attributes
-- calculate clip regions
-- note if left/right clips present
-- Remove nopoly
-- Add min_repeat threshold
-- Add min_anchor
-- support mix of regex and plain pattern
-- Split L/R into helper functions
-- log when create motifs inc rev
+- Sam fields as attributes of samline class
+- Calculate clip regions as attributes of samline class
+- Methods to check if left or right clip is terminal
+- Method to check if motif in clips
+- Method to print samline
+- Note if left or right terminal softclip regions present
+- Add and use min_anchor threshold (default 500bp) to ensure that the alignment is anchored to the reference
+- Split left and right clip checks into helper functions
 - Add function: Count Cigar len to left / right of softclip 20S20M2D10M2S = 30 bases of read aligned to ref
-    - ? Should we calc total align len on reference, or total based of read which are aligned?
+    - Check that aligned length on ref is >= min_anchor
 """
 
 
 def processSamlines(
     samfile,
-    ContigDict,
-    motifList=None,
-    matchAnywhere=False,
-    maxBreak=0,
-    minClip=1,
-    noRev=False,
-    fuzzy=False,
-    minRepeats=1,  # Add minAnchor=500
+    contig_dict,
+    motif_list=None,
+    match_anywhere=False,
+    max_break=0,
+    min_clip=1,
+    min_repeats=1,
+    min_anchor=500,
 ):
     # SAM line index keys
-    if motifList is None:
-        motifList = []
+    if motif_list is None:
+        motif_list = []
     SAM_QNAME = 0
     SAM_RNAME = 2
     SAM_POS = 3
@@ -67,8 +66,8 @@ def processSamlines(
             alnLen = lenCIGAR(samline[SAM_CIGAR])
             # Check for left overhang
             if leftClipLen:
-                if (int(samline[SAM_POS]) <= maxBreak) and (
-                    leftClipLen >= (int(samline[SAM_POS]) + minClip)
+                if (int(samline[SAM_POS]) <= max_break) and (
+                    leftClipLen >= (int(samline[SAM_POS]) + min_clip)
                 ):
                     # Overhang is on contig left
                     keepLine = True
@@ -77,7 +76,7 @@ def processSamlines(
             # Check for right overhang
             if rightClipLen:
                 try:
-                    ContigLen = ContigDict[str(samline[SAM_RNAME])]
+                    ContigLen = contig_dict[str(samline[SAM_RNAME])]
                 except KeyError:
                     sys.exit(
                         'Reference sequence not found in FAI file: '
@@ -85,7 +84,7 @@ def processSamlines(
                     )
                 alnEnd = int(samline[SAM_POS]) + alnLen
                 # Check if overhang is on contig right end
-                if ((ContigLen - alnEnd) <= maxBreak) and (
+                if ((ContigLen - alnEnd) <= max_break) and (
                     alnEnd + rightClipLen >= ContigLen + 1
                 ):
                     rightClip = True
@@ -102,32 +101,23 @@ def processSamlines(
                         )
                         bothCount += 1
             # Optional check for Telomeric repeat motifs
-            if motifList and keepLine and matchAnywhere:
-                # if noPoly:
-                #    if any(
-                #        s in crunchHomopolymers([samline[SAM_SEQ]])[0]
-                #        for s in motifList
-                #    ):
-                #        sys.stdout.write(line)
-                #        motifCount += 1
-                #    else:
-                #        removeCount += 1
-                # else:
-                if any(
-                    s in samline[SAM_SEQ] for s in motifList
-                ):  # TODO: Mod to allow regex pattern search
+            if motif_list and keepLine and match_anywhere:
+                if check_sequence_for_patterns(
+                    samline[SAM_SEQ], motif_list, min_repeats
+                ):
                     sys.stdout.write(line)
                     motifCount += 1
                 else:
                     removeCount += 1
-            elif motifList and keepLine:
+            elif motif_list and keepLine:
                 if isMotifInClip(
                     samline,
-                    motifList,
+                    motif_list,
                     leftClip,
                     rightClip,
                     leftClipLen,
                     rightClipLen,
+                    min_repeats,
                 ):
                     sys.stdout.write(line)
                     motifCount += 1
@@ -137,7 +127,7 @@ def processSamlines(
                 sys.stdout.write(line)
             else:
                 removeCount += 1
-    if motifList:
+    if motif_list:
         logging.info(
             f'Processed {samlineCount} SAM records.\n'
             f'Found {keepCount} alignments soft-clipped at contig ends.\n'
@@ -196,7 +186,7 @@ def lenCIGAR(SAM_CIGAR):
     return alnLen
 
 
-def StreamingSamFilter(samfile=None, contigs=None, maxBreak=50, minClip=1):
+def StreamingSamFilter(samfile=None, contigs=None, max_break=50, min_clip=1):
     """Rewrite loadSam() as generator."""
     SAM_QNAME = 0
     SAM_RNAME = 2
@@ -216,8 +206,8 @@ def StreamingSamFilter(samfile=None, contigs=None, maxBreak=50, minClip=1):
             alnLen = lenCIGAR(samline[SAM_CIGAR])
             # Check for left overhang
             if leftClipLen:
-                if (int(samline[SAM_POS]) <= maxBreak) and (
-                    leftClipLen >= (int(samline[SAM_POS]) + minClip)
+                if (int(samline[SAM_POS]) <= max_break) and (
+                    leftClipLen >= (int(samline[SAM_POS]) + min_clip)
                 ):
                     # Overhang is on contig left
                     alnEnd = int(samline[SAM_POS]) + alnLen
@@ -249,7 +239,7 @@ def StreamingSamFilter(samfile=None, contigs=None, maxBreak=50, minClip=1):
                     )
                 alnEnd = int(samline[SAM_POS]) + alnLen
                 # Check if overhang is on contig right end
-                if ((ContigLen - alnEnd) <= maxBreak) and (
+                if ((ContigLen - alnEnd) <= max_break) and (
                     alnEnd + rightClipLen >= ContigLen + 1
                 ):
                     yield (
