@@ -19,16 +19,17 @@ A tool for the recovery of unassembled telomeres from raw long-reads using soft-
 ### Table of contents
 
 - [About Teloclip](#about-teloclip)
+- [CLI Structure](#cli-structure)
 - [Options and Usage](#options-and-usage)
   - [Installation](#installation)
-  - [Run with Gitpod](#run-with-gitpod)
 - [Example Usage](#example-usage)
   - [Optional Quality Control](#optional-quality-control)
   - [Extending contigs](#extending-contigs)
-  - [Alternative use cases](#alternative-use-cases)
 - [Options](#options)
-  - [Teloclip Options](#teloclip-options)
-  - [Teloclip-extract Options](#teloclip-extract-options)
+  - [Main Command](#main-command)
+  - [Filter Sub-command Options](#filter-sub-command-options)
+  - [Extract Sub-command Options](#extract-sub-command-options)
+  - [Legacy Command Support](#legacy-command-support)
 - [Citing Teloclip](#citing-teloclip)
 - [Publications using Teloclip](#publications-using-teloclip)
 - [Issues](#issues)
@@ -45,6 +46,14 @@ Information about segments of a read that were aligned or clipped are stored in 
 Optionally, teloclip can screen overhanging reads for telomere-associated motifs (i.e. 'TTAGGG' / 'CCCTAA') and report only those containing a match.
 
 Teloclip is based on concepts from Torsten Seemann's excellent tool [samclip](https://github.com/tseemann/samclip). Samclip can be used to remove clipped alignments from a samfile prior to variant calling.
+
+## CLI Structure
+
+Teloclip provides a unified command-line interface with sub-commands for different operations:
+
+- **`teloclip filter`**: Filter SAM/BAM files for terminal soft-clipped alignments containing potential telomeric sequences
+- **`teloclip extract`**: Extract overhanging reads to separate FASTA files organized by contig and end position
+- **Global options**: Consistent logging and verbosity controls across all sub-commands
 
 ## Options and Usage
 
@@ -112,11 +121,11 @@ samtools faidx ref.fa
 **Reading alignments from SAM file**
 
 ```bash
-# Read alignment input from sam file and write overhang-reads to stout
-teloclip --ref-idx ref.fa.fai in.sam
+# Read alignment input from sam file and write overhang-reads to stdout
+teloclip filter --ref-idx ref.fa.fai in.sam
 
 # Read alignment input from stdin and write stdout to file
-teloclip --ref-idx ref.fa.fai < in.sam > out.sam
+teloclip filter --ref-idx ref.fa.fai < in.sam > out.sam
 ```
 
 **Reading and writing BAM alignments**
@@ -125,8 +134,8 @@ BAM files are binary sam files, they contain all the same information but take u
 You can use bam files with teloclip like this:
 
 ```bash
-# Read alignments from bam file, pipe sam lines to teloclip, sort overhang-read alignments and wite to bam file
-samtools view -h in.bam | teloclip --ref-idx ref.fa.fai | samtools sort > out.bam
+# Read alignments from bam file, pipe sam lines to teloclip, sort overhang-read alignments and write to bam file
+samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai | samtools sort > out.bam
 ```
 
 **Streaming SAM records from aligner**
@@ -135,13 +144,13 @@ samtools view -h in.bam | teloclip --ref-idx ref.fa.fai | samtools sort > out.ba
 # Map PacBio long-reads to ref assembly,
 # return alignments clipped at contig ends, 
 # write to sorted bam.
-minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz | teloclip --ref-idx ref.fa.fai | samtools sort > out.bam 
+minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz | teloclip filter --ref-idx ref.fa.fai | samtools sort > out.bam 
 
 # Map reads to reference, 
 # Exclude non-primary alignments. 
 # Return alignments clipped at contig ends,
 # write to sorted bam.
-minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz | samtools view -h -F 0x100 | teloclip --ref-idx ref.fa.fai | samtools sort > out.bam 
+minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz | samtools view -h -F 0x100 | teloclip filter --ref-idx ref.fa.fai | samtools sort > out.bam 
 ```
 
 **Report clipped alignments containing target motifs**
@@ -149,14 +158,14 @@ minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz | samtools view -h -F 0x100 | telo
 ```bash
 # Report alignments which are clipped at a contig end
 # AND contain >=1 copy of the telomeric repeat "TTAGGG" (or its reverse complement "CCCTAA") in the clipped region.
-samtools view -h in.bam | teloclip --ref-idx ref.fa.fai --motifs TTAGGG | samtools sort > out.bam 
+samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG | samtools sort > out.bam 
 
 # Report alignments which are clipped at a contig end
 # AND contain >=1 copy of the telomeric repeat "TTAGGG" (or its reverse complement "CCCTAA") ANYWHERE in the read.
-samtools view -h in.bam | teloclip --ref-idx ref.fa.fai --motifs TTAGGG --match-anywhere | samtools sort > out.bam
+samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG --match-anywhere | samtools sort > out.bam
 
 # To change the minimum number of consecutive motif repeats required for a match, set "--min-repeats"
-samtools view -h in.bam | teloclip --ref-idx ref.fa.fai --motifs TTAGGG --min-repeats 4 | samtools sort > out.bam 
+samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG --min-repeats 4 | samtools sort > out.bam 
 
 ```
 
@@ -168,18 +177,18 @@ i.e. "TTAGGG" -> "T{1,3}AG{2,4}". This pattern will match TTAGG TTAGGGG TAGG TTT
 To reduce off target matching you can increase the minimum required number of sequential motif matches with "--min-repeats".
 
 ```bash
-samtools view -h in.bam | teloclip --ref-idx ref.fa.fai --fuzzy --motifs TTAGGG --min-repeats 4 | samtools sort > out.bam
+samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --fuzzy --motifs TTAGGG --min-repeats 4 | samtools sort > out.bam
 ```
 
 **Extract clipped reads**
 
-`teloclip-extract` will write overhanging reads to separate fasta files for each reference contig end. The clipped region of each read is masked as lowercase in output fasta files.
+`teloclip extract` will write overhanging reads to separate fasta files for each reference contig end. The clipped region of each read is masked as lowercase in output fasta files.
 
-Collections of reads that overhang a contig end can be assembled with `miniasm` into a single segment before being used to extend the contig. The final telemere-extended assembly should be polished (i.e. with `Racon` or `Pilon`) to correct errors in the raw long-read extensions.
+Collections of reads that overhang a contig end can be assembled with `miniasm` into a single segment before being used to extend the contig. The final telomere-extended assembly should be polished (i.e. with `Racon` or `Pilon`) to correct errors in the raw long-read extensions.
 
 ```bash
 # Find clipped alignments containing motif 'TTAGGG' and write reads to separate fasta files for each reference contig end.
-samtools view -h in.bam | teloclip --ref-idx ref.fa.fai --motifs TTAGGG | teloclip-extract --ref-idx ref.fa.fai --extract-reads --extract-dir split_overhangs_by_contig
+samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG | teloclip extract --ref-idx ref.fa.fai --extract-reads --extract-dir split_overhangs_by_contig
 ```
 
 ### Optional Quality Control
@@ -192,7 +201,7 @@ In some cases it may be also be useful to prioritise primary alignments. This ca
 
 ```bash
 # Exclude secondary alignments.
-samtools view -h -F 0x100 in.sam | teloclip --ref-idx ref.fa.fai > noSA.sam 
+samtools view -h -F 0x100 in.sam | teloclip filter --ref-idx ref.fa.fai > noSA.sam 
 ```
 
 **Pre-corrected Data**  
@@ -217,15 +226,38 @@ Finally, validate the updated assembly by re-mapping long-read data and checking
 
 ## Options
 
-### Teloclip Options
+Teloclip now uses a unified CLI with sub-commands. The main `teloclip` command provides global options and sub-commands for specific operations.
 
-Run `teloclip --help` to view the programs' most commonly used options:
+### Main Command
+
+Run `teloclip --help` to view the main command options:
 
 ```code
-usage: teloclip [-h] --ref-idx REF_IDX [--min-clip MIN_CLIP] [--max-break MAX_BREAK]
-                [--motifs MOTIFS] [--no-rev] [--fuzzy] [-r MIN_REPEATS]
-                [--min-anchor MIN_ANCHOR] [--match-anywhere] [-v]
-                [samfile]
+usage: teloclip [OPTIONS] COMMAND [ARGS]...
+
+A tool for the recovery of unassembled telomeres from soft-clipped alignments.
+
+Options:
+  --verbose       Enable verbose logging
+  --quiet         Suppress all output except errors
+  --log-level     Set logging level (DEBUG, INFO, WARNING, ERROR)
+  --version       Show the version and exit
+  --help          Show this message and exit
+
+Commands:
+  filter   Filter SAM files for terminal soft-clipped alignments
+  extract  Extract overhanging reads to separate FASTA files by contig
+```
+
+### Filter Sub-command Options
+
+Run `teloclip filter --help` to view the filter command options:
+
+```code
+usage: teloclip filter [-h] --ref-idx REF_IDX [--min-clip MIN_CLIP] [--max-break MAX_BREAK]
+                       [--motifs MOTIFS] [--no-rev] [--fuzzy] [-r MIN_REPEATS]
+                       [--min-anchor MIN_ANCHOR] [--match-anywhere]
+                       [samfile]
 
 Filter SAM file for clipped alignments containing unassembled telomeric repeats.
 
@@ -253,17 +285,16 @@ options:
                         Minimum number of aligned bases (anchor) required on the non-
                         clipped portion of the read. Default: 500
   --match-anywhere      If set, motif match may occur in unclipped region of reads.
-  -v, --version         show program's version number and exit
 ```
 
-### Teloclip-extract Options
+### Extract Sub-command Options
 
-Run `teloclip-extract --help` to view the programs' most commonly used options:
+Run `teloclip extract --help` to view the extract command options:
 
 ```code
-usage: teloclip-extract [-h] --ref-idx REF_IDX [--prefix PREFIX] [--extract-reads]
+usage: teloclip extract [-h] --ref-idx REF_IDX [--prefix PREFIX] [--extract-reads]
                         [--extract-dir EXTRACT_DIR] [--min-clip MIN_CLIP]
-                        [--max-break MAX_BREAK] [-v]
+                        [--max-break MAX_BREAK]
                         [samfile]
 
 Extract overhanging reads for each end of each reference contig. Write to fasta.
@@ -282,7 +313,6 @@ options:
   --min-clip MIN_CLIP   Require clip to extend past ref contig end by at least N bases.
   --max-break MAX_BREAK
                         Tolerate max N unaligned bases before contig end.
-  -v, --version         show program's version number and exit
 ```
 
 ## Citing Teloclip

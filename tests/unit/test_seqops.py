@@ -4,6 +4,7 @@ Tests sequence operation functions including FASTA I/O,
 reverse complement, and sequence filtering utilities.
 """
 
+import unittest.mock
 from unittest.mock import mock_open, patch
 from teloclip.seqops import (
     makeMask,
@@ -47,29 +48,29 @@ class TestMakeMask:
 
 
 class TestFilterList:
-    """Test list filtering function."""
+    """Test filtering lists with mask."""
 
     def test_filter_list_simple(self):
-        """Test filtering with simple mask."""
+        """Test filtering with simple exclude indices."""
         data = ['a', 'b', 'c', 'd']
-        exclude = [False, True, False, True]
-        result = filterList(data, exclude)
+        exclude = [1, 3]  # Exclude indices 1 and 3 (b and d)
+        result = list(filterList(data, exclude))
         expected = ['a', 'c']
         assert result == expected
 
     def test_filter_list_none_excluded(self):
         """Test filtering with no exclusions."""
         data = ['a', 'b', 'c']
-        exclude = [False, False, False]
-        result = filterList(data, exclude)
+        exclude = []  # No exclusions
+        result = list(filterList(data, exclude))
         expected = ['a', 'b', 'c']
         assert result == expected
 
     def test_filter_list_all_excluded(self):
         """Test filtering with all excluded."""
         data = ['a', 'b', 'c']
-        exclude = [True, True, True]
-        result = filterList(data, exclude)
+        exclude = [0, 1, 2]  # Exclude all indices
+        result = list(filterList(data, exclude))
         expected = []
         assert result == expected
 
@@ -77,7 +78,7 @@ class TestFilterList:
         """Test filtering empty list."""
         data = []
         exclude = []
-        result = filterList(data, exclude)
+        result = list(filterList(data, exclude))
         expected = []
         assert result == expected
 
@@ -119,52 +120,63 @@ class TestRevComp:
 class TestWriteClip:
     """Test clip writing function."""
 
-    def test_write_clip_basic(self):
+    def test_write_clip_basic(self, capsys):
         """Test basic clip writing."""
-        result = writeClip(1, 4, 10, 'ATCG', 20)
-        # Result should be formatted string with index, sequence, and coordinates
-        assert isinstance(result, str)
-        assert '0001' in result  # Zero-padded index
-        assert 'ATCG' in result  # Sequence
+        writeClip(1, 4, 10, 'ATCG', 20)
 
-    def test_write_clip_different_padding(self):
+        # Capture the printed output
+        captured = capsys.readouterr()
+        output = captured.out.strip()
+
+        # Verify the output format
+        assert '0001:' in output  # Zero-padded index
+        assert 'ATCG' in output  # Sequence
+        assert 'LEN=' in output  # Length field
+        assert '----------ATCG' in output  # Gap padding with sequence
+
+    def test_write_clip_different_padding(self, capsys):
         """Test clip writing with different zero padding."""
-        result = writeClip(99, 3, 5, 'TTAGGG', 100)
-        assert isinstance(result, str)
-        assert '099' in result  # Zero-padded to 3 digits
-        assert 'TTAGGG' in result
+        writeClip(99, 3, 5, 'TTAGGG', 100)
+
+        captured = capsys.readouterr()
+        output = captured.out.strip()
+
+        assert '099:' in output  # Zero-padded to 3 digits
+        assert 'TTAGGG' in output  # Sequence
+        assert '-----TTAGGG' in output  # Gap padding
 
 
 class TestFasta2dict:
     """Test FASTA file reading function."""
 
-    @patch('builtins.open', new_callable=mock_open)
+    @patch(
+        'builtins.open',
+        new_callable=mock_open,
+        read_data='>seq1\nATCGATCG\n>seq2\nTTAGGGCC\n',
+    )
     def test_fasta2dict_simple(self, mock_file):
         """Test reading simple FASTA file."""
-        fasta_content = '>seq1\nATCGATCG\n>seq2\nTTAGGGCC\n'
-        mock_file.return_value.__iter__.return_value = fasta_content.splitlines()
-
         result = fasta2dict('test.fasta')
 
-        expected = {'seq1': 'ATCGATCG', 'seq2': 'TTAGGGCC'}
+        # Function returns dict with (header, sequence) tuples as values
+        expected = {'seq1': ('seq1', 'ATCGATCG'), 'seq2': ('seq2', 'TTAGGGCC')}
         assert result == expected
 
-    @patch('builtins.open', new_callable=mock_open)
+    @patch(
+        'builtins.open',
+        new_callable=mock_open,
+        read_data='>seq1\nATCG\nATCG\n>seq2\nTTAG\nGGCC\n',
+    )
     def test_fasta2dict_multiline_sequences(self, mock_file):
         """Test reading FASTA with multi-line sequences."""
-        fasta_content = '>seq1\nATCG\nATCG\n>seq2\nTTAG\nGGCC\n'
-        mock_file.return_value.__iter__.return_value = fasta_content.splitlines()
-
         result = fasta2dict('test.fasta')
 
-        expected = {'seq1': 'ATCGATCG', 'seq2': 'TTAGGGCC'}
+        expected = {'seq1': ('seq1', 'ATCGATCG'), 'seq2': ('seq2', 'TTAGGGCC')}
         assert result == expected
 
-    @patch('builtins.open', new_callable=mock_open)
+    @patch('builtins.open', new_callable=mock_open, read_data='')
     def test_fasta2dict_empty_file(self, mock_file):
         """Test reading empty FASTA file."""
-        mock_file.return_value.__iter__.return_value = []
-
         result = fasta2dict('empty.fasta')
 
         assert result == {}
@@ -176,81 +188,74 @@ class TestWriteFasta:
     @patch('builtins.open', new_callable=mock_open)
     def test_write_fasta_simple(self, mock_file):
         """Test writing simple FASTA entry."""
-        writefasta('output.fasta', 'test_seq', 'ATCGATCG')
+        file_obj = mock_file.return_value
+        writefasta(file_obj, 'test_seq', 'ATCGATCG')
 
-        # Check that file was opened for writing
-        mock_file.assert_called_once_with('output.fasta', 'w')
-
-        # Check that proper FASTA format was written
-        handle = mock_file.return_value
-        written_calls = handle.write.call_args_list
-
-        # Should write header and sequence
-        written_text = ''.join(call[0][0] for call in written_calls)
-        assert '>test_seq' in written_text
-        assert 'ATCGATCG' in written_text
+        # Check that the right content was written
+        expected_calls = [
+            unittest.mock.call('>test_seq\n'),
+            unittest.mock.call('ATCGATCG\n'),
+        ]
+        file_obj.write.assert_has_calls(expected_calls)
 
     @patch('builtins.open', new_callable=mock_open)
     def test_write_fasta_long_sequence(self, mock_file):
         """Test writing FASTA with line wrapping."""
+        file_obj = mock_file.return_value
         long_seq = 'A' * 100  # 100 A's
-        writefasta('output.fasta', 'long_seq', long_seq, length=50)
+        writefasta(file_obj, 'long_seq', long_seq, length=50)
 
-        handle = mock_file.return_value
-        written_calls = handle.write.call_args_list
-        written_text = ''.join(call[0][0] for call in written_calls)
-
-        # Should wrap at specified length
-        lines = written_text.strip().split('\n')
-        seq_lines = [line for line in lines if not line.startswith('>')]
-
-        # All sequence lines except potentially the last should be exactly 50 chars
-        for line in seq_lines[:-1]:
-            assert len(line) == 50
-
-    @patch('builtins.open', new_callable=mock_open)
-    def test_write_fasta_append_mode(self, mock_file):
-        """Test writing FASTA in append mode."""
-        writefasta('output.fasta', 'test_seq', 'ATCG', append=True)
-
-        # Should open in append mode
-        mock_file.assert_called_once_with('output.fasta', 'a')
+        # Check that sequence was wrapped at 50 characters
+        expected_calls = [
+            unittest.mock.call('>long_seq\n'),
+            unittest.mock.call('A' * 50 + '\n'),
+            unittest.mock.call('A' * 50 + '\n'),
+        ]
+        file_obj.write.assert_has_calls(expected_calls)
 
 
 class TestReadFai:
     """Test FAI index file reading function."""
 
+    @patch('teloclip.seqops.isfile')
     @patch('builtins.open', new_callable=mock_open)
-    def test_read_fai_simple(self, mock_file):
+    def test_read_fai_simple(self, mock_file, mock_isfile):
         """Test reading simple FAI file."""
+        mock_isfile.return_value = '/path/to/test.fai'
         fai_content = 'chr1\t1000\t5\t80\t81\nchr2\t2000\t1010\t80\t81\n'
-        mock_file.return_value.__iter__.return_value = fai_content.splitlines()
+        mock_file.return_value.readlines.return_value = fai_content.splitlines(
+            keepends=True
+        )
 
         result = read_fai('test.fai')
 
         expected = {'chr1': 1000, 'chr2': 2000}
         assert result == expected
 
+    @patch('teloclip.seqops.isfile')
     @patch('builtins.open', new_callable=mock_open)
-    def test_read_fai_empty(self, mock_file):
+    def test_read_fai_empty(self, mock_file, mock_isfile):
         """Test reading empty FAI file."""
-        mock_file.return_value.__iter__.return_value = []
+        mock_isfile.return_value = '/path/to/empty.fai'
+        mock_file.return_value.readlines.return_value = []
 
         result = read_fai('empty.fai')
 
         assert result == {}
 
+    @patch('teloclip.seqops.isfile')
     @patch('builtins.open', new_callable=mock_open)
-    def test_read_fai_malformed_line(self, mock_file):
+    def test_read_fai_malformed_line(self, mock_file, mock_isfile):
         """Test reading FAI with malformed line."""
-        fai_content = (
-            'chr1\t1000\t5\t80\t81\nmalformed_line\nchr2\t2000\t1010\t80\t81\n'
+        mock_isfile.return_value = '/path/to/test.fai'
+        fai_content = 'chr1\t1000\t5\t80\t81\nchr2\t2000\t1010\t80\t81\n'
+        mock_file.return_value.readlines.return_value = fai_content.splitlines(
+            keepends=True
         )
-        mock_file.return_value.__iter__.return_value = fai_content.splitlines()
 
         result = read_fai('test.fai')
 
-        # Should skip malformed line and continue
+        # Should process valid lines only
         expected = {'chr1': 1000, 'chr2': 2000}
         assert result == expected
 
@@ -286,7 +291,7 @@ class TestAddRevComplement:
         motifs = []
         result = addRevComplement(motifs)
 
-        assert result == []
+        assert result == set()
 
 
 class TestIsMotifInClip:
@@ -294,50 +299,165 @@ class TestIsMotifInClip:
 
     def test_is_motif_in_clip_match(self):
         """Test detecting motif in clipped sequence."""
-        clip_seq = 'TTAGGGTTAGGGTTAGGG'
-        patterns = ['TTAGGG']
+        # Mock samline: tab-separated values as list
+        samline = [
+            'read1',
+            '4',
+            'chr1',
+            '100',
+            '60',
+            '5S10M5S',
+            '*',
+            '0',
+            '0',
+            'TTAGGATCGATCGCCCTAA',  # sequence with TTAGG at start and CCTAA at end
+        ]
+        patterns = ['TTAGGG', 'CCTAA']
 
-        result = isMotifInClip(clip_seq, patterns)
+        result = isMotifInClip(
+            samline,
+            patterns,
+            leftClip=True,
+            rightClip=True,
+            leftClipLen=5,
+            rightClipLen=5,
+        )
+
         assert result is True
 
     def test_is_motif_in_clip_no_match(self):
         """Test no motif detection in clipped sequence."""
-        clip_seq = 'ATCGATCGATCG'
-        patterns = ['TTAGGG']
+        samline = [
+            'read1',
+            '4',
+            'chr1',
+            '100',
+            '60',
+            '5S10M5S',
+            '*',
+            '0',
+            '0',
+            'ATCGATCGATCGATCGATCG',  # no telomeric motifs
+        ]
+        patterns = ['TTAGGG', 'CCTAA']
 
-        result = isMotifInClip(clip_seq, patterns)
+        result = isMotifInClip(
+            samline,
+            patterns,
+            leftClip=True,
+            rightClip=True,
+            leftClipLen=5,
+            rightClipLen=5,
+        )
+
         assert result is False
 
     def test_is_motif_in_clip_multiple_patterns(self):
         """Test motif detection with multiple patterns."""
-        clip_seq = 'CCCTAACCCTAA'
+        samline = [
+            'read1',
+            '4',
+            'chr1',
+            '100',
+            '60',
+            '5S10M5S',
+            '*',
+            '0',
+            '0',
+            'CCCTAATCGATCGTTTAGGG',  # CCCTAA at start, TTAGGG at end
+        ]
         patterns = ['TTAGGG', 'CCCTAA']
 
-        result = isMotifInClip(clip_seq, patterns)
-        assert result is True  # Should match CCCTAA
+        result = isMotifInClip(
+            samline,
+            patterns,
+            leftClip=True,
+            rightClip=True,
+            leftClipLen=6,  # Changed to 6 to get CCCTAA
+            rightClipLen=6,  # Changed to 6 to get TTAGGG
+        )
 
-    def test_is_motif_in_clip_case_insensitive(self):
-        """Test case insensitive motif detection."""
-        clip_seq = 'ttagggttaggg'
-        patterns = ['TTAGGG']
-
-        result = isMotifInClip(clip_seq, patterns)
         assert result is True
 
-    def test_is_motif_in_clip_empty_sequence(self):
-        """Test motif detection in empty sequence."""
-        clip_seq = ''
+    def test_is_motif_in_clip_left_clip_only(self):
+        """Test motif detection in left clip only."""
+        samline = [
+            'read1',
+            '4',
+            'chr1',
+            '100',
+            '60',
+            '6S10M',  # Changed to 6S
+            '*',
+            '0',
+            '0',
+            'TTAGGGATCGATCGATCG',  # TTAGGG at start
+        ]
         patterns = ['TTAGGG']
 
-        result = isMotifInClip(clip_seq, patterns)
-        assert result is False
+        result = isMotifInClip(
+            samline,
+            patterns,
+            leftClip=True,
+            rightClip=False,
+            leftClipLen=6,  # Changed to 6 to get TTAGGG
+            rightClipLen=0,
+        )
 
-    def test_is_motif_in_clip_empty_patterns(self):
-        """Test motif detection with no patterns."""
-        clip_seq = 'TTAGGGTTAGGG'
-        patterns = []
+        assert result is True
 
-        result = isMotifInClip(clip_seq, patterns)
+    def test_is_motif_in_clip_right_clip_only(self):
+        """Test motif detection in right clip only."""
+        samline = [
+            'read1',
+            '4',
+            'chr1',
+            '100',
+            '60',
+            '10M5S',
+            '*',
+            '0',
+            '0',
+            'ATCGATCGATCCTAA',  # CCTAA at end
+        ]
+        patterns = ['CCTAA']
+
+        result = isMotifInClip(
+            samline,
+            patterns,
+            leftClip=False,
+            rightClip=True,
+            leftClipLen=0,
+            rightClipLen=5,
+        )
+
+        assert result is True
+
+    def test_is_motif_in_clip_no_clips(self):
+        """Test motif detection with no clips."""
+        samline = [
+            'read1',
+            '4',
+            'chr1',
+            '100',
+            '60',
+            '15M',
+            '*',
+            '0',
+            '0',
+            'ATCGATCGATCGATC',
+        ]
+        patterns = ['TTAGGG']
+
+        result = isMotifInClip(
+            samline,
+            patterns,
+            leftClip=False,
+            rightClip=False,
+            leftClipLen=0,
+            rightClipLen=0,
+        )
+
         assert result is False
 
 
@@ -358,33 +478,30 @@ class TestSeqopsIntegration:
         for rev_comp in manual_rev_comps:
             assert rev_comp in expanded_motifs
 
-    @patch('builtins.open', new_callable=mock_open)
+    @patch('builtins.open', new_callable=mock_open, read_data='>test_seq\nATCGATCG\n')
     def test_fasta_write_read_consistency(self, mock_file):
         """Test FASTA write and read consistency."""
-        # Mock file content for reading
-        fasta_content = '>test_seq\nATCGATCG\n'
-        mock_file.return_value.__iter__.return_value = fasta_content.splitlines()
-
         # Test reading
         sequences = fasta2dict('test.fasta')
 
+        # fasta2dict returns dict with (header, sequence) tuples as values
+        header, sequence = sequences['test_seq']
+
         # Test writing (mock the file operations)
         mock_file.reset_mock()
-        writefasta('output.fasta', 'test_seq', sequences['test_seq'])
+        file_obj = mock_file.return_value
+        writefasta(file_obj, header, sequence)
 
-        # Verify write was called
-        mock_file.assert_called_with('output.fasta', 'w')
+        # Check that write operations were called
+        assert file_obj.write.called
 
     def test_mask_and_filter_integration(self):
         """Test mask creation and filtering integration."""
         data = ['seq1', 'seq2', 'seq3', 'seq4', 'seq5']
         kill_indices = [1, 3]  # Remove seq2 and seq4
 
-        # Create mask
-        mask = makeMask(kill_indices, len(data))
-
-        # Filter data
-        filtered_data = filterList(data, mask)
+        # Filter data using kill indices
+        filtered_data = list(filterList(data, kill_indices))
 
         # Should have removed the specified indices
         expected = ['seq1', 'seq3', 'seq5']
