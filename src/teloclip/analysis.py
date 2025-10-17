@@ -6,9 +6,10 @@ statistics about overhanging sequences that can be used to extend draft contigs.
 """
 
 from dataclasses import dataclass, field
-from typing import List, Dict, Tuple, Optional, Iterator
 import statistics
-from .samops import splitCIGAR, checkClips
+from typing import Dict, Iterator, List, Optional, Tuple
+
+from .samops import checkClips, splitCIGAR
 
 
 @dataclass

@@ -4,13 +4,13 @@ Tests motif pattern generation and sequence matching functions.
 """
 
 from teloclip.motifs import (
-    make_motif_regex,
-    make_fuzzy_motif_regex,
-    count_regex_patterns_in_sequence,
-    count_continuous_runs,
-    construct_regex_pattern,
-    format_pattern_counts,
     check_sequence_for_patterns,
+    construct_regex_pattern,
+    count_continuous_runs,
+    count_regex_patterns_in_sequence,
+    format_pattern_counts,
+    make_fuzzy_motif_regex,
+    make_motif_regex,
 )
 
 

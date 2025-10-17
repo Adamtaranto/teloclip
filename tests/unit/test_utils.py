@@ -3,8 +3,10 @@
 Tests utility functions.
 """
 
-import pytest
 from unittest.mock import patch
+
+import pytest
+
 from teloclip.utils import isfile
 
 

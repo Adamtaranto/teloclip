@@ -6,14 +6,15 @@ and homopolymer analysis functionality.
 """
 
 import pytest
+
 from teloclip.analysis import (
-    OverhangInfo,
     ContigStats,
-    collect_overhang_stats,
+    OverhangInfo,
     calculate_overhang_statistics,
+    collect_overhang_stats,
+    detect_homopolymer_runs,
     identify_outlier_contigs,
     rank_overhangs_by_length,
-    detect_homopolymer_runs,
     select_best_overhang,
 )
 

@@ -6,16 +6,17 @@ reverse complement, and sequence filtering utilities.
 
 import unittest.mock
 from unittest.mock import mock_open, patch
+
 from teloclip.seqops import (
-    makeMask,
+    addRevComplement,
+    fasta2dict,
     filterList,
+    isMotifInClip,
+    makeMask,
+    read_fai,
     revComp,
     writeClip,
-    fasta2dict,
     writefasta,
-    read_fai,
-    addRevComplement,
-    isMotifInClip,
 )
 
 

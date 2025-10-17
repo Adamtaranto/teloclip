@@ -2,9 +2,10 @@
 Pytest configuration and fixtures for teloclip tests.
 """
 
-import pytest
-import tempfile
 from pathlib import Path
+import tempfile
+
+import pytest
 
 
 @pytest.fixture

@@ -2,14 +2,13 @@
 Tests for anchor validation functions in samops module.
 """
 
-import pytest
 
 from teloclip.samops import (
     calculate_aligned_bases,
-    validate_min_anchor,
-    splitCIGAR,
     checkClips,
     lenCIGAR,
+    splitCIGAR,
+    validate_min_anchor,
 )
 
 

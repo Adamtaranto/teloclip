@@ -5,23 +5,24 @@ This module implements the 'teloclip extend' command for automatically extending
 draft contigs using overhang analysis from soft-clipped alignments.
 """
 
-import sys
 import logging
 from pathlib import Path
-from typing import Dict, List, Iterator
+import sys
+from typing import Dict, Iterator, List
+
 import click
 
 from ..analysis import (
-    collect_overhang_stats,
+    ContigStats,
     calculate_overhang_statistics,
+    collect_overhang_stats,
+    detect_homopolymer_runs,
     identify_outlier_contigs,
     select_best_overhang,
-    detect_homopolymer_runs,
-    ContigStats,
 )
 from ..extension import apply_contig_extension
-from ..seqops import read_fai, fasta2dict, writefasta
 from ..logs import init_logging
+from ..seqops import fasta2dict, read_fai, writefasta
 
 
 def setup_logger(level):

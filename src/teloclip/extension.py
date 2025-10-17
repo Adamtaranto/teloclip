@@ -6,6 +6,7 @@ overhang sequences from soft-clipped alignments.
 """
 
 from typing import Tuple
+
 from .analysis import OverhangInfo
 
 

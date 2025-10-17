@@ -51,9 +51,9 @@ def main(ctx, verbose, quiet, log_level):
 def register_commands():
     """Register sub-commands. Import here to avoid circular imports."""
     try:
+        from teloclip.commands.extend import extend
         from teloclip.commands.extract import extract_cmd
         from teloclip.commands.filter import filter_cmd
-        from teloclip.commands.extend import extend
 
         main.add_command(filter_cmd)
         main.add_command(extract_cmd)

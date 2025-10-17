@@ -4,18 +4,20 @@ Tests SAM/BAM processing functions including CIGAR string parsing,
 anchor validation, soft clip detection, and terminal position analysis.
 """
 
+from unittest.mock import mock_open, patch
+
 import pytest
-from unittest.mock import patch, mock_open
+
 from teloclip.samops import (
+    CIGARinfo,
+    SAMinfo,
+    StreamingSamFilter,
     calculate_aligned_bases,
-    validate_min_anchor,
-    processSamlines,
-    splitCIGAR,
     checkClips,
     lenCIGAR,
-    StreamingSamFilter,
-    SAMinfo,
-    CIGARinfo,
+    processSamlines,
+    splitCIGAR,
+    validate_min_anchor,
 )
 
 

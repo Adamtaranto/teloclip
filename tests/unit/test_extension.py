@@ -5,14 +5,15 @@ Tests for contig extension algorithms and position calculation.
 """
 
 import pytest
-from teloclip.extension import (
-    calculate_extension_position,
-    trim_contig_end,
-    extend_contig,
-    validate_extension,
-    apply_contig_extension,
-)
+
 from teloclip.analysis import OverhangInfo
+from teloclip.extension import (
+    apply_contig_extension,
+    calculate_extension_position,
+    extend_contig,
+    trim_contig_end,
+    validate_extension,
+)
 
 
 class TestCalculateExtensionPosition:
