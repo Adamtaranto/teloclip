@@ -3,7 +3,6 @@ Main CLI entry point for teloclip with sub-commands.
 """
 
 import logging
-import sys
 
 import click
 
@@ -54,22 +53,17 @@ def register_commands():
     try:
         from teloclip.commands.extract import extract_cmd
         from teloclip.commands.filter import filter_cmd
+        from teloclip.commands.extend import extend
 
         main.add_command(filter_cmd)
         main.add_command(extract_cmd)
+        main.add_command(extend)
     except ImportError as e:
         # Handle gracefully during development
         click.echo(f'Warning: Could not import commands: {e}', err=True)
 
 
-# Placeholder for extend command (will be implemented in Milestone 4)
-@main.command('extend')
-@click.pass_context
-def extend_cmd(ctx):
-    """Extend contigs using soft-clipped overhangs (Coming Soon)."""
-    click.echo("The 'extend' command is not yet implemented.")
-    click.echo('This feature will be available in a future release.')
-    sys.exit(1)
+# Remove the placeholder extend command since we now have the real implementation
 
 
 if __name__ == '__main__':
