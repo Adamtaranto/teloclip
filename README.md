@@ -179,7 +179,7 @@ Collections of reads that overhang a contig end can be assembled with `miniasm` 
 
 ```bash
 # Find clipped alignments containing motif 'TTAGGG' and write reads to separate fasta files for each reference contig end.
-samtools view -h in.bam | teloclip --ref-idx ref.fa.fai --motifs TTAGGG | teloclip-extract --refIdx ref.fa.fai --extractReads --extractDir SplitOverhangs
+samtools view -h in.bam | teloclip --ref-idx ref.fa.fai --motifs TTAGGG | teloclip-extract --ref-idx ref.fa.fai --extract-reads --extract-dir split_overhangs_by_contig
 ```
 
 ### Optional Quality Control
@@ -261,26 +261,28 @@ options:
 Run `teloclip-extract --help` to view the programs' most commonly used options:
 
 ```code
-Usage: teloclip-extract [-h] --refIdx REFIDX [--prefix PREFIX]
-                        [--extractReads] [--extractDir EXTRACTDIR]
-                        [--minClip MINCLIP] [--maxBreak MAXBREAK] [--version]
+usage: teloclip-extract [-h] --ref-idx REF_IDX [--prefix PREFIX] [--extract-reads]
+                        [--extract-dir EXTRACT_DIR] [--min-clip MIN_CLIP]
+                        [--max-break MAX_BREAK] [-v]
                         [samfile]
 
-positional arguments:
-  samfile               If not set, will read sam from stdin.
+Extract overhanging reads for each end of each reference contig. Write to fasta.
 
-optional arguments:
-  -h, --help            Show this help message and exit
-  --refIdx              Path to fai index for reference fasta. Index fasta
-                        using `samtools faidx FASTA`
-  --prefix              Use this prefix for output files. Default: None.
-  --extractReads        If set, write overhang reads to fasta by contig.
-  --extractDir
+positional arguments:
+  samfile
+
+options:
+  -h, --help            show this help message and exit
+  --ref-idx REF_IDX     Path to fai index for reference fasta. Index fasta using `samtools
+                        faidx FASTA`
+  --prefix PREFIX       Use this prefix for output files. Default: None.
+  --extract-reads       If set, write overhang reads to fasta by contig.
+  --extract-dir EXTRACT_DIR
                         Write extracted reads to this directory. Default: cwd.
-  --minClip             Require clip to extend past ref contig end by at least
-                        N bases.
-  --maxBreak            Tolerate max N unaligned bases at contig ends.
-  --version             Show program's version number and exit
+  --min-clip MIN_CLIP   Require clip to extend past ref contig end by at least N bases.
+  --max-break MAX_BREAK
+                        Tolerate max N unaligned bases before contig end.
+  -v, --version         show program's version number and exit
 ```
 
 ## Citing Teloclip

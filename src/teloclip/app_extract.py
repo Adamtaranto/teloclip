@@ -14,74 +14,6 @@ Users can then assemble these reads externally and realign to the ref contig to 
 """
 
 
-def mainArgs():
-    parser = argparse.ArgumentParser(
-        description='Extract overhanging reads for each end of each reference contig. Write to fasta.',
-        prog='teloclip-extract',
-    )
-
-    # Input options
-    parser.add_argument(
-        'samfile', nargs='?', type=argparse.FileType('r'), default=sys.stdin
-    )
-
-    parser.add_argument(
-        '--refIdx',
-        type=str,
-        required=True,
-        help='Path to fai index for reference fasta. Index fasta using `samtools faidx FASTA`',
-    )
-
-    parser.add_argument(
-        '--prefix',
-        type=str,
-        default=None,
-        required=False,
-        help='Use this prefix for output files. Default: None.',
-    )
-
-    parser.add_argument(
-        '--extractReads',
-        default=False,
-        action='store_true',
-        help='If set, write overhang reads to fasta by contig.',
-    )
-
-    parser.add_argument(
-        '--extractDir',
-        type=str,
-        default=None,
-        required=False,
-        help='Write extracted reads to this directory. Default: cwd.',
-    )
-
-    parser.add_argument(
-        '--minClip',
-        type=int,
-        default=1,
-        help='Require clip to extend past ref contig end by at least N bases.',
-    )
-
-    parser.add_argument(
-        '--maxBreak',
-        type=int,
-        default=50,
-        help='Tolerate max N unaligned bases before contig end.',
-    )
-
-    # Version info
-    parser.add_argument(
-        '-v',
-        '--version',
-        action='version',
-        version='%(prog)s {version}'.format(version=__version__),
-    )
-
-    args = parser.parse_args()
-
-    return args
-
-
 def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=None):
     """
     Takes alignment line summaries tagged with overhang information from StreamingSamFilter
@@ -162,6 +94,78 @@ def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=No
     logging.info('Total alignments processed: %s' % str(readCount))
 
 
+def mainArgs():
+    parser = argparse.ArgumentParser(
+        description='Extract overhanging reads for each end of each reference contig. Write to fasta.',
+        prog='teloclip-extract',
+    )
+
+    # Input options
+    parser.add_argument(
+        'samfile', nargs='?', type=argparse.FileType('r'), default=sys.stdin
+    )
+
+    parser.add_argument(
+        '--ref-idx',
+        type=str,
+        required=True,
+        help='Path to fai index for reference fasta. Index fasta using `samtools faidx FASTA`',
+    )
+
+    parser.add_argument(
+        '--prefix',
+        type=str,
+        default=None,
+        required=False,
+        help='Use this prefix for output files. Default: None.',
+    )
+
+    parser.add_argument(
+        '--extract-reads',
+        dest='extract_reads',
+        default=False,
+        action='store_true',
+        help='If set, write overhang reads to fasta by contig.',
+    )
+
+    parser.add_argument(
+        '--extract-dir',
+        dest='extract_dir',
+        type=str,
+        default=None,
+        required=False,
+        help='Write extracted reads to this directory. Default: cwd.',
+    )
+
+    parser.add_argument(
+        '--min-clip',
+        dest='min_clip',
+        type=int,
+        default=1,
+        help='Require clip to extend past ref contig end by at least N bases.',
+    )
+
+    parser.add_argument(
+        '--max-break',
+        dest='max_break',
+        type=int,
+        default=50,
+        help='Tolerate max N unaligned bases before contig end.',
+    )
+
+    # Version info
+    parser.add_argument(
+        '-v',
+        '--version',
+        action='version',
+        version='%(prog)s {version}'.format(version=__version__),
+    )
+
+    args = parser.parse_args()
+
+    return args
+
+
 def main():
     # Set up logging
     init_logging()
@@ -170,8 +174,8 @@ def main():
     args = mainArgs()
 
     # Load ref contigs lengths as dict
-    logging.info('Importing reference contig info from: %s ' % str(args.refIdx))
-    contigInfo = read_fai(args.refIdx)
+    logging.info('Importing reference contig info from: %s ' % str(args.ref_idx))
+    contigInfo = read_fai(args.ref_idx)
 
     # Load alignments from samfile or stdin
     # {'contig':{"L":[(alnStart,alnEnd,leftClipLen,readSeq,readname)],"R":[(alnStart,alnEnd,rightClipLen,readSeq,readname)]}}
@@ -180,18 +184,17 @@ def main():
     alignments = StreamingSamFilter(
         samfile=args.samfile,
         contigs=contigInfo,
-        maxBreak=args.maxBreak,
-        minClip=args.minClip,
+        maxBreak=args.max_break,
+        minClip=args.min_clip,
     )
 
-    if args.extractReads:
+    if args.extract_reads:
         logging.info('Writing overhang reads by contig.')
-        # splitbycontig(alignments=alignments,contigs=contigInfo,prefix=args.prefix,outdir=args.extractDir)
         StreamingSplitByContig(
             alignments=alignments,
             contigs=contigInfo,
             prefix=args.prefix,
-            outdir=args.extractDir,
+            outdir=args.extract_dir,
         )
 
     sys.exit(0)
