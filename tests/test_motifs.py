@@ -4,7 +4,7 @@ from teloclip.motifs import (
     check_sequence_for_patterns,
     construct_regex_pattern,
     count_continuous_runs,
-    count_patterns_in_sequence,
+    count_regex_patterns_in_sequence,
     format_pattern_counts,
 )
 
@@ -32,26 +32,26 @@ def test_check_sequence_for_patterns():
     assert check_sequence_for_patterns(dna_sequence, regex_patterns) is True
 
 
-def test_count_patterns_in_sequence():
+def test_count_regex_patterns_in_sequence():
     # Test case with a simple DNA sequence and patterns
     dna_sequence = 'ATCGATCGATCG'
     regex_patterns = ['ATC', 'GAT', 'CGA']
-    assert count_patterns_in_sequence(dna_sequence, regex_patterns) == {
+    assert count_regex_patterns_in_sequence(dna_sequence, regex_patterns) == {
         'ATC': 3,
         'GAT': 2,
         'CGA': 2,
     }
 
     # Test case with an empty DNA sequence
-    assert count_patterns_in_sequence('', ['ATC', 'GAT']) == {'ATC': 0, 'GAT': 0}
+    assert count_regex_patterns_in_sequence('', ['ATC', 'GAT']) == {'ATC': 0, 'GAT': 0}
 
     # Test case with an empty pattern list
-    assert count_patterns_in_sequence('ATCG', []) == {}
+    assert count_regex_patterns_in_sequence('ATCG', []) == {}
 
     # Test case with a complex DNA sequence and patterns
     dna_sequence = 'ATCGGATCGAGCGCGAATCG'
     regex_patterns = ['ATC', 'GAT', 'CGA']
-    assert count_patterns_in_sequence(dna_sequence, regex_patterns) == {
+    assert count_regex_patterns_in_sequence(dna_sequence, regex_patterns) == {
         'ATC': 3,
         'GAT': 1,
         'CGA': 2,

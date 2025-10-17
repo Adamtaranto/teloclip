@@ -1,5 +1,4 @@
 from itertools import groupby
-import os
 
 from teloclip.motifs import check_sequence_for_patterns
 from teloclip.utils import isfile
@@ -66,20 +65,6 @@ def writefasta(outfile, name, seq, length=80):
         seq = seq[length:]
 
 
-# NCU
-def manageTemp(record=None, tempPath=None, scrub=False):
-    """Create single sequence fasta files or scrub temp files."""
-    if scrub and tempPath:
-        try:
-            os.remove(tempPath)
-        except OSError:
-            pass
-    else:
-        with open(tempPath, 'w') as f:
-            name, seq = record
-            writefasta(f, name, seq, length=80)
-
-
 def read_fai(fai):
     """
     Import fasta index file. Return dict of sequence names and lengths.
@@ -112,33 +97,9 @@ def addRevComplement(motifList):
     return set(setList)
 
 
-# Depreciated
-def crunchHomopolymers(motifList):
-    """
-    Take as input a list of target motifs, collapse poly-nucleotide tracks, return list of collapsed motifs.
-    """
-    # List to catch all collapsed motifs.
-    crunchList = []
-    # For each motif
-    for motif in motifList:
-        # Create empty list to catch not repeated bases.
-        noReps = []
-        # Walk through original motif base-by-base.
-        for base in motif:
-            # If list of kept bases in empty, add first base.
-            if not noReps:
-                noReps.append(base)
-            # If list exists and base is not same as last, store new base.
-            elif base != noReps[-1]:
-                noReps.append(base)
-        # Convert list to string and store new motif
-        crunchList.append(''.join(noReps))
-    # Convert to set to remove duplicates and return
-    return list(set(crunchList))
-
-
-# TODO: support min pattern matches
-def isMotifInClip(samline, motifList, leftClip, rightClip, leftClipLen, rightClipLen):
+def isMotifInClip(
+    samline, motifList, leftClip, rightClip, leftClipLen, rightClipLen, minRepeats=1
+):
     """
     Extract terminal soft-clipped blocks from read sequence and test for presence of any DNA motif in motifList.
     """
@@ -152,11 +113,11 @@ def isMotifInClip(samline, motifList, leftClip, rightClip, leftClipLen, rightCli
     # Search motif/s as regex in the clipped segment
     if leftClip:
         leftcheck = check_sequence_for_patterns(
-            samline[SAM_SEQ][0:leftClipLen], motifList
+            samline[SAM_SEQ][0:leftClipLen], motifList, minRepeats
         )
     if rightClip:
         rightcheck = check_sequence_for_patterns(
-            samline[SAM_SEQ][-rightClipLen:], motifList
+            samline[SAM_SEQ][-rightClipLen:], motifList, minRepeats
         )
 
     # True if either clipped end sequence contains at least one instance of any motif.
