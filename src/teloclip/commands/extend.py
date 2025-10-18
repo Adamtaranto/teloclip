@@ -90,11 +90,15 @@ def generate_extension_report(
     overall_stats: Dict[str, Dict[str, float]],
     excluded_contigs: List[str],
     warnings: List[str],
+    dry_run: bool = False,
 ) -> str:
     """Generate a comprehensive statistics report."""
     report_lines = []
 
-    report_lines.append('# Teloclip Extend Statistics Report')
+    if dry_run:
+        report_lines.append('# Teloclip Extend Statistics Report (DRY RUN)')
+    else:
+        report_lines.append('# Teloclip Extend Statistics Report')
     report_lines.append('=' * 50)
     report_lines.append('')
 
@@ -108,8 +112,12 @@ def generate_extension_report(
     report_lines.append('')
 
     # Extensions applied
-    report_lines.append('## Extensions Applied')
-    report_lines.append(f'Total contigs extended: {len(extensions_applied)}')
+    if dry_run:
+        report_lines.append('## Extensions That Would Be Applied')
+        report_lines.append(f'Total contigs that would be extended: {len(extensions_applied)}')
+    else:
+        report_lines.append('## Extensions Applied')
+        report_lines.append(f'Total contigs extended: {len(extensions_applied)}')
     report_lines.append('')
 
     for contig_name, ext_info in extensions_applied.items():
@@ -256,6 +264,28 @@ def extend(
 
         logger.info('Reading reference sequences...')
         reference_seqs = load_fasta_sequences(reference_fasta)
+        
+        # Validate FASTA vs FAI consistency
+        logger.debug('Validating FASTA file consistency with index...')
+        missing_from_fasta, missing_from_fai = validate_fasta_against_fai(reference_fasta, contig_dict)
+        
+        if missing_from_fasta:
+            logger.warning(f'Sequences in FAI index but missing from FASTA: {", ".join(sorted(missing_from_fasta))}')
+            logger.warning('These contigs will be skipped during extension analysis')
+            
+        if missing_from_fai:
+            logger.warning(f'Sequences in FASTA but missing from FAI index: {", ".join(sorted(missing_from_fai))}')
+            logger.warning('These contigs will not be analyzed for extension')
+            
+        # Filter contig_dict to only include sequences present in FASTA
+        available_contigs = set(reference_seqs.keys())
+        filtered_contig_dict = {name: length for name, length in contig_dict.items()
+                               if name in available_contigs}
+
+        if len(filtered_contig_dict) < len(contig_dict):
+            removed_count = len(contig_dict) - len(filtered_contig_dict)
+            logger.info(f'Filtered out {removed_count} contigs not present in FASTA file')
+            contig_dict = filtered_contig_dict
 
         logger.info('Collecting overhang statistics...')
         sam_lines = read_sam_lines(sam_file)
@@ -376,6 +406,7 @@ def extend(
             overall_stats,
             excluded_contigs,
             warnings,
+            dry_run,
         )
 
         # Write outputs
@@ -403,7 +434,11 @@ def extend(
                 write_fasta_sequences(reference_seqs, None)
 
         # Summary
-        logger.info(f'Extension complete: {len(extensions_applied)} contigs extended')
+        if dry_run:
+            logger.info(f'Dry-run analysis complete: {len(extensions_applied)} contigs would be extended')
+        else:
+            logger.info(f'Extension complete: {len(extensions_applied)} contigs extended')
+            
         if excluded_contigs:
             logger.info(f'Excluded {len(excluded_contigs)} outlier contigs')
         if warnings:
