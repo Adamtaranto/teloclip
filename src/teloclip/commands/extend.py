@@ -33,7 +33,8 @@ from ..analysis import (
 )
 from ..extension import apply_contig_extension
 from ..logs import init_logging
-from ..seqops import fasta2dict, read_fai, writefasta
+from ..bio_io import load_fasta_sequences, write_fasta_sequences, validate_fasta_against_fai
+from ..seqops import read_fai
 
 
 def setup_logger(level):
@@ -253,7 +254,7 @@ def extend(
         logger.info(f'Loaded {len(contig_dict)} contigs from reference')
 
         logger.info('Reading reference sequences...')
-        reference_seqs = fasta2dict(str(reference_fasta))
+        reference_seqs = load_fasta_sequences(reference_fasta)
 
         logger.info('Collecting overhang statistics...')
         sam_lines = read_sam_lines(sam_file)
@@ -387,9 +388,7 @@ def extend(
 
         if output_fasta and not dry_run:
             logger.info(f'Writing extended sequences to {output_fasta}')
-            with open(output_fasta, 'w') as f:
-                for _contig_name, (header, seq) in reference_seqs.items():
-                    writefasta(f, header, seq)
+            write_fasta_sequences(reference_seqs, output_fasta)
 
         # Summary
         logger.info(f'Extension complete: {len(extensions_applied)} contigs extended')
