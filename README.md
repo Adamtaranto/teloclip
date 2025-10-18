@@ -199,10 +199,10 @@ Note: Circular genomes (i.e. mitochondria, chloroplasts, and nitroplasts) will a
 
 ```bash
 # Use `--dry-run` option to report proposed changes without applying them.
-teloclip extend --ref-idx ref.fa.fai --stats-report --exclude-outliers --dry-run  overhangs.sam ref.fa
+teloclip extend --ref-idx ref.fa.fai --stats-report stats.md --exclude-outliers --dry-run  overhangs.sam ref.fa
 
 # Output extended contigs
-teloclip extend --ref-idx ref.fa.fai --stats-report --exclude-outliers --output-fasta telo_extended_ref.fa overhangs.sam ref.fa
+teloclip extend --ref-idx ref.fa.fai --stats-report stats.md --exclude-outliers --output-fasta telo_extended_ref.fa overhangs.sam ref.fa
 ```
 
 After manually extending contigs the revised assembly should be re-polished using available long and short read data to correct indels present in the raw long-reads.
