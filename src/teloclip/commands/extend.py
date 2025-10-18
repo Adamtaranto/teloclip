@@ -47,7 +47,8 @@ def setup_logger(level):
 
 def validate_input_files(sam_file: Path, reference_fasta: Path, ref_idx: Path) -> None:
     """Validate that required input files exist and are readable."""
-    if not sam_file.exists():
+    # Allow '-' for stdin SAM input
+    if str(sam_file) != '-' and not sam_file.exists():
         raise click.ClickException(f'SAM file not found: {sam_file}')
 
     if not reference_fasta.exists():
