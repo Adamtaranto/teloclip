@@ -36,7 +36,18 @@ class ExtractionStats:
         is_left: bool,
         motif_counts: Optional[Dict[str, int]] = None,
     ):
-        """Record processed alignment statistics."""
+        """
+        Record processed alignment statistics.
+
+        Parameters
+        ----------
+        contig_name : str
+            Name of the contig being processed.
+        is_left : bool
+            Whether this is a left-end overhang alignment.
+        motif_counts : dict, optional
+            Dictionary of motif patterns and their counts.
+        """
         self.total_alignments += 1
         self.contigs_processed.add(contig_name)
 
@@ -52,14 +63,19 @@ class ExtractionStats:
                 self.motif_matches[motif] += count
 
     def record_filter(self, filter_type: str):
-        """Record filtered alignments."""
+        """
+        Record filtered alignments.
+        """
         if filter_type == 'quality':
             self.quality_filtered += 1
         elif filter_type == 'anchor':
             self.anchor_filtered += 1
 
     def generate_report(self) -> str:
-        """Generate comprehensive extraction report."""
+        """
+        Generate comprehensive extraction report.
+        """
+
         lines = []
         lines.append('# Teloclip Extract Statistics Report')
         lines.append('=' * 50)
@@ -95,7 +111,9 @@ class ExtractionStats:
 
 
 class EfficientSequenceWriter:
-    """Memory-efficient sequence writer with buffering and BioPython integration."""
+    """
+    Memory-efficient sequence writer with buffering and BioPython integration.
+    """
 
     def __init__(
         self,
@@ -109,11 +127,11 @@ class EfficientSequenceWriter:
         Parameters
         ----------
         output_path : Union[str, Path, None]
-            Output file path. If None, writes to stdout
+            Output file path. If None, writes to stdout.
         output_format : str
-            Output format ('fasta' or 'fastq')
+            Output format ('fasta' or 'fastq').
         buffer_size : int
-            Number of sequences to buffer before writing
+            Number of sequences to buffer before writing.
         """
         self.output_path = Path(output_path) if output_path else None
         self.output_format = output_format.lower()
@@ -127,16 +145,35 @@ class EfficientSequenceWriter:
             raise ValueError(f'Unsupported output format: {output_format}')
 
     def __enter__(self):
-        """Context manager entry."""
+        """
+        Context manager entry.
+
+        Returns
+        -------
+        EfficientSequenceWriter
+            Returns self for context manager usage.
+        """
         self.open()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
+        """
+        Context manager exit.
+
+        Parameters
+        ----------
+        exc_type : type
+            Exception type if an exception occurred.
+        exc_val : Exception
+            Exception value if an exception occurred.
+        exc_tb : traceback
+            Exception traceback if an exception occurred.
+        """
         self.close()
 
     def open(self):
-        """Open output file handle."""
+        """
+        Open output file handle."""
         if self.output_path is None:
             self.file_handle = sys.stdout
         else:
@@ -158,15 +195,15 @@ class EfficientSequenceWriter:
         Parameters
         ----------
         seq_id : str
-            Sequence identifier
+            Sequence identifier.
         sequence : str
-            DNA sequence
+            DNA sequence.
         description : str, optional
-            Sequence description
+            Sequence description.
         quality : str, optional
-            Quality string (required for FASTQ format)
+            Quality string (required for FASTQ format).
         stats : dict, optional
-            Statistics to include in header
+            Statistics to include in header.
         """
         # Build enhanced description with stats
         if stats:
@@ -206,14 +243,22 @@ class EfficientSequenceWriter:
             self.flush()
 
     def flush(self):
-        """Force write buffered sequences."""
+        """
+        Force write buffered sequences.
+
+        Returns
+        -------
+        None
+            No return value.
+        """
         if self.buffer and self.file_handle:
             SeqIO.write(self.buffer, self.file_handle, self.output_format)
             self.sequences_written += len(self.buffer)
             self.buffer.clear()
 
     def close(self):
-        """Close writer and cleanup."""
+        """
+        Close writer and cleanup."""
         # Write any remaining buffered sequences
         if self.buffer:
             self.flush()
@@ -225,7 +270,9 @@ class EfficientSequenceWriter:
 
 
 class MultiFileSequenceWriter:
-    """Manage multiple sequence writers for different contigs/ends."""
+    """
+    Manage multiple sequence writers for different contigs/ends.
+    """
 
     def __init__(
         self,
@@ -240,13 +287,13 @@ class MultiFileSequenceWriter:
         Parameters
         ----------
         base_dir : Union[str, Path, None]
-            Base output directory
+            Base output directory.
         prefix : str, optional
-            Prefix for output filenames
+            Prefix for output filenames.
         output_format : str
-            Output format ('fasta' or 'fastq')
+            Output format ('fasta' or 'fastq').
         buffer_size : int
-            Buffer size for each writer
+            Buffer size for each writer.
         """
         self.base_dir = Path(base_dir) if base_dir else Path.cwd()
         self.prefix = prefix
@@ -264,15 +311,16 @@ class MultiFileSequenceWriter:
         Parameters
         ----------
         contig_name : str
-            Name of contig
+            Name of contig.
         end : str
-            End type ('L' for left, 'R' for right)
+            End type ('L' for left, 'R' for right).
 
         Returns
         -------
         EfficientSequenceWriter
-            Writer for this contig/end combination
+            Writer for this contig/end combination.
         """
+
         key = f'{contig_name}_{end}'
 
         if key not in self.writers:
@@ -305,20 +353,62 @@ class MultiFileSequenceWriter:
         quality: Optional[str] = None,
         stats: Optional[Dict] = None,
     ):
-        """Write sequence to appropriate file."""
+        """
+        Write sequence to appropriate file.
+
+        Parameters
+        ----------
+        contig_name : str
+            Name of the contig.
+        end : str
+            End type ('L' for left, 'R' for right).
+        seq_id : str
+            Sequence identifier.
+        sequence : str
+            DNA sequence.
+        description : str, optional
+            Sequence description.
+        quality : str, optional
+            Quality string for FASTQ format.
+        stats : dict, optional
+            Statistics to include in header.
+        """
         writer = self.get_writer(contig_name, end)
         writer.write_sequence(seq_id, sequence, description, quality, stats)
 
     def close_all(self):
-        """Close all writers."""
+        """
+        Close all writers.
+
+        Returns
+        -------
+        None
+            No return value.
+        """
         for writer in self.writers.values():
             writer.close()
         self.writers.clear()
 
     def __enter__(self):
-        """Context manager entry."""
+        """
+        Context manager entry.
+
+        Returns
+        -------
+        MultiFileSequenceWriter
+            Returns self for context manager usage.
+        """
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        """Context manager exit."""
+        """
+        Context manager exit.
+
+        exc_type : type
+            Exception type if an exception occurred.
+        exc_val : Exception
+            Exception value if an exception occurred.
+        exc_tb : traceback
+            Exception traceback if an exception occurred.
+        """
         self.close_all()
