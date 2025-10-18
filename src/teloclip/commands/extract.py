@@ -9,8 +9,7 @@ import sys
 
 import click
 
-from teloclip.app_extract import StreamingSplitByContig
-from teloclip.samops import StreamingSamFilter
+from teloclip.samops import StreamingSamFilter, StreamingSplitByContig
 from teloclip.seqops import read_fai
 
 
