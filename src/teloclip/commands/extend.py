@@ -380,16 +380,27 @@ def extend(
 
         # Write outputs
         if stats_report:
-            logger.info(f'Writing statistics report to {stats_report}')
-            with open(stats_report, 'w') as f:
-                f.write(report_content)
+            if str(stats_report) == '-':
+                # Write to stdout when explicitly requested with '-'
+                logger.info('Writing statistics report to stdout')
+                print(report_content)
+            else:
+                logger.info(f'Writing statistics report to {stats_report}')
+                with open(stats_report, 'w') as f:
+                    f.write(report_content)
         else:
-            # Print report to stdout if no file specified
-            print(report_content)
+            # Default: write report to stderr if no file specified
+            logger.info('Writing statistics report to stderr')
+            print(report_content, file=sys.stderr)
 
-        if output_fasta and not dry_run:
-            logger.info(f'Writing extended sequences to {output_fasta}')
-            write_fasta_sequences(reference_seqs, output_fasta)
+        # Write extended sequences
+        if not dry_run:
+            if output_fasta:
+                logger.info(f'Writing extended sequences to {output_fasta}')
+                write_fasta_sequences(reference_seqs, output_fasta)
+            else:
+                logger.info('Writing extended sequences to stdout')
+                write_fasta_sequences(reference_seqs, None)
 
         # Summary
         logger.info(f'Extension complete: {len(extensions_applied)} contigs extended')
