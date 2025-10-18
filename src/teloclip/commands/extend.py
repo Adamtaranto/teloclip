@@ -14,9 +14,10 @@ draft contigs using overhang analysis from soft-clipped alignments.
 # TODO: Do not report extensions complete in dry-run mode
 # TODO: Fix error error on extend.py:397 Error during extend operation: can only concatenate tuple (not "str") to tuple. Error: can only concatenate tuple (not "str") to tuple
 # TODO: Default stats-report to stderr if not specified
-# TODO: Report count of motif matches in each extended region using re.findall
+# ✅ IMPLEMENTED: Report count of motif matches in each extended region using re.findall
 
 import logging
+import re
 from pathlib import Path
 import sys
 from typing import Dict, Iterator, List
@@ -31,9 +32,17 @@ from ..analysis import (
     identify_outlier_contigs,
     select_best_overhang,
 )
+from ..motifs import (
+    make_fuzzy_motif_regex,
+    make_motif_regex,
+)
 from ..extension import apply_contig_extension
 from ..logs import init_logging
-from ..bio_io import load_fasta_sequences, write_fasta_sequences, validate_fasta_against_fai
+from ..bio_io import (
+    load_fasta_sequences,
+    write_fasta_sequences,
+    validate_fasta_against_fai,
+)
 from ..seqops import read_fai
 
 
@@ -90,6 +99,7 @@ def generate_extension_report(
     overall_stats: Dict[str, Dict[str, float]],
     excluded_contigs: List[str],
     warnings: List[str],
+    motif_stats: Dict[str, Dict[str, int]] = None,
     dry_run: bool = False,
 ) -> str:
     """Generate a comprehensive statistics report."""
@@ -114,7 +124,9 @@ def generate_extension_report(
     # Extensions applied
     if dry_run:
         report_lines.append('## Extensions That Would Be Applied')
-        report_lines.append(f'Total contigs that would be extended: {len(extensions_applied)}')
+        report_lines.append(
+            f'Total contigs that would be extended: {len(extensions_applied)}'
+        )
     else:
         report_lines.append('## Extensions Applied')
         report_lines.append(f'Total contigs extended: {len(extensions_applied)}')
@@ -132,6 +144,17 @@ def generate_extension_report(
         if ext_info['trim_length'] > 0:
             report_lines.append(f'  Bases trimmed: {ext_info["trim_length"]}')
         report_lines.append('')
+
+    # Motif analysis results
+    if motif_stats:
+        report_lines.append('## Motif Analysis Results')
+        report_lines.append('')
+        for contig_name, motif_counts in motif_stats.items():
+            if any(count > 0 for count in motif_counts.values()):
+                report_lines.append(f'### {contig_name}')
+                for motif_name, count in motif_counts.items():
+                    report_lines.append(f'  {motif_name}: {count} matches')
+                report_lines.append('')
 
     # Outliers detected
     if any(outliers.values()):
@@ -223,6 +246,16 @@ def generate_extension_report(
 @click.option(
     '--dry-run', is_flag=True, help='Report extensions without modifying sequences'
 )
+@click.option(
+    '--motifs',
+    multiple=True,
+    help='Motif sequences to count in extended regions (can be used multiple times)',
+)
+@click.option(
+    '--fuzzy-motifs',
+    is_flag=True,
+    help='Use fuzzy motif matching allowing ±1 character variation',
+)
 @click.pass_context
 def extend(
     ctx,
@@ -237,6 +270,8 @@ def extend(
     max_homopolymer,
     min_extension,
     dry_run,
+    motifs,
+    fuzzy_motifs,
 ):
     """
     Extend contigs using overhang analysis from soft-clipped alignments.
@@ -264,28 +299,53 @@ def extend(
 
         logger.info('Reading reference sequences...')
         reference_seqs = load_fasta_sequences(reference_fasta)
-        
+
         # Validate FASTA vs FAI consistency
         logger.debug('Validating FASTA file consistency with index...')
-        missing_from_fasta, missing_from_fai = validate_fasta_against_fai(reference_fasta, contig_dict)
-        
+        missing_from_fasta, missing_from_fai = validate_fasta_against_fai(
+            reference_fasta, contig_dict
+        )
+
         if missing_from_fasta:
-            logger.warning(f'Sequences in FAI index but missing from FASTA: {", ".join(sorted(missing_from_fasta))}')
+            logger.warning(
+                f'Sequences in FAI index but missing from FASTA: {", ".join(sorted(missing_from_fasta))}'
+            )
             logger.warning('These contigs will be skipped during extension analysis')
-            
+
         if missing_from_fai:
-            logger.warning(f'Sequences in FASTA but missing from FAI index: {", ".join(sorted(missing_from_fai))}')
+            logger.warning(
+                f'Sequences in FASTA but missing from FAI index: {", ".join(sorted(missing_from_fai))}'
+            )
             logger.warning('These contigs will not be analyzed for extension')
-            
+
         # Filter contig_dict to only include sequences present in FASTA
         available_contigs = set(reference_seqs.keys())
-        filtered_contig_dict = {name: length for name, length in contig_dict.items()
-                               if name in available_contigs}
+        filtered_contig_dict = {
+            name: length
+            for name, length in contig_dict.items()
+            if name in available_contigs
+        }
 
         if len(filtered_contig_dict) < len(contig_dict):
             removed_count = len(contig_dict) - len(filtered_contig_dict)
-            logger.info(f'Filtered out {removed_count} contigs not present in FASTA file')
+            logger.info(
+                f'Filtered out {removed_count} contigs not present in FASTA file'
+            )
             contig_dict = filtered_contig_dict
+
+        # Prepare motif patterns if specified
+        motif_patterns = {}
+        if motifs:
+            logger.info(f'Preparing motif patterns: {", ".join(motifs)}')
+            for motif in motifs:
+                if fuzzy_motifs:
+                    pattern = make_fuzzy_motif_regex(motif)
+                    pattern_name = f'{motif} (fuzzy)'
+                else:
+                    pattern = make_motif_regex(motif)
+                    pattern_name = motif
+                motif_patterns[pattern_name] = pattern
+            logger.info(f'Created {len(motif_patterns)} motif patterns for analysis')
 
         logger.info('Collecting overhang statistics...')
         sam_lines = read_sam_lines(sam_file)
@@ -307,9 +367,15 @@ def extend(
         extensions_applied = {}
         excluded_contigs = []
         warnings = []
+        motif_stats = {}
 
         # Process each contig for potential extension
+        total_contigs = len(stats_dict)
+        logger.info(f'Processing {total_contigs} contigs for potential extension...')
+        processed_count = 0
+
         for contig_name, contig_stats in stats_dict.items():
+            processed_count += 1
             # Skip if excluding outliers
             if exclude_outliers and (
                 contig_name in outliers['left_outliers']
@@ -376,6 +442,21 @@ def extend(
                                 f'Extended {contig_name} {end_name} end: '
                                 f'+{best_overhang.length}bp from read {best_overhang.read_name}'
                             )
+
+                            # Count motifs in extended sequence if patterns provided
+                            if motif_patterns:
+                                for pattern_name, pattern_str in motif_patterns.items():
+                                    # Count matches using re.findall
+                                    matches = re.findall(pattern_str, extended_seq)
+                                    motif_count = len(matches)
+                                    if contig_name not in motif_stats:
+                                        motif_stats[contig_name] = {}
+                                    motif_stats[contig_name][pattern_name] = motif_count
+
+                                    if motif_count > 0:
+                                        logger.info(
+                                            f'Found {motif_count} {pattern_name} motifs in extended {contig_name}'
+                                        )
                         except ValueError as e:
                             error_msg = f'Extension failed for {contig_name}: {e}'
                             warnings.append(error_msg)
@@ -393,10 +474,37 @@ def extend(
                         }
                         extensions_applied[contig_name] = ext_info
 
+                        # Simulate motif counting in dry-run mode if patterns provided
+                        if motif_patterns:
+                            # Get original sequence and simulate extension
+                            original_seq = reference_seqs[contig_name][1]
+                            extended_seq, _ = apply_contig_extension(
+                                original_seq, best_overhang, contig_stats.contig_length
+                            )
+
+                            for pattern_name, pattern_str in motif_patterns.items():
+                                # Count matches using re.findall
+                                matches = re.findall(pattern_str, extended_seq)
+                                motif_count = len(matches)
+                                if contig_name not in motif_stats:
+                                    motif_stats[contig_name] = {}
+                                motif_stats[contig_name][pattern_name] = motif_count
+
+                                if motif_count > 0:
+                                    logger.info(
+                                        f'[DRY RUN] Would find {motif_count} {pattern_name} motifs in extended {contig_name}'
+                                    )
+
                         logger.info(
                             f'[DRY RUN] Would extend {contig_name} {end_name} end: '
                             f'+{best_overhang.length}bp from read {best_overhang.read_name}'
                         )
+
+            # Log progress periodically (every 10 contigs) or at the end
+            if processed_count % 10 == 0 or processed_count == total_contigs:
+                logger.debug(
+                    f'Processed {processed_count}/{total_contigs} contigs for extension'
+                )
 
         # Generate report
         report_content = generate_extension_report(
@@ -406,6 +514,7 @@ def extend(
             overall_stats,
             excluded_contigs,
             warnings,
+            motif_stats,
             dry_run,
         )
 
@@ -435,10 +544,32 @@ def extend(
 
         # Summary
         if dry_run:
-            logger.info(f'Dry-run analysis complete: {len(extensions_applied)} contigs would be extended')
+            logger.info(
+                f'Dry-run analysis complete: {len(extensions_applied)} contigs would be extended'
+            )
         else:
-            logger.info(f'Extension complete: {len(extensions_applied)} contigs extended')
-            
+            logger.info(
+                f'Extension complete: {len(extensions_applied)} contigs extended'
+            )
+
+        # Motif analysis summary
+        if motif_patterns and motif_stats:
+            total_motifs_found = sum(
+                sum(counts.values()) for counts in motif_stats.values()
+            )
+            contigs_with_motifs = len(
+                [
+                    contig
+                    for contig, counts in motif_stats.items()
+                    if any(count > 0 for count in counts.values())
+                ]
+            )
+            if total_motifs_found > 0:
+                logger.info(
+                    f'Motif analysis: found {total_motifs_found} motif matches '
+                    f'in {contigs_with_motifs} extended contigs'
+                )
+
         if excluded_contigs:
             logger.info(f'Excluded {len(excluded_contigs)} outlier contigs')
         if warnings:
