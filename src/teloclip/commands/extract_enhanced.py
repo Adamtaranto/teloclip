@@ -12,8 +12,7 @@ This refactored version provides significant performance improvements and new fe
 
 import logging
 import sys
-from pathlib import Path
-from typing import Dict, Optional
+from typing import Dict
 
 import click
 

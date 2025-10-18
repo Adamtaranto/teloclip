@@ -7,10 +7,9 @@ functions with better performance, error handling, and feature integration.
 
 import logging
 import re
-from typing import Dict, Iterator, Optional, Tuple, Union
+from typing import Dict, Iterator, Optional, Tuple
 
 from .extract_io import ExtractionStats, MultiFileSequenceWriter
-from .motifs import make_motif_regex, make_fuzzy_motif_regex
 from .samops import validate_min_anchor
 
 

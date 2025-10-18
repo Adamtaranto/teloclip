@@ -147,7 +147,7 @@ You can also stream SAM records directly from the aligner to save disk space.
 
 ```bash
 # Map PacBio long-reads to ref assembly,
-# return alignments clipped at contig ends, 
+# return alignments clipped at contig ends,
 # write to sorted bam.
 minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz | teloclip filter --ref-idx ref.fa.fai | samtools sort > overhangs.bam
 ```
@@ -162,7 +162,7 @@ minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz | teloclip filter --ref-idx ref.fa
 samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG | samtools sort > overhangs.bam
 
 # To change the minimum number of consecutive motif repeats required for a match, set "--min-repeats". This example will require one instance of "TTAGGGTTAGGGTTAGGG" in the overhang.
-samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG --min-repeats 3 | samtools sort > out.bam 
+samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG --min-repeats 3 | samtools sort > out.bam
 ```
 
 **Matching noisy target motifs**
@@ -211,7 +211,7 @@ The final telomere-extended assembly should be re-polished using available long 
 
 ### Optional Quality Control
 
-**Additional filters**  
+**Additional filters**
 
 Users may wish to exclude reads below a minimum length or read quality score to reduce the risk of incorrect alignments.
 
@@ -219,7 +219,7 @@ In some cases it may be also be useful to prioritise primary alignments. This ca
 
 ```bash
 # Exclude secondary alignments.
-samtools view -h -F 0x100 in.sam | teloclip filter --ref-idx ref.fa.fai > noSA.sam 
+samtools view -h -F 0x100 in.sam | teloclip filter --ref-idx ref.fa.fai > noSA.sam
 ```
 
 ## Options
@@ -231,20 +231,25 @@ The main `teloclip` command provides global options and sub-commands for specifi
 Run `teloclip --help` to view the main command options:
 
 ```code
-usage: teloclip [OPTIONS] COMMAND [ARGS]...
+Usage: teloclip [OPTIONS] COMMAND [ARGS]...
 
-A tool for the recovery of unassembled telomeres from soft-clipped alignments.
+  A tool for the recovery of unassembled telomeres from soft-clipped read
+  alignments.
+
+  Use sub-commands to filter alignments, extract reads, or extend contigs.
 
 Options:
-  --verbose       Enable verbose logging
-  --quiet         Suppress all output except errors
-  --log-level     Set logging level (DEBUG, INFO, WARNING, ERROR)
-  --version       Show the version and exit
-  --help          Show this message and exit
+  -v, --verbose                   Enable verbose logging
+  -q, --quiet                     Suppress all but error messages
+  --log-level [DEBUG|INFO|WARNING|ERROR]
+                                  Set specific log level
+  --version                       Show the version and exit.
+  --help                          Show this message and exit.
 
 Commands:
-  filter   Filter SAM files for terminal soft-clipped alignments
-  extract  Extract overhanging reads to separate FASTA files by contig
+  extend   Extend contigs using overhang analysis from soft-clipped...
+  extract  Extract overhanging reads for each end of each reference contig.
+  filter   Filter SAM file for clipped alignments containing unassembled...
 ```
 
 ### Filter Sub-command Options
@@ -252,37 +257,50 @@ Commands:
 Run `teloclip filter --help` to view the filter command options:
 
 ```code
-usage: teloclip filter [-h] --ref-idx REF_IDX [--min-clip MIN_CLIP] [--max-break MAX_BREAK]
-                       [--motifs MOTIFS] [--no-rev] [--fuzzy] [-r MIN_REPEATS]
-                       [--min-anchor MIN_ANCHOR] [--match-anywhere]
-                       [samfile]
+Usage: teloclip filter [OPTIONS] [SAMFILE]
 
-Filter SAM file for clipped alignments containing unassembled telomeric repeats.
+  Filter SAM file for clipped alignments containing unassembled telomeric
+  repeats.
 
-positional arguments:
-  samfile
+  Reads SAM/BAM alignments and outputs only those that are soft-clipped at
+  contig ends, optionally filtering for specific motifs like telomeric
+  repeats.
 
-options:
-  -h, --help            show this help message and exit
-  --ref-idx REF_IDX     Path to fai index for reference fasta. Index fasta using `samtools
-                        faidx FASTA`
-  --min-clip MIN_CLIP   Require clip to extend past ref contig end by at least N bases.
-  --max-break MAX_BREAK
-                        Tolerate max N unaligned bases before contig end.
-  --motifs MOTIFS       If set keep only reads containing given motif/s from comma
-                        delimited list of strings. By default also search for reverse
-                        complement of motifs. i.e. TTAGGG,TTAAGGG will also match
-                        CCCTAA,CCCTTAA
-  --no-rev              If set do NOT search for reverse complement of specified motifs.
-  --fuzzy               If set, tolerate +/- 1 variation in motif homopolymer runs i.e.
-                        TTAGGG -> T{1,3}AG{2,4}. Default: Off
-  -r MIN_REPEATS, --min-repeats MIN_REPEATS
-                        Minimum number of sequential pattern matches required for a hit to
-                        be reported. Default: 3
-  --min-anchor MIN_ANCHOR
-                        Minimum number of aligned bases (anchor) required on the non-
-                        clipped portion of the read. Default: 500
-  --match-anywhere      If set, motif match may occur in unclipped region of reads.
+  Examples:
+
+  # Basic filtering for terminal soft-clipped reads
+  teloclip filter --ref-idx ref.fa.fai input.sam > output.sam
+
+  # Filter for telomeric motifs with fuzzy matching
+  teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG --fuzzy input.sam
+
+  # Read from stdin, write to stdout
+  samtools view -h input.bam | teloclip filter --ref-idx ref.fa.fai
+
+Options:
+  --ref-idx PATH             Path to fai index for reference fasta. Index
+                             fasta using `samtools faidx FASTA`  [required]
+  --min-clip INTEGER         Require clip to extend past ref contig end by at
+                             least N bases.
+  --max-break INTEGER        Tolerate max N unaligned bases before contig end.
+  --motifs TEXT              If set keep only reads containing given motif/s
+                             from comma delimited list of strings. By default
+                             also search for reverse complement of motifs.
+                             i.e. TTAGGG,TTAAGGG will also match
+                             CCCTAA,CCCTTAA
+  --no-rev                   If set do NOT search for reverse complement of
+                             specified motifs.
+  --fuzzy                    If set, tolerate +/- 1 variation in motif
+                             homopolymer runs i.e. TTAGGG -> T{1,3}AG{2,4}.
+                             Default: Off
+  -r, --min-repeats INTEGER  Minimum number of sequential pattern matches
+                             required for a hit to be reported. Default: 1
+  --min-anchor INTEGER       Minimum number of aligned bases (anchor) required
+                             on the non-clipped portion of the read. Default:
+                             500
+  --match-anywhere           If set, motif match may occur in unclipped region
+                             of reads.
+  --help                     Show this message and exit.
 ```
 
 ### Extract Sub-command Options
@@ -290,27 +308,36 @@ options:
 Run `teloclip extract --help` to view the extract command options:
 
 ```code
-usage: teloclip extract [-h] --ref-idx REF_IDX [--prefix PREFIX] [--extract-reads]
-                        [--extract-dir EXTRACT_DIR] [--min-clip MIN_CLIP]
-                        [--max-break MAX_BREAK]
-                        [samfile]
+Usage: teloclip extract [OPTIONS] [SAMFILE]
 
-Extract overhanging reads for each end of each reference contig. Write to fasta.
+  Extract overhanging reads for each end of each reference contig.
 
-positional arguments:
-  samfile
+  Reads SAM/BAM alignments and extracts soft-clipped sequences that extend
+  beyond contig ends, writing them to separate FASTA files for each contig
+  end.
 
-options:
-  -h, --help            show this help message and exit
-  --ref-idx REF_IDX     Path to fai index for reference fasta. Index fasta using `samtools
-                        faidx FASTA`
-  --prefix PREFIX       Use this prefix for output files. Default: None.
-  --extract-reads       If set, write overhang reads to fasta by contig.
-  --extract-dir EXTRACT_DIR
-                        Write extracted reads to this directory. Default: cwd.
-  --min-clip MIN_CLIP   Require clip to extend past ref contig end by at least N bases.
-  --max-break MAX_BREAK
-                        Tolerate max N unaligned bases before contig end.
+  Examples:
+
+  #Extract reads to current directory
+  teloclip extract --ref-idx ref.fa.fai --extract-reads input.sam
+
+  #Extract with custom directory and prefix
+  teloclip extract --ref-idx ref.fa.fai --extract-reads \
+  --extract-dir overhangs/ --prefix sample1 input.sam
+
+  # Read from stdin
+  samtools view -h input.bam | teloclip extract --ref-idx ref.fa.fai --extract-reads
+
+Options:
+  --ref-idx PATH       Path to fai index for reference fasta. Index fasta
+                       using `samtools faidx FASTA`  [required]
+  --prefix TEXT        Use this prefix for output files. Default: None.
+  --extract-reads      If set, write overhang reads to fasta by contig.
+  --extract-dir PATH   Write extracted reads to this directory. Default: cwd.
+  --min-clip INTEGER   Require clip to extend past ref contig end by at least
+                       N bases.
+  --max-break INTEGER  Tolerate max N unaligned bases before contig end.
+  --help               Show this message and exit.
 ```
 
 ### Extend sub-command options
@@ -343,8 +370,11 @@ Options:
   --min-extension INTEGER    Minimum overhang length for extension (default:
                              1)
   --dry-run                  Report extensions without modifying sequences
-  --help                     Show this message and exit.
-  ```
+  --motifs TEXT              Motif sequences to count in extended regions (can
+                             be used multiple times)
+  --fuzzy-motifs             Use fuzzy motif matching allowing ±1 character
+                             variation
+  --help                     Show this message and exit.  ```
 
 ## Citing Teloclip
 

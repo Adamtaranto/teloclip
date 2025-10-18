@@ -6,7 +6,6 @@ statistics tracking, and motif integration.
 """
 
 import tempfile
-import sys
 from pathlib import Path
 from unittest.mock import patch
 from io import StringIO

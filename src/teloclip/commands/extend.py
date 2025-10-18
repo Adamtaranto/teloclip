@@ -5,17 +5,6 @@ This module implements the 'teloclip extend' command for automatically extending
 draft contigs using overhang analysis from soft-clipped alignments.
 """
 
-# TODO: Use biopython seqIO for fasta reading/writing so that we can handle large genomes without loading everything into memory
-## This will require changing or removing fasta2dict and writefasta functions to use generators. Check for other code that assumes fasta2dict returns full dict in memory.
-# TODO: Skip contigs not present in reference fasta when reading fai index and warn user
-# TODO: Write output fasta in streaming fashion to stdout if no output file specified
-# TODO: Option to read sam from stdin if sam_file is '-'
-# TODO: Do not report extensions for contigs not present in reference fasta
-# TODO: Do not report extensions complete in dry-run mode
-# TODO: Fix error error on extend.py:397 Error during extend operation: can only concatenate tuple (not "str") to tuple. Error: can only concatenate tuple (not "str") to tuple
-# TODO: Default stats-report to stderr if not specified
-# ✅ IMPLEMENTED: Report count of motif matches in each extended region using re.findall
-
 import logging
 import re
 from pathlib import Path
