@@ -6,7 +6,7 @@ draft contigs using overhang analysis from soft-clipped alignments.
 """
 
 # TODO: Use biopython seqIO for fasta reading/writing so that we can handle large genomes without loading everything into memory
-## This will require changing fasta2dict and writefasta functions to use generators
+## This will require changing or removing fasta2dict and writefasta functions to use generators. Check for other code that assumes fasta2dict returns full dict in memory.
 # TODO: Skip contigs not present in reference fasta when reading fai index and warn user
 # TODO: Write output fasta in streaming fashion to stdout if no output file specified
 # TODO: Option to read sam from stdin if sam_file is '-'
@@ -330,11 +330,14 @@ def extend(
                 if contig_name not in extensions_applied:
                     if not dry_run:
                         try:
-                            original_seq = reference_seqs[contig_name]
+                            # Extract sequence from tuple (header, seq)
+                            original_seq = reference_seqs[contig_name][1]
                             extended_seq, ext_info = apply_contig_extension(
                                 original_seq, best_overhang, contig_stats.contig_length
                             )
-                            reference_seqs[contig_name] = extended_seq
+                            # Update sequence in tuple (header, seq)
+                            header = reference_seqs[contig_name][0]
+                            reference_seqs[contig_name] = (header, extended_seq)
                             extensions_applied[contig_name] = ext_info
 
                             logger.info(
@@ -384,7 +387,9 @@ def extend(
 
         if output_fasta and not dry_run:
             logger.info(f'Writing extended sequences to {output_fasta}')
-            writefasta(reference_seqs, str(output_fasta))
+            with open(output_fasta, 'w') as f:
+                for _contig_name, (header, seq) in reference_seqs.items():
+                    writefasta(f, header, seq)
 
         # Summary
         logger.info(f'Extension complete: {len(extensions_applied)} contigs extended')
