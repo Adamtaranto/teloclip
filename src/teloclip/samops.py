@@ -1,7 +1,7 @@
 import logging
+import os
 import re
 import sys
-import os
 
 from teloclip.motifs import check_sequence_for_patterns
 from teloclip.seqops import isMotifInClip, writefasta
