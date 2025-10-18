@@ -4,6 +4,10 @@ Extend sub-command implementation.
 This module implements the 'teloclip extend' command for automatically extending
 draft contigs using overhang analysis from soft-clipped alignments.
 """
+# TODO: Use biopython seqIO for fasta reading/writing so that we can handle large genomes without loading everything into memory
+## This will require changing fasta2dict and writefasta functions to use generators
+# TODO: Skip contigs not present in reference fasta when reading fai index and warn user
+# TODO: Write output fasta in streaming fashion to stdout if no output file specified
 
 import logging
 from pathlib import Path
