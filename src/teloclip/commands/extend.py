@@ -18,7 +18,7 @@ import click
 from ..analysis import ContigStats, calculate_overhang_statistics
 from ..logs import init_logging
 from ..motifs import make_fuzzy_motif_regex, make_motif_regex
-from ..seqops import read_fai
+from ..seqops import read_fai, revComp
 from ..streaming_analysis import (
     process_single_contig_extension,
     stream_contigs_for_extension,
@@ -313,14 +313,14 @@ def generate_extension_report(
     '--dry-run', is_flag=True, help='Report extensions without modifying sequences'
 )
 @click.option(
-    '--motifs',
-    multiple=True,
-    help='Motif sequences to count in extended regions (can be used multiple times)',
+    '--count-motifs',
+    type=str,
+    help='Comma-delimited motif sequences to count in overhang regions (e.g., "TTAGGG,CCCTAA")',
 )
 @click.option(
-    '--fuzzy-motifs',
+    '--fuzzy-count',
     is_flag=True,
-    help='Use fuzzy motif matching allowing ±1 character variation',
+    help='Use fuzzy motif matching allowing ±1 character variation when counting motifs',
 )
 @click.pass_context
 def extend(
@@ -338,8 +338,8 @@ def extend(
     max_break,
     min_anchor,
     dry_run,
-    motifs,
-    fuzzy_motifs,
+    count_motifs,
+    fuzzy_count,
 ):
     """
     Extend contigs using overhang analysis from soft-clipped alignments.
@@ -381,10 +381,10 @@ def extend(
         Minimum anchor length required for alignment.
     dry_run : bool
         If True, analyze but don't modify contigs.
-    motifs : tuple
-        Motif sequences to search for in overhangs.
-    fuzzy_motifs : bool
-        Use fuzzy motif matching allowing ±1 character variation.
+    count_motifs : str
+        Comma-delimited motif sequences to count in overhang regions.
+    fuzzy_count : bool
+        Use fuzzy motif matching allowing ±1 character variation when counting motifs.
     """
     import pysam
 
@@ -407,17 +407,70 @@ def extend(
 
         # Prepare motif patterns if specified
         motif_patterns = {}
-        if motifs:
-            logger.info(f'Preparing motif patterns: {", ".join(motifs)}')
-            for motif in motifs:
-                if fuzzy_motifs:
-                    pattern = make_fuzzy_motif_regex(motif)
-                    pattern_name = f'{motif} (fuzzy)'
-                else:
-                    pattern = make_motif_regex(motif)
-                    pattern_name = motif
-                motif_patterns[pattern_name] = pattern
-            logger.info(f'Created {len(motif_patterns)} motif patterns for analysis')
+        if count_motifs:
+            # Parse comma-delimited motifs
+            raw_motifs = [
+                motif.strip().upper()
+                for motif in count_motifs.split(',')
+                if motif.strip()
+            ]
+            logger.info(f'Processing motif list: {", ".join(raw_motifs)}')
+
+            # Validate motifs - must contain only A, T, G, C
+            valid_bases = {'A', 'T', 'G', 'C'}
+            validated_motifs = []
+
+            for motif in raw_motifs:
+                if not motif:  # Skip empty motifs
+                    continue
+                if not all(base in valid_bases for base in motif):
+                    invalid_bases = set(motif) - valid_bases
+                    logger.warning(
+                        f'Skipping invalid motif "{motif}": contains invalid bases {invalid_bases}'
+                    )
+                    continue
+                validated_motifs.append(motif)
+
+            if not validated_motifs:
+                logger.warning('No valid motifs found after validation')
+            else:
+                logger.info(
+                    f'Validated {len(validated_motifs)} motifs: {", ".join(validated_motifs)}'
+                )
+
+                # Add reverse complements and create unique set
+                all_motifs = set()
+                for motif in validated_motifs:
+                    all_motifs.add(motif)
+                    rev_comp = revComp(motif)
+                    all_motifs.add(rev_comp)
+                    logger.debug(f'Motif: {motif} -> Reverse complement: {rev_comp}')
+
+                # Convert to sorted list for consistent ordering
+                unique_motifs = sorted(all_motifs)
+                logger.info(
+                    f'Final motif set (including reverse complements): {", ".join(unique_motifs)}'
+                )
+
+                # Create regex patterns for each unique motif
+                for motif in unique_motifs:
+                    if fuzzy_count:
+                        pattern = make_fuzzy_motif_regex(motif)
+                        pattern_name = f'{motif} (fuzzy)'
+                        logger.debug(f'Created fuzzy pattern for {motif}: {pattern}')
+                    else:
+                        pattern = make_motif_regex(motif)
+                        pattern_name = motif
+                        logger.debug(f'Created exact pattern for {motif}: {pattern}')
+                    motif_patterns[pattern_name] = pattern
+
+                logger.info(
+                    f'Created {len(motif_patterns)} motif patterns for analysis'
+                )
+                if fuzzy_count:
+                    logger.info(
+                        'Using fuzzy matching (±1 character variation) for motif counting'
+                    )
 
         # Open indexed files
         logger.info('Opening indexed BAM and FASTA files...')

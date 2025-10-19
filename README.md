@@ -198,11 +198,22 @@ Check for conflicting soft-clipped sequences. These indicate non-specific read a
 Note: Circular genomes (i.e. mitochondria, chloroplasts, and nitroplasts) will always yield soft-clipped overhangs and should not be extended. We attempt to exclude these with `--exclude-outliers` which will skip contigs with unusually high overhang depths.
 
 ```bash
-# Use `--dry-run` option to report proposed changes without applying them.
-teloclip extend --ref-idx ref.fa.fai --stats-report stats.md --exclude-outliers --dry-run  overhangs.sam ref.fa
+# Create required indices (one-time setup)
+samtools faidx ref.fa
 
-# Output extended contigs
-teloclip extend --ref-idx ref.fa.fai --stats-report stats.md --exclude-outliers --output-fasta telo_extended_ref.fa overhangs.sam ref.fa
+# Convert SAM -> BAM, sort, and write sorted BAM
+samtools view -bS overhangs.sam | samtools sort -o overhangs.sorted.bam
+
+# Index the sorted BAM for fast access
+samtools index overhangs.sorted.bam
+
+# Use `--dry-run` option to report proposed changes without applying them.
+teloclip extend overhangs.sorted.bam ref.fa \
+  --ref-idx ref.fa.fai \
+  --output-fasta extended.fasta \
+  --stats-report extension_report.txt \
+  --count-motifs TTAGGG \
+  --dry-run
 ```
 
 After manually extending contigs the revised assembly should be re-polished using available long and short read data to correct indels present in the raw long-reads.
@@ -337,7 +348,7 @@ Options:
 Run `teloclip extend --help` to view the extract command options:
 
 ```code
-Usage: teloclip extend [OPTIONS] SAM_FILE REFERENCE_FASTA
+Usage: teloclip extend [OPTIONS] BAM_FILE REFERENCE_FASTA
 
   Extend contigs using overhang analysis from soft-clipped alignments.
 
@@ -354,11 +365,15 @@ Options:
                              50)
   --min-extension INTEGER    Minimum overhang length for extension (default:
                              1)
+  --max-break INTEGER        Maximum gap allowed between alignment and contig
+                             end (default: 10)
+  --min-anchor INTEGER       Minimum anchor length required for alignment
+                             (default: 500)
   --dry-run                  Report extensions without modifying sequences
-  --motifs TEXT              Motif sequences to count in extended regions (can
-                             be used multiple times)
-  --fuzzy-motifs             Use fuzzy motif matching allowing ±1 character
-                             variation
+  --count-motifs TEXT        Comma-delimited motif sequences to count in
+                             overhang regions (e.g., "TTAGGG,CCCTAA")
+  --fuzzy-count              Use fuzzy motif matching allowing ±1 character
+                             variation when counting motifs
   --help                     Show this message and exit.
 ```
 
