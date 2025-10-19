@@ -11,7 +11,6 @@ import pytest
 from teloclip.samops import (
     CIGARinfo,
     SAMinfo,
-    StreamingSamFilter,
     calculate_aligned_bases,
     checkClips,
     lenCIGAR,
@@ -207,19 +206,6 @@ class TestProcessSamlines:
         # Should return a dictionary with counts
         assert isinstance(counts, dict)
         assert 'samlineCount' in counts
-
-
-class TestStreamingSamFilter:
-    """Test streaming SAM filter class."""
-
-    def test_streaming_sam_filter_init(self):
-        """Test StreamingSamFilter initialization."""
-        filter_obj = StreamingSamFilter(
-            samfile='test.sam', contigs={'contig01': 1000}, max_break=50, min_clip=10
-        )
-
-        # Check that function creates an object (basic smoke test)
-        assert filter_obj is not None
 
 
 class TestSAMinfo:

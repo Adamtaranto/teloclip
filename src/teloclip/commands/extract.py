@@ -1,16 +1,29 @@
 """
-Extract sub-command for teloclip CLI.
+Enhanced extract sub-command for teloclip CLI.
 
-Extract overhanging reads for each end of each reference contig and write to FASTA files.
+This refactored version provides significant performance improvements and new features:
+- Memory-efficient I/O with BioPython SeqIO integration
+- Rich sequence headers with mapping quality and motif statistics
+- Motif analysis integration with exact and fuzzy matching
+- Comprehensive statistics reporting
+- Quality filtering and validation
+- Support for FASTA and FASTQ output formats
 """
 
 import logging
 import sys
+from typing import Dict
 
 import click
 
-from teloclip.samops import StreamingSamFilter, StreamingSplitByContig
-from teloclip.seqops import read_fai
+from ..logs import init_logging
+from ..seqops import read_fai
+from ..motifs import make_motif_regex, make_fuzzy_motif_regex
+from ..samops import (
+    EnhancedStreamingSamFilter,
+    enhanced_streaming_split_by_contig,
+)
+from ..extract_io import ExtractionStats
 
 
 @click.command('extract')
@@ -46,105 +59,250 @@ from teloclip.seqops import read_fai
     type=int,
     help='Tolerate max N unaligned bases before contig end.',
 )
+@click.option(
+    '--min-anchor',
+    default=500,
+    type=int,
+    help='Minimum anchored alignment length required (default: 500).',
+)
+@click.option(
+    '--min-mapq',
+    default=0,
+    type=int,
+    help='Minimum mapping quality required (default: 0).',
+)
+@click.option(
+    '--include-stats',
+    is_flag=True,
+    help='Include mapping quality, clip length, and motif counts in FASTA headers.',
+)
+@click.option(
+    '--motifs',
+    multiple=True,
+    help='Motif sequences to count in overhang regions (can be used multiple times).',
+)
+@click.option(
+    '--fuzzy-motifs',
+    is_flag=True,
+    help='Use fuzzy motif matching allowing ±1 character variation.',
+)
+@click.option(
+    '--buffer-size',
+    default=1000,
+    type=int,
+    help='Number of sequences to buffer before writing (default: 1000).',
+)
+@click.option(
+    '--output-format',
+    default='fasta',
+    type=click.Choice(['fasta', 'fastq']),
+    help='Output format for extracted sequences (default: fasta).',
+)
+@click.option(
+    '--stats-report',
+    type=click.Path(),
+    help='Write extraction statistics to file. Use "-" for stdout.',
+)
+@click.option(
+    '--no-mask-overhangs',
+    is_flag=True,
+    help='Do not convert overhang sequences to lowercase.',
+)
+@click.option(
+    '--log-level',
+    default='INFO',
+    type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']),
+    help='Logging level (default: INFO).',
+)
 @click.pass_context
 def extract_cmd(
-    ctx, samfile, ref_idx, prefix, extract_reads, extract_dir, min_clip, max_break
+    ctx,
+    samfile,
+    ref_idx,
+    prefix,
+    extract_reads,
+    extract_dir,
+    min_clip,
+    max_break,
+    min_anchor,
+    min_mapq,
+    include_stats,
+    motifs,
+    fuzzy_motifs,
+    buffer_size,
+    output_format,
+    stats_report,
+    no_mask_overhangs,
+    log_level,
 ):
     """
-    Extract overhanging (soft-clipped) read sequences that extend beyond contig ends.
+    Extract overhanging reads for each end of each reference contig.
 
-    Reads SAM/BAM alignments, identifies reads with soft-clipped segments that
-    extend past either end of reference contigs (as defined in a FASTA index),
-    and optionally writes those overhanging sequences to per-contig FASTA files.
-    If writing is disabled, the function still consumes and processes the
-    alignment stream to trigger any side effects of the underlying streaming
-    pipeline.
+    This enhanced version reads SAM/BAM alignments and extracts soft-clipped sequences
+    that extend beyond contig ends, with advanced filtering, motif analysis, and
+    comprehensive statistics reporting.
 
     Parameters
     ----------
     ctx : click.Context
-        Click command context passed by the CLI entry point. Used for CLI-related
-        state and logging but not required for core processing.
-    samfile : str or file-like
-        Path to a SAM/BAM file or a file-like object/stream. Use '-' or pipe data
-        in via stdin to stream SAM records.
+        Click context object.
+    samfile : str
+        Path to SAM/BAM file or '-' for stdin.
     ref_idx : str
-        Path to the reference FASTA index file (FAI). Used to obtain contig names
-        and lengths to determine contig ends.
+        Path to reference index file (.fai).
     prefix : str
-        Filename prefix to use when writing output FASTA files for extracted
-        overhang reads. Combined with contig identifiers to form output names.
+        Prefix for output filenames.
     extract_reads : bool
-        If True, extracted overhang sequences are written to FASTA files, one
-        file (or set of files) per contig end. If False, alignments are still
-        processed but no files are written.
+        Extract and write overhang sequences.
     extract_dir : str
-        Destination directory for output FASTA files when extract_reads is True.
-        The directory will be created if necessary (behavior depends on the
-        underlying implementation).
+        Directory for output files.
     min_clip : int
-        Minimum soft-clip length (in bases) required for a clipped segment to be
-        considered an overhang. Clipped segments shorter than this are ignored.
+        Minimum clip length required.
     max_break : int
-        Maximum allowed internal break/gap (in bases) within an alignment used by
-        the streaming filter to decide whether a clipped segment represents a
-        contiguous overhang.
-
-    Returns
-    -------
-    None
-        This function performs streaming I/O and side effects (logging and optional
-        file output) and does not return a value.
-
-    Notes
-    -----
-    - Contig information is loaded from the provided FASTA index (ref_idx) to
-      determine contig boundaries.
-    - Alignments are streamed and filtered; when extract_reads is True, matching
-      soft-clipped sequences are grouped by contig end and written as FASTA.
-      When extract_reads is False, the alignment stream is still consumed to
-      perform processing (but no files are produced).
-    - Underlying I/O, parsing, or streaming utilities may raise exceptions
-      (e.g., FileNotFoundError for missing files, parsing errors for malformed
-      SAM/BAM/FAI). Those exceptions are propagated to the caller.
+        Maximum gap from contig end to allow.
+    min_anchor : int
+        Minimum anchored alignment length required.
+    min_mapq : int
+        Minimum mapping quality required.
+    include_stats : bool
+        Include statistics in FASTA headers.
+    motifs : tuple
+        Motif sequences to analyze.
+    fuzzy_motifs : bool
+        Use fuzzy motif matching.
+    buffer_size : int
+        I/O buffer size for writing.
+    output_format : str
+        Output format ('fasta' or 'fastq').
+    stats_report : str
+        Path for statistics report output.
+    no_mask_overhangs : bool
+        Disable overhang sequence masking.
+    log_level : str
+        Logging verbosity level.
 
     Examples
     --------
-    # Extract reads to current directory
+
+    \\b
+    # Basic extraction to current directory
     teloclip extract --ref-idx ref.fa.fai --extract-reads input.sam
 
-    # Extract with custom directory and prefix
+    \\b
+    # Extract with motif analysis and statistics
+    teloclip extract --ref-idx ref.fa.fai --extract-reads --include-stats \\
+        --motifs TTAGGG --motifs CCCTAA --stats-report stats.txt input.sam
+
+    \\b
+    # Extract with quality filtering and custom output
     teloclip extract --ref-idx ref.fa.fai --extract-reads \\
-        --extract-dir overhangs/ --prefix sample1 input.sam
+        --extract-dir overhangs/ --prefix sample1 --min-mapq 20 \\
+        --min-anchor 1000 --output-format fastq input.sam
 
-    # Read from stdin
-    samtools view -h input.bam | teloclip extract --ref-idx ref.fa.fai --extract-reads
+    \\b
+    # Read from stdin with fuzzy motif matching
+    samtools view -h input.bam | teloclip extract --ref-idx ref.fa.fai \\
+        --extract-reads --motifs TTAGGG --fuzzy-motifs
     """
-    # Load ref contigs lengths as dict
-    logging.info('Importing reference contig info from: %s', ref_idx)
-    contig_info = read_fai(ref_idx)
+    # Initialize logging
+    init_logging(level=getattr(logging, log_level.upper()))
+    logger = logging.getLogger(__name__)
 
-    # Load alignments from samfile or stdin
-    logging.info('Processing alignments. Searching for overhangs.')
+    try:
+        # Load reference contig info
+        logger.info(f'Loading reference contig info from: {ref_idx}')
+        contig_info = read_fai(ref_idx)
+        logger.info(f'Loaded {len(contig_info)} contigs from reference')
 
-    alignments = StreamingSamFilter(
-        samfile=samfile,
-        contigs=contig_info,
-        max_break=max_break,
-        min_clip=min_clip,
-    )
+        # Prepare motif patterns if specified
+        motif_patterns: Dict[str, str] = {}
+        if motifs:
+            logger.info(f'Preparing motif patterns: {", ".join(motifs)}')
+            for motif in motifs:
+                if fuzzy_motifs:
+                    pattern = make_fuzzy_motif_regex(motif)
+                    pattern_name = f'{motif} (fuzzy)'
+                else:
+                    pattern = make_motif_regex(motif)
+                    pattern_name = motif
+                motif_patterns[pattern_name] = pattern
+            logger.info(f'Created {len(motif_patterns)} motif patterns for analysis')
 
-    if extract_reads:
-        logging.info('Writing overhang reads by contig.')
-        StreamingSplitByContig(
-            alignments=alignments,
+        # Initialize statistics tracker
+        stats = ExtractionStats()
+
+        # Create enhanced streaming filter
+        logger.info('Processing alignments. Searching for overhangs.')
+        alignments = EnhancedStreamingSamFilter(
+            samfile=samfile,
             contigs=contig_info,
-            prefix=prefix,
-            outdir=extract_dir,
+            max_break=max_break,
+            min_clip=min_clip,
+            min_anchor=min_anchor,
+            min_mapq=min_mapq,
+            motif_patterns=motif_patterns,
+            stats=stats,
         )
-    else:
-        # If extract_reads is not set, we still need to consume the generator
-        # to process the alignments, but we won't write anything
-        for _ in alignments:
-            pass
-        logging.info('Processing complete. Use --extract-reads to write output files.')
+
+        if extract_reads:
+            logger.info('Writing overhang reads by contig.')
+
+            # Use enhanced extraction function
+            final_stats = enhanced_streaming_split_by_contig(
+                alignments=alignments,
+                output_dir=extract_dir,
+                prefix=prefix,
+                output_format=output_format,
+                buffer_size=buffer_size,
+                include_stats=include_stats,
+                mask_overhangs=not no_mask_overhangs,
+            )
+
+        else:
+            # Process alignments without writing files (for statistics only)
+            for alignment in alignments:
+                stats.record_alignment(
+                    contig_name=alignment['contig_name'],
+                    is_left=(alignment['end'] == 'L'),
+                    motif_counts=alignment.get('motif_counts'),
+                )
+            final_stats = stats
+            logger.info(
+                'Processing complete. Use --extract-reads to write output files.'
+            )
+
+        # Generate and output statistics report
+        if stats_report or not extract_reads:
+            report_content = final_stats.generate_report()
+
+            if stats_report:
+                if stats_report == '-':
+                    logger.info('Writing statistics report to stdout')
+                    print(report_content)
+                else:
+                    logger.info(f'Writing statistics report to {stats_report}')
+                    with open(stats_report, 'w') as f:
+                        f.write(report_content)
+            elif not extract_reads:
+                # Always show stats if not extracting files
+                print(report_content)
+
+        # Final summary
+        logger.info(
+            f'Extraction complete: processed {final_stats.total_alignments} alignments, '
+            f'found {final_stats.left_overhangs + final_stats.right_overhangs} overhangs '
+            f'from {len(final_stats.contigs_processed)} contigs'
+        )
+
+        if motif_patterns and final_stats.motif_matches:
+            total_motif_matches = sum(final_stats.motif_matches.values())
+            logger.info(
+                f'Motif analysis: found {total_motif_matches} motif matches across all patterns'
+            )
+
+    except FileNotFoundError as e:
+        logger.error(f'File not found: {e}')
+        raise click.ClickException(str(e)) from e
+    except Exception as e:
+        logger.error(f'Error during extract operation: {e}')
+        raise click.ClickException(str(e)) from e

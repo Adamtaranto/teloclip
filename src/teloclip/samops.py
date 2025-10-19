@@ -3,12 +3,15 @@ SAM file operations for Teloclip.
 """
 
 import logging
-import os
 import re
 import sys
+from typing import Dict, Iterator, Optional, Tuple, TYPE_CHECKING
 
 from teloclip.motifs import check_sequence_for_patterns
-from teloclip.seqops import isMotifInClip, writefasta
+from teloclip.seqops import isMotifInClip
+
+if TYPE_CHECKING:
+    from .extract_io import ExtractionStats
 
 
 def processSamlines(
@@ -329,201 +332,6 @@ def validate_min_anchor(cigar_string, min_anchor):
     return aligned_bases >= min_anchor
 
 
-def StreamingSamFilter(samfile=None, contigs=None, max_break=50, min_clip=1):
-    """
-    Filter SAM alignments to identify overhang reads at contig ends.
-
-    Processes SAM alignment lines as a generator to identify reads with soft-clipping
-    that extend beyond contig boundaries, indicating potential overhang sequences.
-
-    Parameters
-    ----------
-    samfile : file-like object, optional
-        SAM format file or stream. Default is None.
-    contigs : dict, optional
-        Dictionary mapping contig names to their lengths. Default is None.
-    max_break : int, optional
-        Maximum allowed distance from contig end for overhang detection. Default is 50.
-    min_clip : int, optional
-        Minimum soft-clipping length required for overhang. Default is 1.
-
-    Yields
-    ------
-    tuple
-        Tuple containing (position, alignment_end, clip_length, sequence,
-        read_name, contig_name, direction) for each overhang alignment.
-        Direction is 'L' for left overhang, 'R' for right overhang.
-    """
-    SAM_QNAME = 0
-    SAM_RNAME = 2
-    SAM_POS = 3
-    SAM_CIGAR = 5
-    SAM_SEQ = 9
-    # Read sam from stdin
-    for line in samfile:
-        # Skip header rows
-        if line[0][0] == '@':
-            continue
-        samline = line.split('\t')
-        # Check that aln contains soft clipping
-        if 'S' in samline[SAM_CIGAR] and 'H' not in samline[SAM_CIGAR]:
-            # Get L/R clip lengths
-            leftClipLen, rightClipLen = checkClips(samline[SAM_CIGAR])
-            alnLen = lenCIGAR(samline[SAM_CIGAR])
-            # Check for left overhang
-            if leftClipLen:
-                if (int(samline[SAM_POS]) <= max_break) and (
-                    leftClipLen >= (int(samline[SAM_POS]) + min_clip)
-                ):
-                    # Overhang is on contig left
-                    alnEnd = int(samline[SAM_POS]) + alnLen
-                    try:
-                        yield (
-                            (
-                                samline[SAM_POS],
-                                alnEnd,
-                                leftClipLen,
-                                samline[SAM_SEQ],
-                                samline[SAM_QNAME],
-                                samline[SAM_RNAME],
-                                'L',
-                            )
-                        )
-                    except KeyError:
-                        logging.warning(
-                            'Reference sequence not found in FAI file: '
-                            + str(samline[SAM_RNAME])
-                        )
-            # Check for right overhang
-            if rightClipLen:
-                try:
-                    ContigLen = contigs[str(samline[SAM_RNAME])]
-                except KeyError:
-                    logging.warning(
-                        'Reference sequence not found in FAI file: '
-                        + str(samline[SAM_RNAME])
-                    )
-                alnEnd = int(samline[SAM_POS]) + alnLen
-                # Check if overhang is on contig right end
-                if ((ContigLen - alnEnd) <= max_break) and (
-                    alnEnd + rightClipLen >= ContigLen + 1
-                ):
-                    yield (
-                        (
-                            samline[SAM_POS],
-                            alnEnd,
-                            rightClipLen,
-                            samline[SAM_SEQ],
-                            samline[SAM_QNAME],
-                            samline[SAM_RNAME],
-                            'R',
-                        )
-                    )
-
-
-def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=None):
-    """
-    Split overhang alignments by contig and write to separate FASTA files.
-
-    Takes alignment summaries from StreamingSamFilter and writes overhang reads
-    into output files for each end of each contig that has alignments.
-
-    Parameters
-    ----------
-    alignments : generator, optional
-        Generator of alignment tuples from StreamingSamFilter. Default is None.
-    contigs : dict, optional
-        Dictionary mapping contig names to their lengths. Default is None.
-    prefix : str, optional
-        Prefix for output filenames. Default is None.
-    outdir : str, optional
-        Output directory for FASTA files. Default is None (uses current directory).
-
-    Returns
-    -------
-    None
-        Writes FASTA files directly to disk.
-
-    Notes
-    -----
-    Creates separate files for left (L) and right (R) overhang reads for each contig.
-    Filename format: {prefix}_{contig_name}_{L|R}_overhangs.fna
-    """
-    # Note: This method opens and closes the output fasta files for EVERY read processed.
-    # Probably inefficient but avoids reading everything into memory
-    if outdir:
-        if not os.path.isdir(outdir):
-            os.makedirs(outdir)
-    else:
-        outdir = os.getcwd()
-    # Output file tracker
-    outpaths = []
-    # Counter
-    readCount = 0
-    # For each aligned read
-    for read in alignments:
-        readCount += 1
-        # Log update every 10K reads
-        if not readCount % 10000:
-            logging.info('Alignments processed: %s' % str(readCount))
-        # Check if alignment is at right end overhang
-        if read[6] == 'R':
-            # i.e [(alnStart,alnEnd,rightClipLen,readSeq,readName,contigName,'R')]
-            if prefix:
-                base = '_'.join([prefix, str(read[5])])
-            else:
-                base = str(read[5])
-            # Set output file path
-            outfileR = os.path.join(outdir, '_'.join([base, 'R']) + '.fasta')
-            # Check if need to create new outfile or append to existing file.
-            if outfileR not in outpaths:
-                logging.info('Creating new outfile: %s' % str(outfileR))
-                outpaths.append(outfileR)
-                # Output reads aligned to right end of contig
-                with open(outfileR, 'w') as fileR:
-                    # Convert overhanging segment of read to lowercase
-                    masked = read[3][: -read[2]] + read[3][-read[2] :].lower()
-                    # Write masked read to fasta
-                    writefasta(fileR, str(read[4]), masked)
-            else:
-                # If file already exists
-                # Output reads aligned to right end of contig
-                with open(outfileR, 'a') as fileR:
-                    # Convert overhanging segment of read to lowercase
-                    masked = read[3][: -read[2]] + read[3][-read[2] :].lower()
-                    # Write masked read to fasta
-                    writefasta(fileR, str(read[4]), masked)
-        # Check if alignment is a left end overhang
-        elif read[6] == 'L':
-            # i.e [(alnStart,alnEnd,leftClipLen,readSeq,readname,contigname,'L')]
-            if prefix:
-                base = '_'.join([prefix, str(read[5])])
-            else:
-                base = str(read[5])
-            # Set output file path
-            outfileL = os.path.join(outdir, '_'.join([base, 'L']) + '.fasta')
-            # Check if need to create new outfile or append to existing file.
-            if outfileL not in outpaths:
-                logging.info('Creating new outfile: %s' % str(outfileL))
-                outpaths.append(outfileL)
-                # Output reads aligned to left end of contig
-                with open(outfileL, 'w') as fileL:
-                    # Convert overhanging segment of read to lowercase
-                    masked = read[3][: read[2]].lower() + read[3][read[2] :]
-                    # Write masked read to fasta
-                    writefasta(fileL, str(read[4]), masked)
-            else:
-                # If file already exists
-                # Output reads aligned to left end of contig
-                with open(outfileL, 'a') as fileL:
-                    # Convert overhanging segment of read to lowercase
-                    masked = read[3][: read[2]].lower() + read[3][read[2] :]
-                    # Write masked read to fasta
-                    writefasta(fileL, str(read[4]), masked)
-
-    logging.info('Total alignments processed: %s' % str(readCount))
-
-
 def SAMinfo():
     """
     Print samfile spec.
@@ -580,3 +388,403 @@ def CIGARinfo():
     NM  NM tag  10
     """
     )
+
+
+class EnhancedStreamingSamFilter:
+    """
+    Enhanced streaming SAM filter with additional validation and statistics.
+
+    Improvements over original StreamingSamFilter:
+    - Better error handling and validation
+    - Statistics tracking
+    - Quality and anchor filtering
+    - Motif analysis integration
+
+    Parameters
+    ----------
+    samfile : file-like
+        SAM file handle or iterator.
+    contigs : Dict[str, int]
+        Dictionary of contig names to lengths.
+    max_break : int, optional
+        Maximum gap from contig end to allow. Default is 50.
+    min_clip : int, optional
+        Minimum clip length required. Default is 1.
+    min_anchor : int, optional
+        Minimum anchored alignment length required. Default is 500.
+    min_mapq : int, optional
+        Minimum mapping quality required. Default is 0.
+    motif_patterns : Dict[str, str], optional
+        Compiled motif regex patterns. Default is None.
+    stats : ExtractionStats, optional
+        Statistics tracker. Default is None.
+    """
+
+    def __init__(
+        self,
+        samfile,
+        contigs: Dict[str, int],
+        max_break: int = 50,
+        min_clip: int = 1,
+        min_anchor: int = 500,
+        min_mapq: int = 0,
+        motif_patterns: Optional[Dict[str, str]] = None,
+        stats: Optional['ExtractionStats'] = None,
+    ):
+        """
+        Initialize enhanced streaming filter.
+
+        Parameters
+        ----------
+        samfile : file-like
+            SAM file handle or iterator
+        contigs : Dict[str, int]
+            Dictionary of contig names to lengths
+        max_break : int
+            Maximum gap from contig end to allow
+        min_clip : int
+            Minimum clip length required
+        min_anchor : int
+            Minimum anchored alignment length required
+        min_mapq : int
+            Minimum mapping quality required
+        motif_patterns : Dict[str, str], optional
+            Compiled motif regex patterns
+        stats : ExtractionStats, optional
+            Statistics tracker
+        """
+        self.samfile = samfile
+        self.contigs = contigs
+        self.max_break = max_break
+        self.min_clip = min_clip
+        self.min_anchor = min_anchor
+        self.min_mapq = min_mapq
+        self.motif_patterns = motif_patterns or {}
+        self.stats = stats or None
+
+        # SAM field indices
+        self.SAM_QNAME = 0
+        self.SAM_FLAG = 1
+        self.SAM_RNAME = 2
+        self.SAM_POS = 3
+        self.SAM_MAPQ = 4
+        self.SAM_CIGAR = 5
+        self.SAM_SEQ = 9
+
+    def _split_cigar(self, cigar_string: str) -> list:
+        """
+        Split CIGAR string into list of (length, operation) tuples.
+
+        Parameters
+        ----------
+        cigar_string : str
+            CIGAR string from SAM alignment.
+
+        Returns
+        -------
+        list
+            List of (length, operation) tuples.
+        """
+        cigar_list = []
+        for match in re.findall(r'[0-9]*[A-Z=]', cigar_string):
+            length = int(re.findall(r'[0-9]*', match)[0])
+            operation = re.findall(r'[A-Z=]', match)[0]
+            cigar_list.append((length, operation))
+        return cigar_list
+
+    def _check_clips(self, cigar_string: str) -> Tuple[Optional[int], Optional[int]]:
+        """
+        Get lengths of soft-clipped blocks from either end of alignment.
+
+        Parameters
+        ----------
+        cigar_string : str
+            CIGAR string from SAM alignment.
+
+        Returns
+        -------
+        Tuple[Optional[int], Optional[int]]
+            Left and right clip lengths (None if no clipping).
+        """
+        left_clip_len = None
+        right_clip_len = None
+        cigar_list = self._split_cigar(cigar_string)
+
+        # Check if first segment is soft-clipped
+        if cigar_list and cigar_list[0][1] == 'S':
+            left_clip_len = cigar_list[0][0]
+
+        # Check if last segment is soft-clipped
+        if cigar_list and cigar_list[-1][1] == 'S':
+            right_clip_len = cigar_list[-1][0]
+
+        return (left_clip_len, right_clip_len)
+
+    def _calculate_alignment_length(self, cigar_string: str) -> int:
+        """
+        Calculate alignment length on reference sequence.
+
+        Parameters
+        ----------
+        cigar_string : str
+            CIGAR string from SAM alignment.
+
+        Returns
+        -------
+        int
+            Total alignment length on reference sequence.
+        """
+        aln_len = 0
+        cigar_list = self._split_cigar(cigar_string)
+        for length, operation in cigar_list:
+            if operation in {'D', 'M', 'N', 'X', '='}:
+                aln_len += length
+        return aln_len
+
+    def _count_motifs_in_sequence(self, sequence: str) -> Dict[str, int]:
+        """
+        Count motif occurrences in sequence.
+
+        Parameters
+        ----------
+        sequence : str
+            DNA sequence to search for motifs.
+
+        Returns
+        -------
+        Dict[str, int]
+            Dictionary mapping motif names to occurrence counts.
+        """
+        motif_counts = {}
+        for motif_name, pattern in self.motif_patterns.items():
+            matches = re.findall(pattern, sequence)
+            motif_counts[motif_name] = len(matches)
+        return motif_counts
+
+    def __iter__(self):
+        """
+        Iterate through filtered SAM alignments.
+
+        Yields
+        ------
+        dict
+            Dictionary containing alignment information with keys:
+            - aln_start: int, alignment start position
+            - aln_end: int, alignment end position
+            - clip_length: int, soft-clip length
+            - sequence: str, read sequence
+            - read_name: str, read identifier
+            - contig_name: str, reference contig name
+            - end: str, overhang direction ('L' or 'R')
+            - mapq: int, mapping quality score
+            - motif_counts: dict, motif occurrence counts (if patterns provided)
+            - overhang_seq: str, overhanging sequence portion
+        """
+        for line in self.samfile:
+            # Skip header rows
+            if line.startswith('@'):
+                continue
+
+            try:
+                samline = line.strip().split('\t')
+
+                # Basic validation
+                if len(samline) < 11:
+                    logging.warning(f'Malformed SAM line: {line.strip()}')
+                    continue
+
+                # Check for soft clipping (and no hard clipping)
+                cigar = samline[self.SAM_CIGAR]
+                if 'S' not in cigar or 'H' in cigar:
+                    continue
+
+                # Quality filtering
+                try:
+                    mapq = int(samline[self.SAM_MAPQ])
+                    if mapq < self.min_mapq:
+                        if self.stats:
+                            self.stats.record_filter('quality')
+                        continue
+                except (ValueError, IndexError):
+                    logging.warning(f'Invalid MAPQ in line: {line.strip()}')
+                    continue
+
+                # Anchor length validation
+                if not validate_min_anchor(cigar, self.min_anchor):
+                    if self.stats:
+                        self.stats.record_filter('anchor')
+                    continue
+
+                # Get clip lengths and alignment info
+                left_clip_len, right_clip_len = self._check_clips(cigar)
+                aln_len = self._calculate_alignment_length(cigar)
+
+                contig_name = samline[self.SAM_RNAME]
+                if contig_name not in self.contigs:
+                    logging.warning(f'Unknown contig in SAM: {contig_name}')
+                    continue
+
+                contig_len = self.contigs[contig_name]
+                pos = int(samline[self.SAM_POS])
+                sequence = samline[self.SAM_SEQ]
+                read_name = samline[self.SAM_QNAME]
+
+                # Count motifs if patterns provided
+                motif_counts = None
+                if self.motif_patterns:
+                    motif_counts = self._count_motifs_in_sequence(sequence)
+
+                # Check for left overhang
+                if left_clip_len and left_clip_len >= self.min_clip:
+                    if pos <= self.max_break and left_clip_len >= (pos + self.min_clip):
+                        aln_end = pos + aln_len
+                        yield {
+                            'aln_start': pos,
+                            'aln_end': aln_end,
+                            'clip_length': left_clip_len,
+                            'sequence': sequence,
+                            'read_name': read_name,
+                            'contig_name': contig_name,
+                            'end': 'L',
+                            'mapq': mapq,
+                            'motif_counts': motif_counts,
+                            'overhang_seq': sequence[:left_clip_len],
+                        }
+
+                # Check for right overhang
+                if right_clip_len and right_clip_len >= self.min_clip:
+                    aln_end = pos + aln_len
+                    if (
+                        contig_len - aln_end
+                    ) <= self.max_break and aln_end + right_clip_len >= contig_len + 1:
+                        yield {
+                            'aln_start': pos,
+                            'aln_end': aln_end,
+                            'clip_length': right_clip_len,
+                            'sequence': sequence,
+                            'read_name': read_name,
+                            'contig_name': contig_name,
+                            'end': 'R',
+                            'mapq': mapq,
+                            'motif_counts': motif_counts,
+                            'overhang_seq': sequence[-right_clip_len:],
+                        }
+
+            except (IndexError, ValueError) as e:
+                logging.warning(f'Error processing SAM line: {e}')
+                continue
+
+
+def enhanced_streaming_split_by_contig(
+    alignments: Iterator,
+    output_dir: Optional[str] = None,
+    prefix: Optional[str] = None,
+    output_format: str = 'fasta',
+    buffer_size: int = 1000,
+    include_stats: bool = False,
+    mask_overhangs: bool = True,
+) -> 'ExtractionStats':
+    """
+    Efficiently write overhang reads using file handles and buffering.
+
+    This is a complete rewrite of StreamingSplitByContig with major improvements:
+    - Uses file handle management instead of opening/closing files repeatedly
+    - BioPython integration for reliable FASTA/FASTQ writing
+    - Buffered writes for better I/O performance
+    - Rich sequence headers with optional statistics
+    - Motif analysis integration
+    - Comprehensive statistics tracking
+
+    Parameters
+    ----------
+    alignments : Iterator
+        Iterator of alignment dictionaries from EnhancedStreamingSamFilter.
+    output_dir : str, optional
+        Output directory for files.
+    prefix : str, optional
+        Prefix for output filenames.
+    output_format : str
+        Output format ('fasta' or 'fastq').
+    buffer_size : int
+        Number of sequences to buffer before writing.
+    include_stats : bool
+        Whether to include statistics in sequence headers.
+    mask_overhangs : bool
+        Whether to convert overhang sequences to lowercase.
+
+    Returns
+    -------
+    ExtractionStats
+        Statistics about the extraction process.
+    """
+    from .extract_io import ExtractionStats, MultiFileSequenceWriter
+
+    stats = ExtractionStats()
+
+    # Initialize multi-file writer
+    with MultiFileSequenceWriter(
+        base_dir=output_dir,
+        prefix=prefix,
+        output_format=output_format,
+        buffer_size=buffer_size,
+    ) as writer:
+        read_count = 0
+
+        for alignment in alignments:
+            read_count += 1
+
+            # Log progress
+            if read_count % 10000 == 0:
+                logging.info(f'Alignments processed: {read_count}')
+
+            contig_name = alignment['contig_name']
+            end = alignment['end']
+            sequence = alignment['sequence']
+            clip_length = alignment['clip_length']
+
+            # Apply masking if requested
+            if mask_overhangs:
+                if end == 'L':
+                    # Mask left overhang (lowercase)
+                    masked_seq = sequence[:clip_length].lower() + sequence[clip_length:]
+                else:  # end == 'R'
+                    # Mask right overhang (lowercase)
+                    masked_seq = (
+                        sequence[:-clip_length] + sequence[-clip_length:].lower()
+                    )
+            else:
+                masked_seq = sequence
+
+            # Build sequence description
+            description = f'overhang_{end}_{contig_name}'
+
+            # Prepare statistics for header
+            seq_stats = None
+            if include_stats:
+                seq_stats = {
+                    'mapq': alignment['mapq'],
+                    'clip_length': clip_length,
+                    'overhang_length': len(alignment['overhang_seq']),
+                }
+                if alignment.get('motif_counts'):
+                    seq_stats['motif_counts'] = alignment['motif_counts']
+
+            # Write sequence
+            writer.write_sequence(
+                contig_name=contig_name,
+                end=end,
+                seq_id=alignment['read_name'],
+                sequence=masked_seq,
+                description=description,
+                stats=seq_stats,
+            )
+
+            # Update statistics
+            stats.record_alignment(
+                contig_name=contig_name,
+                is_left=(end == 'L'),
+                motif_counts=alignment.get('motif_counts'),
+            )
+
+    logging.info(f'Total alignments processed: {read_count}')
+    return stats
