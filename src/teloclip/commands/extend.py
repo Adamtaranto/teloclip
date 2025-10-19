@@ -283,7 +283,9 @@ def generate_extension_report(
     return '\n'.join(report_lines)
 
 
-@click.command()
+@click.command(
+    help='Extend contigs using overhang analysis from soft-clipped alignments.'
+)
 @click.argument('sam_file', type=click.Path(exists=False, path_type=Path))
 @click.argument('reference_fasta', type=click.Path(exists=True, path_type=Path))
 @click.option(

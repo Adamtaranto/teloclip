@@ -1,5 +1,5 @@
 """
-Enhanced extract sub-command for teloclip CLI.
+Extract sub-command for teloclip CLI.
 
 This refactored version provides significant performance improvements and new features:
 - Memory-efficient I/O with BioPython SeqIO integration
@@ -23,10 +23,12 @@ from ..samops import (
     EnhancedStreamingSamFilter,
     enhanced_streaming_split_by_contig,
 )
-from ..seqops import read_fai
+from ..seqops import read_fai, revComp
 
 
-@click.command('extract')
+@click.command(
+    'extract', help='Extract overhanging reads for each end of each reference contig.'
+)
 @click.argument('samfile', type=click.File('r'), default=sys.stdin)
 @click.option(
     '--ref-idx',
@@ -77,14 +79,14 @@ from ..seqops import read_fai
     help='Include mapping quality, clip length, and motif counts in FASTA headers.',
 )
 @click.option(
-    '--motifs',
-    multiple=True,
-    help='Motif sequences to count in overhang regions (can be used multiple times).',
+    '--count-motifs',
+    type=str,
+    help='Comma-delimited motif sequences to count in overhang regions (e.g., "TTAGGG,CCCTAA").',
 )
 @click.option(
-    '--fuzzy-motifs',
+    '--fuzzy-count',
     is_flag=True,
-    help='Use fuzzy motif matching allowing ±1 character variation.',
+    help='Use fuzzy motif matching allowing ±1 character variation when counting motifs.',
 )
 @click.option(
     '--buffer-size',
@@ -127,8 +129,8 @@ def extract_cmd(
     min_anchor,
     min_mapq,
     include_stats,
-    motifs,
-    fuzzy_motifs,
+    count_motifs,
+    fuzzy_count,
     buffer_size,
     output_format,
     stats_report,
@@ -166,9 +168,9 @@ def extract_cmd(
         Minimum mapping quality required.
     include_stats : bool
         Include statistics in FASTA headers.
-    motifs : tuple
-        Motif sequences to analyze.
-    fuzzy_motifs : bool
+    count_motifs : str
+        Comma-delimited motif sequences to count.
+    fuzzy_count : bool
         Use fuzzy motif matching.
     buffer_size : int
         I/O buffer size for writing.
@@ -184,25 +186,21 @@ def extract_cmd(
     Examples
     --------
 
-    \\b
     # Basic extraction to current directory
     teloclip extract --ref-idx ref.fa.fai --extract-reads input.sam
 
-    \\b
     # Extract with motif analysis and statistics
     teloclip extract --ref-idx ref.fa.fai --extract-reads --include-stats \\
-        --motifs TTAGGG --motifs CCCTAA --stats-report stats.txt input.sam
+        --count-motifs TTAGGG,CCCTAA --stats-report stats.txt input.sam
 
-    \\b
     # Extract with quality filtering and custom output
     teloclip extract --ref-idx ref.fa.fai --extract-reads \\
         --extract-dir overhangs/ --prefix sample1 --min-mapq 20 \\
         --min-anchor 1000 --output-format fastq input.sam
 
-    \\b
     # Read from stdin with fuzzy motif matching
     samtools view -h input.bam | teloclip extract --ref-idx ref.fa.fai \\
-        --extract-reads --motifs TTAGGG --fuzzy-motifs
+        --extract-reads --count-motifs TTAGGG --fuzzy-count
     """
     # Initialize logging
     init_logging(level=getattr(logging, log_level.upper()))
@@ -216,17 +214,70 @@ def extract_cmd(
 
         # Prepare motif patterns if specified
         motif_patterns: Dict[str, str] = {}
-        if motifs:
-            logger.info(f'Preparing motif patterns: {", ".join(motifs)}')
-            for motif in motifs:
-                if fuzzy_motifs:
-                    pattern = make_fuzzy_motif_regex(motif)
-                    pattern_name = f'{motif} (fuzzy)'
-                else:
-                    pattern = make_motif_regex(motif)
-                    pattern_name = motif
-                motif_patterns[pattern_name] = pattern
-            logger.info(f'Created {len(motif_patterns)} motif patterns for analysis')
+        if count_motifs:
+            # Parse comma-delimited motifs
+            raw_motifs = [
+                motif.strip().upper()
+                for motif in count_motifs.split(',')
+                if motif.strip()
+            ]
+            logger.info(f'Processing motif list: {", ".join(raw_motifs)}')
+
+            # Validate motifs - must contain only A, T, G, C
+            valid_bases = {'A', 'T', 'G', 'C'}
+            validated_motifs = []
+
+            for motif in raw_motifs:
+                if not motif:  # Skip empty motifs
+                    continue
+                if not all(base in valid_bases for base in motif):
+                    invalid_bases = set(motif) - valid_bases
+                    logger.warning(
+                        f'Skipping invalid motif "{motif}": contains invalid bases {invalid_bases}'
+                    )
+                    continue
+                validated_motifs.append(motif)
+
+            if not validated_motifs:
+                logger.warning('No valid motifs found after validation')
+            else:
+                logger.info(
+                    f'Validated {len(validated_motifs)} motifs: {", ".join(validated_motifs)}'
+                )
+
+                # Add reverse complements and create unique set
+                all_motifs = set()
+                for motif in validated_motifs:
+                    all_motifs.add(motif)
+                    rev_comp = revComp(motif)
+                    all_motifs.add(rev_comp)
+                    logger.debug(f'Motif: {motif} -> Reverse complement: {rev_comp}')
+
+                # Convert to sorted list for consistent ordering
+                unique_motifs = sorted(all_motifs)
+                logger.info(
+                    f'Final motif set (including reverse complements): {", ".join(unique_motifs)}'
+                )
+
+                # Create regex patterns for each unique motif
+                for motif in unique_motifs:
+                    if fuzzy_count:
+                        pattern = make_fuzzy_motif_regex(motif)
+                        pattern_name = f'{motif} (fuzzy)'
+                        logger.debug(f'Created fuzzy pattern for {motif}: {pattern}')
+                    else:
+                        pattern = make_motif_regex(motif)
+                        pattern_name = motif
+                        logger.debug(f'Created exact pattern for {motif}: {pattern}')
+                    motif_patterns[pattern_name] = pattern
+
+                logger.info(
+                    f'Created {len(motif_patterns)} motif patterns for analysis'
+                )
+                if fuzzy_count:
+                    logger.info(
+                        'Using fuzzy matching (±1 character variation) for motif counting'
+                    )
 
         # Initialize statistics tracker
         stats = ExtractionStats()

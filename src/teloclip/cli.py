@@ -10,7 +10,9 @@ from teloclip._version import __version__
 from teloclip.logs import init_logging
 
 
-@click.group()
+@click.group(
+    help='A tool for the recovery of unassembled telomeres from soft-clipped read alignments.'
+)
 @click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
 @click.option('--quiet', '-q', is_flag=True, help='Suppress all but error messages')
 @click.option(

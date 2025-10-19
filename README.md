@@ -236,8 +236,6 @@ Usage: teloclip [OPTIONS] COMMAND [ARGS]...
   A tool for the recovery of unassembled telomeres from soft-clipped read
   alignments.
 
-  Use sub-commands to filter alignments, extract reads, or extend contigs.
-
 Options:
   -v, --verbose                   Enable verbose logging
   -q, --quiet                     Suppress all but error messages
@@ -261,21 +259,6 @@ Usage: teloclip filter [OPTIONS] [SAMFILE]
 
   Filter SAM file for clipped alignments containing unassembled telomeric
   repeats.
-
-  Reads SAM/BAM alignments and outputs only those that are soft-clipped at
-  contig ends, optionally filtering for specific motifs like telomeric
-  repeats.
-
-  Examples:
-
-  # Basic filtering for terminal soft-clipped reads
-  teloclip filter --ref-idx ref.fa.fai input.sam > output.sam
-
-  # Filter for telomeric motifs with fuzzy matching
-  teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG --fuzzy input.sam
-
-  # Read from stdin, write to stdout
-  samtools view -h input.bam | teloclip filter --ref-idx ref.fa.fai
 
 Options:
   --ref-idx PATH             Path to fai index for reference fasta. Index
@@ -312,32 +295,41 @@ Usage: teloclip extract [OPTIONS] [SAMFILE]
 
   Extract overhanging reads for each end of each reference contig.
 
-  Reads SAM/BAM alignments and extracts soft-clipped sequences that extend
-  beyond contig ends, writing them to separate FASTA files for each contig
-  end.
-
-  Examples:
-
-  #Extract reads to current directory
-  teloclip extract --ref-idx ref.fa.fai --extract-reads input.sam
-
-  #Extract with custom directory and prefix
-  teloclip extract --ref-idx ref.fa.fai --extract-reads \
-  --extract-dir overhangs/ --prefix sample1 input.sam
-
-  # Read from stdin
-  samtools view -h input.bam | teloclip extract --ref-idx ref.fa.fai --extract-reads
-
 Options:
-  --ref-idx PATH       Path to fai index for reference fasta. Index fasta
-                       using `samtools faidx FASTA`  [required]
-  --prefix TEXT        Use this prefix for output files. Default: None.
-  --extract-reads      If set, write overhang reads to fasta by contig.
-  --extract-dir PATH   Write extracted reads to this directory. Default: cwd.
-  --min-clip INTEGER   Require clip to extend past ref contig end by at least
-                       N bases.
-  --max-break INTEGER  Tolerate max N unaligned bases before contig end.
-  --help               Show this message and exit.
+  --ref-idx PATH                  Path to fai index for reference fasta. Index
+                                  fasta using `samtools faidx FASTA`
+                                  [required]
+  --prefix TEXT                   Use this prefix for output files. Default:
+                                  None.
+  --extract-reads                 If set, write overhang reads to fasta by
+                                  contig.
+  --extract-dir PATH              Write extracted reads to this directory.
+                                  Default: cwd.
+  --min-clip INTEGER              Require clip to extend past ref contig end
+                                  by at least N bases.
+  --max-break INTEGER             Tolerate max N unaligned bases before contig
+                                  end.
+  --min-anchor INTEGER            Minimum anchored alignment length required
+                                  (default: 500).
+  --min-mapq INTEGER              Minimum mapping quality required (default:
+                                  0).
+  --include-stats                 Include mapping quality, clip length, and
+                                  motif counts in FASTA headers.
+  --count-motifs TEXT             Comma-delimited motif sequences to count in
+                                  overhang regions (e.g., "TTAGGG,CCCTAA").
+  --fuzzy-count                   Use fuzzy motif matching allowing ±1
+                                  character variation when counting motifs.
+  --buffer-size INTEGER           Number of sequences to buffer before writing
+                                  (default: 1000).
+  --output-format [fasta|fastq]   Output format for extracted sequences
+                                  (default: fasta).
+  --stats-report PATH             Write extraction statistics to file. Use "-"
+                                  for stdout.
+  --no-mask-overhangs             Do not convert overhang sequences to
+                                  lowercase.
+  --log-level [DEBUG|INFO|WARNING|ERROR]
+                                  Logging level (default: INFO).
+  --help                          Show this message and exit.
 ```
 
 ### Extend sub-command options
@@ -348,13 +340,6 @@ Run `teloclip extend --help` to view the extract command options:
 Usage: teloclip extend [OPTIONS] SAM_FILE REFERENCE_FASTA
 
   Extend contigs using overhang analysis from soft-clipped alignments.
-
-  This command analyzes soft-clipped alignments to identify overhanging
-  sequences that extend beyond contig ends, then automatically extends contigs
-  using the longest suitable overhangs.
-
-  SAM_FILE can be a file path or '-' to read from stdin. REFERENCE_FASTA
-  should be the original reference used for alignment.
 
 Options:
   --ref-idx PATH             Path to fai index for reference fasta  [required]
@@ -374,7 +359,8 @@ Options:
                              be used multiple times)
   --fuzzy-motifs             Use fuzzy motif matching allowing ±1 character
                              variation
-  --help                     Show this message and exit.  ```
+  --help                     Show this message and exit.
+```
 
 ## Citing Teloclip
 

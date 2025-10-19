@@ -13,7 +13,10 @@ from teloclip.samops import processSamlines
 from teloclip.seqops import addRevComplement, read_fai
 
 
-@click.command('filter')
+@click.command(
+    'filter',
+    help='Filter SAM file for clipped alignments containing unassembled telomeric repeats.',
+)
 @click.argument('samfile', type=click.File('r'), default=sys.stdin)
 @click.option(
     '--ref-idx',

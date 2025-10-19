@@ -629,15 +629,20 @@ class EnhancedStreamingSamFilter:
                 sequence = samline[self.SAM_SEQ]
                 read_name = samline[self.SAM_QNAME]
 
-                # Count motifs if patterns provided
-                motif_counts = None
-                if self.motif_patterns:
-                    motif_counts = self._count_motifs_in_sequence(sequence)
+                # Motifs will be counted per overhang region (done below for each clip)
 
                 # Check for left overhang
                 if left_clip_len and left_clip_len >= self.min_clip:
                     if pos <= self.max_break and left_clip_len >= (pos + self.min_clip):
                         aln_end = pos + aln_len
+                        # Extract left overhang sequence (clipped region) and convert to uppercase for motif counting
+                        overhang_seq = sequence[:left_clip_len].upper()
+
+                        # Count motifs in the clipped overhang region only
+                        motif_counts = None
+                        if self.motif_patterns:
+                            motif_counts = self._count_motifs_in_sequence(overhang_seq)
+
                         yield {
                             'aln_start': pos,
                             'aln_end': aln_end,
@@ -648,7 +653,7 @@ class EnhancedStreamingSamFilter:
                             'end': 'L',
                             'mapq': mapq,
                             'motif_counts': motif_counts,
-                            'overhang_seq': sequence[:left_clip_len],
+                            'overhang_seq': overhang_seq,
                         }
 
                 # Check for right overhang
@@ -657,6 +662,14 @@ class EnhancedStreamingSamFilter:
                     if (
                         contig_len - aln_end
                     ) <= self.max_break and aln_end + right_clip_len >= contig_len + 1:
+                        # Extract right overhang sequence (clipped region) and convert to uppercase for motif counting
+                        overhang_seq = sequence[-right_clip_len:].upper()
+
+                        # Count motifs in the clipped overhang region only
+                        motif_counts = None
+                        if self.motif_patterns:
+                            motif_counts = self._count_motifs_in_sequence(overhang_seq)
+
                         yield {
                             'aln_start': pos,
                             'aln_end': aln_end,
@@ -667,7 +680,7 @@ class EnhancedStreamingSamFilter:
                             'end': 'R',
                             'mapq': mapq,
                             'motif_counts': motif_counts,
-                            'overhang_seq': sequence[-right_clip_len:],
+                            'overhang_seq': overhang_seq,
                         }
 
             except (IndexError, ValueError) as e:
