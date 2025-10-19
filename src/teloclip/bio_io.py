@@ -6,8 +6,8 @@ load entire genomes into memory, making it suitable for large genome processing.
 """
 
 from pathlib import Path
-from typing import Dict, Iterator, Tuple, Union
 import sys
+from typing import Dict, Iterator, Tuple, Union
 
 from Bio import SeqIO
 from Bio.Seq import Seq

@@ -16,14 +16,14 @@ from typing import Dict
 
 import click
 
+from ..extract_io import ExtractionStats
 from ..logs import init_logging
-from ..seqops import read_fai
-from ..motifs import make_motif_regex, make_fuzzy_motif_regex
+from ..motifs import make_fuzzy_motif_regex, make_motif_regex
 from ..samops import (
     EnhancedStreamingSamFilter,
     enhanced_streaming_split_by_contig,
 )
-from ..extract_io import ExtractionStats
+from ..seqops import read_fai
 
 
 @click.command('extract')

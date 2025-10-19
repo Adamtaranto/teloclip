@@ -5,7 +5,7 @@ SAM file operations for Teloclip.
 import logging
 import re
 import sys
-from typing import Dict, Iterator, Optional, Tuple, TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, Iterator, Optional, Tuple
 
 from teloclip.motifs import check_sequence_for_patterns
 from teloclip.seqops import isMotifInClip

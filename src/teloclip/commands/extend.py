@@ -6,8 +6,8 @@ draft contigs using overhang analysis from soft-clipped alignments.
 """
 
 import logging
-import re
 from pathlib import Path
+import re
 import sys
 from typing import Dict, Iterator, List
 
@@ -21,16 +21,16 @@ from ..analysis import (
     identify_outlier_contigs,
     select_best_overhang,
 )
-from ..motifs import (
-    make_fuzzy_motif_regex,
-    make_motif_regex,
+from ..bio_io import (
+    load_fasta_sequences,
+    validate_fasta_against_fai,
+    write_fasta_sequences,
 )
 from ..extension import apply_contig_extension
 from ..logs import init_logging
-from ..bio_io import (
-    load_fasta_sequences,
-    write_fasta_sequences,
-    validate_fasta_against_fai,
+from ..motifs import (
+    make_fuzzy_motif_regex,
+    make_motif_regex,
 )
 from ..seqops import read_fai
 
