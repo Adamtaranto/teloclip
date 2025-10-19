@@ -6,6 +6,7 @@ dependencies:
   - bioconda::winnowmap
   - minimap2
   - pip
+  - pysam
   - python >=3.12
   - samtools
   - pip:

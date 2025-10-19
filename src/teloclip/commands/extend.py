@@ -3,36 +3,32 @@ Extend sub-command implementation.
 
 This module implements the 'teloclip extend' command for automatically extending
 draft contigs using overhang analysis from soft-clipped alignments.
+
+This version is optimized for large genomes using streaming I/O and indexed access
+to avoid loading entire genomes into memory.
 """
 
 import logging
 from pathlib import Path
-import re
 import sys
-from typing import Dict, Iterator, List
+from typing import Dict, List
 
 import click
 
-from ..analysis import (
-    ContigStats,
-    calculate_overhang_statistics,
-    collect_overhang_stats,
-    detect_homopolymer_runs,
-    identify_outlier_contigs,
-    select_best_overhang,
-)
-from ..bio_io import (
-    load_fasta_sequences,
-    validate_fasta_against_fai,
-    write_fasta_sequences,
-)
-from ..extension import apply_contig_extension
+from ..analysis import ContigStats, calculate_overhang_statistics
 from ..logs import init_logging
-from ..motifs import (
-    make_fuzzy_motif_regex,
-    make_motif_regex,
-)
+from ..motifs import make_fuzzy_motif_regex, make_motif_regex
 from ..seqops import read_fai
+from ..streaming_analysis import (
+    process_single_contig_extension,
+    stream_contigs_for_extension,
+)
+from ..streaming_io import (
+    BufferedContigWriter,
+    StreamingGenomeProcessor,
+    copy_unmodified_contigs,
+    validate_indexed_files,
+)
 
 
 def setup_logger(level):
@@ -120,34 +116,6 @@ def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
                     raise click.ClickException(
                         f'Cannot create output directory {output_dir}: {e}'
                     ) from e
-
-
-def read_sam_lines(sam_file: Path) -> Iterator[str]:
-    """
-    Read SAM file lines, handling both files and stdin input.
-
-    Parameters
-    ----------
-    sam_file : Path
-        Path to SAM file, or '-' to read from stdin.
-
-    Returns
-    -------
-    Iterator[str]
-        Generator yielding lines from the SAM file.
-
-    Yields
-    ------
-    str
-        Individual lines from the SAM file.
-    """
-    if str(sam_file) == '-':
-        for line in sys.stdin:
-            yield line
-    else:
-        with open(sam_file, 'r') as f:
-            for line in f:
-                yield line
 
 
 def generate_extension_report(
@@ -286,7 +254,7 @@ def generate_extension_report(
 @click.command(
     help='Extend contigs using overhang analysis from soft-clipped alignments.'
 )
-@click.argument('sam_file', type=click.Path(exists=False, path_type=Path))
+@click.argument('bam_file', type=click.Path(exists=True, path_type=Path))
 @click.argument('reference_fasta', type=click.Path(exists=True, path_type=Path))
 @click.option(
     '--ref-idx',
@@ -330,6 +298,18 @@ def generate_extension_report(
     help='Minimum overhang length for extension (default: 1)',
 )
 @click.option(
+    '--max-break',
+    type=int,
+    default=10,
+    help='Maximum gap allowed between alignment and contig end (default: 10)',
+)
+@click.option(
+    '--min-anchor',
+    type=int,
+    default=500,
+    help='Minimum anchor length required for alignment (default: 500)',
+)
+@click.option(
     '--dry-run', is_flag=True, help='Report extensions without modifying sequences'
 )
 @click.option(
@@ -345,7 +325,7 @@ def generate_extension_report(
 @click.pass_context
 def extend(
     ctx,
-    sam_file,
+    bam_file,
     reference_fasta,
     ref_idx,
     output_fasta,
@@ -355,6 +335,8 @@ def extend(
     min_overhangs,
     max_homopolymer,
     min_extension,
+    max_break,
+    min_anchor,
     dry_run,
     motifs,
     fuzzy_motifs,
@@ -366,17 +348,17 @@ def extend(
     that extend beyond contig ends, then automatically extends contigs using the
     longest suitable overhangs.
 
-    SAM_FILE can be a file path or '-' to read from stdin.
-    REFERENCE_FASTA should be the original reference used for alignment.
+    This version uses streaming I/O and indexed access for memory-efficient
+    processing of large genomes.
 
     Parameters
     ----------
     ctx : click.Context
         Click context object.
-    sam_file : Path
-        Path to SAM file or '-' for stdin.
+    bam_file : Path
+        Path to indexed BAM file (.bai index must exist).
     reference_fasta : Path
-        Path to reference FASTA file used for alignment.
+        Path to indexed reference FASTA file (.fai index must exist).
     ref_idx : Path
         Path to reference FASTA index (.fai) file.
     output_fasta : Path
@@ -393,18 +375,27 @@ def extend(
         Maximum homopolymer length to allow in extensions.
     min_extension : int
         Minimum extension length required.
+    max_break : int
+        Maximum gap allowed between alignment and contig end.
+    min_anchor : int
+        Minimum anchor length required for alignment.
     dry_run : bool
         If True, analyze but don't modify contigs.
-    motifs : str
-        Comma-separated motifs to search for in overhangs.
+    motifs : tuple
+        Motif sequences to search for in overhangs.
     fuzzy_motifs : bool
         Use fuzzy motif matching allowing ±1 character variation.
     """
+    import pysam
+
     logger = setup_logger(ctx.obj.get('log_level', 'INFO'))
 
     try:
-        # Validate input files
-        validate_input_files(sam_file, reference_fasta, ref_idx)
+        # Validate indexed files
+        logger.info('Validating indexed input files...')
+        is_valid, error_msg = validate_indexed_files(reference_fasta, bam_file)
+        if not is_valid:
+            raise click.ClickException(error_msg)
 
         # Validate output directories
         if output_fasta or stats_report:
@@ -413,42 +404,6 @@ def extend(
         logger.info('Reading reference genome index...')
         contig_dict = read_fai(ref_idx)
         logger.info(f'Loaded {len(contig_dict)} contigs from reference')
-
-        logger.info('Reading reference sequences...')
-        reference_seqs = load_fasta_sequences(reference_fasta)
-
-        # Validate FASTA vs FAI consistency
-        logger.debug('Validating FASTA file consistency with index...')
-        missing_from_fasta, missing_from_fai = validate_fasta_against_fai(
-            reference_fasta, contig_dict
-        )
-
-        if missing_from_fasta:
-            logger.warning(
-                f'Sequences in FAI index but missing from FASTA: {", ".join(sorted(missing_from_fasta))}'
-            )
-            logger.warning('These contigs will be skipped during extension analysis')
-
-        if missing_from_fai:
-            logger.warning(
-                f'Sequences in FASTA but missing from FAI index: {", ".join(sorted(missing_from_fai))}'
-            )
-            logger.warning('These contigs will not be analyzed for extension')
-
-        # Filter contig_dict to only include sequences present in FASTA
-        available_contigs = set(reference_seqs.keys())
-        filtered_contig_dict = {
-            name: length
-            for name, length in contig_dict.items()
-            if name in available_contigs
-        }
-
-        if len(filtered_contig_dict) < len(contig_dict):
-            removed_count = len(contig_dict) - len(filtered_contig_dict)
-            logger.info(
-                f'Filtered out {removed_count} contigs not present in FASTA file'
-            )
-            contig_dict = filtered_contig_dict
 
         # Prepare motif patterns if specified
         motif_patterns = {}
@@ -464,170 +419,125 @@ def extend(
                 motif_patterns[pattern_name] = pattern
             logger.info(f'Created {len(motif_patterns)} motif patterns for analysis')
 
-        logger.info('Collecting overhang statistics...')
-        sam_lines = read_sam_lines(sam_file)
-        stats_dict = collect_overhang_stats(sam_lines, contig_dict)
+        # Open indexed files
+        logger.info('Opening indexed BAM and FASTA files...')
+        with StreamingGenomeProcessor(reference_fasta, bam_file) as processor:
+            bam_file_handle = pysam.AlignmentFile(str(bam_file), 'rb')
 
-        # Calculate overall statistics
-        overall_stats = calculate_overhang_statistics(stats_dict)
-        logger.info(
-            f'Collected overhangs from {sum(s.left_count + s.right_count for s in stats_dict.values())} alignments'
-        )
+            # Stream contigs for extension analysis
+            logger.info('Streaming contigs for extension analysis...')
+            extensions_applied = {}
+            excluded_contigs = []
+            warnings = []
+            motif_stats = {}
+            all_stats = {}
 
-        # Identify outliers
-        outliers = identify_outlier_contigs(stats_dict, outlier_threshold)
-        logger.info(
-            f'Identified {len(outliers["left_outliers"])} left outliers and {len(outliers["right_outliers"])} right outliers'
-        )
-
-        # Track extensions and warnings
-        extensions_applied = {}
-        excluded_contigs = []
-        warnings = []
-        motif_stats = {}
-
-        # Process each contig for potential extension
-        total_contigs = len(stats_dict)
-        logger.info(f'Processing {total_contigs} contigs for potential extension...')
-        processed_count = 0
-
-        for contig_name, contig_stats in stats_dict.items():
-            processed_count += 1
-            # Skip if excluding outliers
-            if exclude_outliers and (
-                contig_name in outliers['left_outliers']
-                or contig_name in outliers['right_outliers']
+            # Collect statistics for contigs that meet extension criteria
+            for contig_name, contig_stats in stream_contigs_for_extension(
+                bam_file_handle,
+                contig_dict,
+                min_overhangs=min_overhangs,
+                max_break=max_break,
+                min_clip=1,  # Use default minimum clip
+                min_anchor=min_anchor,
+                exclude_outliers=exclude_outliers,
+                outlier_threshold=outlier_threshold,
             ):
-                excluded_contigs.append(contig_name)
-                logger.debug(f'Skipping outlier contig: {contig_name}')
-                continue
+                all_stats[contig_name] = contig_stats
+                logger.debug(f'Processing contig {contig_name} for extension...')
 
-            # Check each end for extension opportunities
-            for is_left in [True, False]:
-                overhangs = (
-                    contig_stats.left_overhangs
-                    if is_left
-                    else contig_stats.right_overhangs
-                )
-                end_name = 'left' if is_left else 'right'
-
-                # Skip if insufficient overhangs
-                if len(overhangs) < min_overhangs:
-                    logger.debug(
-                        f'Insufficient {end_name} overhangs for {contig_name}: {len(overhangs)} < {min_overhangs}'
+                # Get the original sequence for this contig
+                try:
+                    original_sequence = processor.get_contig_sequence(contig_name)
+                except KeyError:
+                    logger.warning(
+                        f'Contig {contig_name} not found in FASTA file, skipping'
                     )
                     continue
 
-                # Select best overhang
-                best_overhang = select_best_overhang(
-                    overhangs, min_extension, max_homopolymer
+                # Process extension for this contig
+                extension_result = process_single_contig_extension(
+                    contig_name=contig_name,
+                    contig_stats=contig_stats,
+                    original_sequence=original_sequence,
+                    min_extension=min_extension,
+                    max_homopolymer=max_homopolymer,
+                    motif_patterns=motif_patterns,
+                    dry_run=dry_run,
                 )
 
-                if best_overhang is None:
-                    logger.debug(
-                        f'No suitable {end_name} overhang found for {contig_name}'
-                    )
-                    continue
+                if extension_result:
+                    extensions_applied[contig_name] = extension_result.extension_info
+                    warnings.extend(extension_result.warnings)
+                    if extension_result.motif_counts:
+                        motif_stats[contig_name] = extension_result.motif_counts
 
-                # Check for homopolymer runs
-                homo_runs = detect_homopolymer_runs(
-                    best_overhang.sequence, max_homopolymer
-                )
-                if homo_runs:
-                    warning_msg = (
-                        f'Homopolymer run detected in {contig_name} {end_name} extension: '
-                        f'{homo_runs[0][0]}x{homo_runs[0][3]} at position {homo_runs[0][1]}'
-                    )
-                    warnings.append(warning_msg)
-                    logger.warning(warning_msg)
-
-                # Apply extension (only one per contig for now)
-                if contig_name not in extensions_applied:
-                    if not dry_run:
-                        try:
-                            # Extract sequence from tuple (header, seq)
-                            original_seq = reference_seqs[contig_name][1]
-                            extended_seq, ext_info = apply_contig_extension(
-                                original_seq, best_overhang, contig_stats.contig_length
-                            )
-                            # Update sequence in tuple (header, seq)
-                            header = reference_seqs[contig_name][0]
-                            reference_seqs[contig_name] = (header, extended_seq)
-                            extensions_applied[contig_name] = ext_info
-
-                            logger.info(
-                                f'Extended {contig_name} {end_name} end: '
-                                f'+{best_overhang.length}bp from read {best_overhang.read_name}'
-                            )
-
-                            # Count motifs in extended sequence if patterns provided
-                            if motif_patterns:
-                                for pattern_name, pattern_str in motif_patterns.items():
-                                    # Count matches using re.findall
-                                    matches = re.findall(pattern_str, extended_seq)
-                                    motif_count = len(matches)
-                                    if contig_name not in motif_stats:
-                                        motif_stats[contig_name] = {}
-                                    motif_stats[contig_name][pattern_name] = motif_count
-
-                                    if motif_count > 0:
-                                        logger.info(
-                                            f'Found {motif_count} {pattern_name} motifs in extended {contig_name}'
-                                        )
-                        except ValueError as e:
-                            error_msg = f'Extension failed for {contig_name}: {e}'
-                            warnings.append(error_msg)
-                            logger.error(error_msg)
-                    else:
-                        # Dry run mode
-                        ext_info = {
-                            'overhang_length': best_overhang.length,
-                            'read_name': best_overhang.read_name,
-                            'is_left': is_left,
-                            'original_length': contig_stats.contig_length,
-                            'final_length': contig_stats.contig_length
-                            + best_overhang.length,
-                            'trim_length': 0,  # Simplified for dry run
-                        }
-                        extensions_applied[contig_name] = ext_info
-
-                        # Simulate motif counting in dry-run mode if patterns provided
-                        if motif_patterns:
-                            # Get original sequence and simulate extension
-                            original_seq = reference_seqs[contig_name][1]
-                            extended_seq, _ = apply_contig_extension(
-                                original_seq, best_overhang, contig_stats.contig_length
-                            )
-
-                            for pattern_name, pattern_str in motif_patterns.items():
-                                # Count matches using re.findall
-                                matches = re.findall(pattern_str, extended_seq)
-                                motif_count = len(matches)
-                                if contig_name not in motif_stats:
-                                    motif_stats[contig_name] = {}
-                                motif_stats[contig_name][pattern_name] = motif_count
-
-                                if motif_count > 0:
-                                    logger.info(
-                                        f'[DRY RUN] Would find {motif_count} {pattern_name} motifs in extended {contig_name}'
-                                    )
-
+                    # Log successful extension
+                    ext_info = extension_result.extension_info
+                    end_name = 'left' if ext_info['is_left'] else 'right'
+                    if dry_run:
                         logger.info(
                             f'[DRY RUN] Would extend {contig_name} {end_name} end: '
-                            f'+{best_overhang.length}bp from read {best_overhang.read_name}'
+                            f'+{ext_info["overhang_length"]}bp from read {ext_info["read_name"]}'
+                        )
+                    else:
+                        logger.info(
+                            f'Extended {contig_name} {end_name} end: '
+                            f'+{ext_info["overhang_length"]}bp from read {ext_info["read_name"]}'
                         )
 
-            # Log progress periodically (every 10 contigs) or at the end
-            if processed_count % 10 == 0 or processed_count == total_contigs:
-                logger.debug(
-                    f'Processed {processed_count}/{total_contigs} contigs for extension'
-                )
+            # Calculate overall statistics if we have data
+            if all_stats:
+                overall_stats = calculate_overhang_statistics(all_stats)
+                logger.info(f'Processed {len(all_stats)} contigs with overhangs')
+            else:
+                overall_stats = {'left': {}, 'right': {}}
+
+            # Write extended sequences
+            if not dry_run:
+                logger.info('Writing extended sequences...')
+                with BufferedContigWriter(output_fasta) as writer:
+                    # Write extended contigs
+                    extended_contig_names = set()
+                    for contig_name, extension_result in [
+                        (name, er)
+                        for name, er in [
+                            (
+                                n,
+                                process_single_contig_extension(
+                                    n,
+                                    all_stats[n],
+                                    processor.get_contig_sequence(n),
+                                    min_extension,
+                                    max_homopolymer,
+                                    motif_patterns,
+                                    dry_run,
+                                ),
+                            )
+                            for n in extensions_applied.keys()
+                        ]
+                        if er is not None
+                    ]:
+                        writer.write_contig(
+                            contig_name, extension_result.extended_sequence
+                        )
+                        extended_contig_names.add(contig_name)
+
+                    # Copy unmodified contigs
+                    copy_unmodified_contigs(
+                        processor, writer, extended_contig_names, contig_dict
+                    )
+
+            bam_file_handle.close()
 
         # Generate report
         report_content = generate_extension_report(
-            stats_dict,
+            all_stats,
             extensions_applied,
-            outliers,
+            {
+                'left_outliers': [],
+                'right_outliers': [],
+            },  # Outlier detection handled in streaming
             overall_stats,
             excluded_contigs,
             warnings,
@@ -649,15 +559,6 @@ def extend(
             # Default: write report to stderr if no file specified
             logger.info('Writing statistics report to stderr')
             print(report_content, file=sys.stderr)
-
-        # Write extended sequences
-        if not dry_run:
-            if output_fasta:
-                logger.info(f'Writing extended sequences to {output_fasta}')
-                write_fasta_sequences(reference_seqs, output_fasta)
-            else:
-                logger.info('Writing extended sequences to stdout')
-                write_fasta_sequences(reference_seqs, None)
 
         # Summary
         if dry_run:
