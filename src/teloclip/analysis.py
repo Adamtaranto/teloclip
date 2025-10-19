@@ -37,22 +37,64 @@ class ContigStats:
 
     @property
     def left_count(self) -> int:
-        """Number of left overhangs."""
+        """
+        Number of left overhangs.
+
+        Returns
+        -------
+        int
+            The number of left overhangs (i.e., the length of self.left_overhangs).
+        """
         return len(self.left_overhangs)
 
     @property
     def right_count(self) -> int:
-        """Number of right overhangs."""
+        """
+        Number of right overhangs.
+
+        Returns
+        -------
+        int
+            The number of right overhangs (i.e., the length of self.right_overhangs).
+        """
         return len(self.right_overhangs)
 
     @property
     def left_total_length(self) -> int:
-        """Total length of all left overhangs."""
+        """
+        Total length of all left overhangs.
+
+        Compute the sum of the lengths of every overhang in the
+        ``left_overhangs`` sequence. Each element in that sequence is expected
+        to expose a numeric ``length`` attribute. If the sequence is empty,
+        the result is 0.
+
+        Returns
+        -------
+        int
+            Sum of the ``length`` attributes of all left overhangs.
+        """
         return sum(oh.length for oh in self.left_overhangs)
 
     @property
     def right_total_length(self) -> int:
-        """Total length of all right overhangs."""
+        """
+        Total length of all right overhangs.
+
+        Compute the sum of the ``length`` attribute for each overhang in
+        ``self.right_overhangs``.
+
+        Returns
+        -------
+        int
+            Total length of all right overhangs. Returns 0 when ``self.right_overhangs`` is empty.
+
+        Notes
+        -----
+        Each element of ``self.right_overhangs`` is expected to expose a numeric
+        ``length`` attribute (typically an integer). This property does not
+        modify the underlying collection.
+        """
         return sum(oh.length for oh in self.right_overhangs)
 
 
@@ -65,14 +107,14 @@ def collect_overhang_stats(
     Parameters
     ----------
     sam_lines : Iterator[str]
-        Iterator of SAM file lines
+        Iterator of SAM file lines.
     contig_dict : Dict[str, int]
-        Dictionary mapping contig names to their lengths
+        Dictionary mapping contig names to their lengths.
 
     Returns
     -------
     Dict[str, ContigStats]
-        Dictionary mapping contig names to their overhang statistics
+        Dictionary mapping contig names to their overhang statistics.
     """
     stats = {}
 
@@ -168,12 +210,12 @@ def calculate_overhang_statistics(
     Parameters
     ----------
     stats_dict : Dict[str, ContigStats]
-        Dictionary of contig statistics
+        Dictionary of contig statistics.
 
     Returns
     -------
     Dict[str, Dict[str, float]]
-        Dictionary with 'left' and 'right' keys containing statistical measures
+        Dictionary with 'left' and 'right' keys containing statistical measures.
     """
     left_lengths = []
     right_lengths = []
@@ -183,6 +225,43 @@ def calculate_overhang_statistics(
         right_lengths.extend([oh.length for oh in contig_stats.right_overhangs])
 
     def calc_stats(lengths: List[int]) -> Dict[str, float]:
+        """
+        Compute basic descriptive statistics for a sequence of lengths.
+
+        Parameters
+        ----------
+        lengths : list of int
+            Sequence of lengths to summarize. If empty, all returned statistics are 0.0.
+
+        Returns
+        -------
+        dict
+            Dictionary mapping statistic names to their values. Contains the following keys:
+            - 'mean' : float
+                Arithmetic mean of the values (0.0 if lengths is empty).
+            - 'median' : float
+                Median value (0.0 if lengths is empty).
+            - 'std_dev' : float
+                Sample standard deviation (uses statistics.stdev). Returns 0.0 if fewer than two values.
+            - 'min' : float
+                Minimum value (0.0 if lengths is empty).
+            - 'max' : float
+                Maximum value (0.0 if lengths is empty).
+
+        Notes
+        -----
+        The function guards against statistics.StatisticsError by returning 0.0 for the standard
+        deviation when the input has fewer than two elements. For an empty input, all statistics
+        are defined to be 0.0 for convenience.
+
+        Examples
+        --------
+        >>> calc_stats([1, 2, 3])
+        {'mean': 2.0, 'median': 2.0, 'std_dev': 1.0, 'min': 1, 'max': 3}
+
+        >>> calc_stats([])
+        {'mean': 0.0, 'median': 0.0, 'std_dev': 0.0, 'min': 0.0, 'max': 0.0}
+        """
         if not lengths:
             return {'mean': 0.0, 'median': 0.0, 'std_dev': 0.0, 'min': 0.0, 'max': 0.0}
 
@@ -210,17 +289,55 @@ def identify_outlier_contigs(
     Parameters
     ----------
     stats_dict : Dict[str, ContigStats]
-        Dictionary of contig statistics
+        Dictionary of contig statistics.
     threshold : float, optional
-        Z-score threshold for outlier detection (default: 2.0)
+        Z-score threshold for outlier detection (default: 2.0).
 
     Returns
     -------
     Dict[str, List[str]]
-        Dictionary with 'left_outliers' and 'right_outliers' keys containing contig names
+        Dictionary with 'left_outliers' and 'right_outliers' keys containing contig names.
     """
 
     def calculate_z_scores(values: List[float]) -> List[float]:
+        """
+        Calculate z-scores for a sequence of numeric values.
+
+        Parameters
+        ----------
+        values : List[float]
+            Sequence of numeric values for which to compute z-scores. The length and
+            order of the input are preserved in the output.
+
+        Returns
+        -------
+        List[float]
+            A list of z-scores computed as (value - mean(values)) / std(values),
+            where std(values) is the sample standard deviation (statistics.stdev,
+            i.e., normalization by N-1). If the input length is 0 or 1, if the sample
+            standard deviation is zero, or if computing the standard deviation raises
+            statistics.StatisticsError, a list of zeros with the same length as
+            `values` is returned.
+
+        Notes
+        -----
+        - This implementation uses the Python standard library's statistics.mean and
+          statistics.stdev. statistics.stdev computes the sample standard deviation
+          (ddof=1). If population standard deviation (ddof=0) is desired, use a
+          different routine (for example numpy.std with ddof=0).
+        - The function is defensive: it handles degenerate cases (insufficient
+          data, zero variance, or statistical errors) by returning zeros rather than
+          raising exceptions.
+
+        Examples
+        --------
+        >>> calculate_z_scores([1.0, 2.0, 3.0])
+        [-1.0, 0.0, 1.0]
+        >>> calculate_z_scores([42.0])
+        [0.0]
+        >>> calculate_z_scores([2.0, 2.0, 2.0])
+        [0.0, 0.0, 0.0]
+        """
         if len(values) <= 1:
             return [0.0] * len(values)
 
@@ -270,12 +387,12 @@ def rank_overhangs_by_length(overhangs_list: List[OverhangInfo]) -> List[Overhan
     Parameters
     ----------
     overhangs_list : List[OverhangInfo]
-        List of overhang information objects
+        List of overhang information objects.
 
     Returns
     -------
     List[OverhangInfo]
-        Sorted list of overhangs (longest first)
+        Sorted list of overhangs (longest first).
     """
     return sorted(overhangs_list, key=lambda oh: oh.length, reverse=True)
 
@@ -289,14 +406,14 @@ def detect_homopolymer_runs(
     Parameters
     ----------
     sequence : str
-        DNA sequence to analyze
+        DNA sequence to analyze.
     min_length : int, optional
-        Minimum length of homopolymer run to report (default: 50)
+        Minimum length of homopolymer run to report (default: 50).
 
     Returns
     -------
     List[Tuple[str, int, int, int]]
-        List of tuples (nucleotide, start_pos, end_pos, length) for each run
+        List of tuples (nucleotide, start_pos, end_pos, length) for each run.
     """
     runs = []
 
@@ -338,16 +455,16 @@ def select_best_overhang(
     Parameters
     ----------
     overhangs : List[OverhangInfo]
-        List of available overhangs
+        List of available overhangs.
     min_extension : int, optional
-        Minimum overhang length required (default: 1)
+        Minimum overhang length required (default: 1).
     max_homopolymer : int, optional
-        Maximum allowed homopolymer run length (default: 50)
+        Maximum allowed homopolymer run length (default: 50).
 
     Returns
     -------
     Optional[OverhangInfo]
-        Best overhang for extension, or None if no suitable overhang found
+        Best overhang for extension, or None if no suitable overhang found.
     """
     if not overhangs:
         return None

@@ -1,3 +1,10 @@
+"""
+Motif analysis functions for sequence pattern matching.
+
+This module provides functions for exact and fuzzy motif matching in DNA sequences,
+including regex pattern generation, motif counting, and analysis utilities.
+"""
+
 import re
 from typing import Dict, List, Tuple
 
@@ -5,6 +12,16 @@ from typing import Dict, List, Tuple
 def make_motif_regex(motif: str) -> str:
     """
     Create a regex pattern to match exact motifs.
+
+    Parameters
+    ----------
+    motif : str
+        The input motif string to create a regex pattern for.
+
+    Returns
+    -------
+    str
+        The regex pattern for exact motif matching.
     """
     # Escape special characters in the motif
     escaped_motif = re.escape(motif)
@@ -17,11 +34,15 @@ def make_fuzzy_motif_regex(motif: str) -> str:
     Create a regex pattern to match fuzzy motifs with runs of characters
     that differ by plus or minus one compared to the original motif.
 
-    Parameters:
-    - motif (str): The input motif string.
+    Parameters
+    ----------
+    motif : str
+        The input motif string.
 
-    Returns:
-    - str: The constructed regex pattern as a raw string.
+    Returns
+    -------
+    str
+        The constructed regex pattern as a raw string.
     """
     # Count continuous runs of characters in the motif
     motif_tuples = count_continuous_runs(motif)
@@ -37,13 +58,17 @@ def count_regex_patterns_in_sequence(
     """
     Count occurrences of regular expression patterns in a DNA sequence.
 
-    Parameters:
-    - dna_sequence (str): The input DNA sequence.
-    - regex_patterns (List[str]): List of regular expression patterns to count.
+    Parameters
+    ----------
+    dna_sequence : str
+        The input DNA sequence.
+    regex_patterns : List[str]
+        List of regular expression patterns to count.
 
-    Returns:
-    - Dict[str, int]: A dictionary where keys are regex patterns and values are
-                     counts of each pattern in the sequence.
+    Returns
+    -------
+    Dict[str, int]
+        Dictionary mapping pattern names to occurrence counts.
     """
     # Confirm that regex patterns does not end with min repeats quantifier of format {x,y} or {x,}
     for pattern in regex_patterns:
@@ -72,12 +97,16 @@ def count_continuous_runs(dna_string: str) -> list:
     """
     Count the length of all continuous runs of a DNA base in a string.
 
-    Parameters:
-    - dna_string (str): The input DNA string.
+    Parameters
+    ----------
+    dna_string : str
+        The input DNA string.
 
-    Returns:
-    - list: A list of tuples where each tuple contains a character and the number
-            of times it occurred consecutively in the input DNA string.
+    Returns
+    -------
+    list
+        A list of tuples where each tuple contains a character and the number
+        of times it occurred consecutively in the input DNA string.
     """
 
     # Check if the input string is empty
@@ -111,13 +140,16 @@ def construct_regex_pattern(motif_tuples: List[Tuple[str, int]]) -> str:
     Construct a regex pattern to match sequences with runs of characters
     that differ by plus or minus one compared to the original input sequence.
 
-    Parameters:
-    - motif_tuples (List[Tuple[str, int]]): List of tuples where each tuple contains
-                                            a character and the number of times it
-                                            occurred consecutively.
+    Parameters
+    ----------
+    motif_tuples : List[Tuple[str, int]]
+        List of tuples where each tuple contains a character and the number
+        of times it occurred consecutively.
 
-    Returns:
-    - str: The constructed regex pattern as a raw string.
+    Returns
+    -------
+    str
+        The constructed regex pattern as a raw string.
     """
 
     pattern_parts = []
@@ -138,12 +170,16 @@ def format_pattern_counts(pattern_counts: Dict[str, int]) -> str:
     """
     Format a dictionary of pattern counts into a string.
 
-    Parameters:
-    - pattern_counts (Dict[str, int]): A dictionary where keys are regex patterns
-                                    and values are counts of each pattern.
+    Parameters
+    ----------
+    pattern_counts : Dict[str, int]
+        A dictionary where keys are regex patterns and values are counts
+        of each pattern.
 
-    Returns:
-    - str: A formatted string with pattern counts.
+    Returns
+    -------
+    str
+        A formatted string representation of the pattern counts.
     """
     # Use a list comprehension to generate formatted pairs of pattern=count
     formatted_pairs = [
@@ -160,13 +196,20 @@ def check_sequence_for_patterns(
     """
     Check a DNA sequence for instances of one or more regular expressions.
 
-    Parameters:
-    - dna_sequence (str): The input DNA sequence.
-    - regex_patterns (List[str]): List of regular expression patterns to check against.
-    - min_repeats (int): Minimum number of sequential repeats required for a match.
+    Parameters
+    ----------
+    dna_sequence : str
+        The input DNA sequence.
+    regex_patterns : List[str]
+        List of regular expression patterns to check against.
+    min_repeats : int, optional
+        Minimum number of sequential repeats required for a match.
+        Default is 1.
 
-    Returns:
-    - bool: True if any of the patterns match the sequence, False otherwise.
+    Returns
+    -------
+    bool
+        True if any of the patterns match the sequence, False otherwise.
     """
     # Modify patterns to include minimum repeats requirement
     if min_repeats > 1:

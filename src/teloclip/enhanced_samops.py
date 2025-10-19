@@ -22,6 +22,25 @@ class EnhancedStreamingSamFilter:
     - Statistics tracking
     - Quality and anchor filtering
     - Motif analysis integration
+
+    Parameters
+    ----------
+    samfile : file-like
+        SAM file handle or iterator.
+    contigs : Dict[str, int]
+        Dictionary of contig names to lengths.
+    max_break : int, optional
+        Maximum gap from contig end to allow. Default is 50.
+    min_clip : int, optional
+        Minimum clip length required. Default is 1.
+    min_anchor : int, optional
+        Minimum anchored alignment length required. Default is 500.
+    min_mapq : int, optional
+        Minimum mapping quality required. Default is 0.
+    motif_patterns : Dict[str, str], optional
+        Compiled motif regex patterns. Default is None.
+    stats : ExtractionStats, optional
+        Statistics tracker. Default is None.
     """
 
     def __init__(
@@ -76,7 +95,19 @@ class EnhancedStreamingSamFilter:
         self.SAM_SEQ = 9
 
     def _split_cigar(self, cigar_string: str) -> list:
-        """Split CIGAR string into list of (length, operation) tuples."""
+        """
+        Split CIGAR string into list of (length, operation) tuples.
+
+        Parameters
+        ----------
+        cigar_string : str
+            CIGAR string from SAM alignment.
+
+        Returns
+        -------
+        list
+            List of (length, operation) tuples.
+        """
         cigar_list = []
         for match in re.findall(r'[0-9]*[A-Z=]', cigar_string):
             length = int(re.findall(r'[0-9]*', match)[0])
@@ -85,7 +116,19 @@ class EnhancedStreamingSamFilter:
         return cigar_list
 
     def _check_clips(self, cigar_string: str) -> Tuple[Optional[int], Optional[int]]:
-        """Get lengths of soft-clipped blocks from either end of alignment."""
+        """
+        Get lengths of soft-clipped blocks from either end of alignment.
+
+        Parameters
+        ----------
+        cigar_string : str
+            CIGAR string from SAM alignment.
+
+        Returns
+        -------
+        Tuple[Optional[int], Optional[int]]
+            Left and right clip lengths (None if no clipping).
+        """
         left_clip_len = None
         right_clip_len = None
         cigar_list = self._split_cigar(cigar_string)
@@ -101,7 +144,19 @@ class EnhancedStreamingSamFilter:
         return (left_clip_len, right_clip_len)
 
     def _calculate_alignment_length(self, cigar_string: str) -> int:
-        """Calculate alignment length on reference sequence."""
+        """
+        Calculate alignment length on reference sequence.
+
+        Parameters
+        ----------
+        cigar_string : str
+            CIGAR string from SAM alignment.
+
+        Returns
+        -------
+        int
+            Total alignment length on reference sequence.
+        """
         aln_len = 0
         cigar_list = self._split_cigar(cigar_string)
         for length, operation in cigar_list:
@@ -110,7 +165,19 @@ class EnhancedStreamingSamFilter:
         return aln_len
 
     def _count_motifs_in_sequence(self, sequence: str) -> Dict[str, int]:
-        """Count motif occurrences in sequence."""
+        """
+        Count motif occurrences in sequence.
+
+        Parameters
+        ----------
+        sequence : str
+            DNA sequence to search for motifs.
+
+        Returns
+        -------
+        Dict[str, int]
+            Dictionary mapping motif names to occurrence counts.
+        """
         motif_counts = {}
         for motif_name, pattern in self.motif_patterns.items():
             matches = re.findall(pattern, sequence)
@@ -118,7 +185,24 @@ class EnhancedStreamingSamFilter:
         return motif_counts
 
     def __iter__(self):
-        """Iterate through filtered SAM alignments."""
+        """
+        Iterate through filtered SAM alignments.
+
+        Yields
+        ------
+        dict
+            Dictionary containing alignment information with keys:
+            - aln_start: int, alignment start position
+            - aln_end: int, alignment end position
+            - clip_length: int, soft-clip length
+            - sequence: str, read sequence
+            - read_name: str, read identifier
+            - contig_name: str, reference contig name
+            - end: str, overhang direction ('L' or 'R')
+            - mapq: int, mapping quality score
+            - motif_counts: dict, motif occurrence counts (if patterns provided)
+            - overhang_seq: str, overhanging sequence portion
+        """
         for line in self.samfile:
             # Skip header rows
             if line.startswith('@'):
@@ -235,24 +319,24 @@ def enhanced_streaming_split_by_contig(
     Parameters
     ----------
     alignments : Iterator
-        Iterator of alignment dictionaries from EnhancedStreamingSamFilter
+        Iterator of alignment dictionaries from EnhancedStreamingSamFilter.
     output_dir : str, optional
-        Output directory for files
+        Output directory for files.
     prefix : str, optional
-        Prefix for output filenames
+        Prefix for output filenames.
     output_format : str
-        Output format ('fasta' or 'fastq')
+        Output format ('fasta' or 'fastq').
     buffer_size : int
-        Number of sequences to buffer before writing
+        Number of sequences to buffer before writing.
     include_stats : bool
-        Whether to include statistics in sequence headers
+        Whether to include statistics in sequence headers.
     mask_overhangs : bool
-        Whether to convert overhang sequences to lowercase
+        Whether to convert overhang sequences to lowercase.
 
     Returns
     -------
     ExtractionStats
-        Statistics about the extraction process
+        Statistics about the extraction process.
     """
     stats = ExtractionStats()
 

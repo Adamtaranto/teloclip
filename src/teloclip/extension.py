@@ -19,13 +19,13 @@ def calculate_extension_position(
     Parameters
     ----------
     alignment_pos : int
-        Start position of alignment (1-based)
+        Start position of alignment (1-based).
     alignment_end : int
-        End position of alignment (1-based, inclusive)
+        End position of alignment (1-based, inclusive).
     contig_length : int
-        Length of the contig
+        Length of the contig.
     is_left : bool
-        True if this is a left overhang, False for right
+        True if this is a left overhang, False for right.
 
     Returns
     -------
@@ -54,16 +54,16 @@ def trim_contig_end(sequence: str, trim_length: int, is_left_end: bool) -> str:
     Parameters
     ----------
     sequence : str
-        Original contig sequence
+        Original contig sequence.
     trim_length : int
-        Number of bases to trim
+        Number of bases to trim.
     is_left_end : bool
-        True to trim from left end, False to trim from right end
+        True to trim from left end, False to trim from right end.
 
     Returns
     -------
     str
-        Trimmed sequence
+        Trimmed sequence.
     """
     if trim_length <= 0:
         return sequence
@@ -83,18 +83,18 @@ def extend_contig(
     Parameters
     ----------
     sequence : str
-        Original contig sequence
+        Original contig sequence.
     overhang : OverhangInfo
-        Overhang information containing the sequence to add
+        Overhang information containing the sequence to add.
     position : int
-        Position to insert the overhang (0-based)
+        Position to insert the overhang (0-based).
     is_left_end : bool
-        True if extending left end, False if extending right end
+        True if extending left end, False if extending right end.
 
     Returns
     -------
     str
-        Extended sequence
+        Extended sequence.
     """
     if is_left_end:
         # Add overhang to the beginning
@@ -111,16 +111,16 @@ def validate_extension(original: str, extended: str, overhang: OverhangInfo) -> 
     Parameters
     ----------
     original : str
-        Original contig sequence
+        Original contig sequence.
     extended : str
-        Extended contig sequence
+        Extended contig sequence.
     overhang : OverhangInfo
-        Overhang that was added
+        Overhang that was added.
 
     Returns
     -------
     bool
-        True if extension is valid, False otherwise
+        True if extension is valid, False otherwise.
     """
     if overhang.is_left:
         # Check that overhang was added to the beginning
@@ -150,11 +150,11 @@ def apply_contig_extension(
     Parameters
     ----------
     contig_seq : str
-        Original contig sequence
+        Original contig sequence.
     overhang : OverhangInfo
-        Overhang to use for extension
+        Overhang to use for extension.
     contig_length : int
-        Length of the original contig
+        Length of the original contig.
 
     Returns
     -------

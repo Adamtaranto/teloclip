@@ -25,6 +25,17 @@ def main(ctx, verbose, quiet, log_level):
     A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
 
     Use sub-commands to filter alignments, extract reads, or extend contigs.
+
+    Parameters
+    ----------
+    ctx : click.Context
+        Click context object for passing information between commands.
+    verbose : bool
+        If True, enable verbose logging (DEBUG level).
+    quiet : bool
+        If True, suppress all but error messages (ERROR level).
+    log_level : str
+        Specific log level to set (DEBUG, INFO, WARNING, ERROR).
     """
     # Ensure that ctx.obj exists and is a dict (in case `cli()` is called by itself)
     ctx.ensure_object(dict)

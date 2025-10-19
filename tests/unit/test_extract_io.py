@@ -206,9 +206,16 @@ class TestMultiFileSequenceWriter:
                 assert 'contig1_R' in writer.writers
                 assert 'contig2_L' in writer.writers
 
+                # Verify writers are properly stored
+                assert writer.writers['contig1_L'] is writer1
+                assert writer.writers['contig1_R'] is writer2
+                assert writer.writers['contig2_L'] is writer3
+
                 # Should reuse existing writers
                 writer1_again = writer.get_writer('contig1', 'L')
+                writer2_again = writer.get_writer('contig1', 'R')
                 assert writer1 is writer1_again
+                assert writer2 is writer2_again
                 assert len(writer.writers) == 3
 
     def test_write_sequences_to_separate_files(self):

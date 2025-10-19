@@ -36,7 +36,19 @@ from ..seqops import read_fai
 
 
 def setup_logger(level):
-    """Setup logger with the specified level."""
+    """
+    Setup logger with the specified logging level.
+
+    Parameters
+    ----------
+    level : int
+        Logging level (e.g., logging.INFO, logging.DEBUG).
+
+    Returns
+    -------
+    logging.Logger
+        Configured logger instance.
+    """
     init_logging()
     logger = logging.getLogger()
     logger.setLevel(level)
@@ -44,7 +56,28 @@ def setup_logger(level):
 
 
 def validate_input_files(sam_file: Path, reference_fasta: Path, ref_idx: Path) -> None:
-    """Validate that required input files exist and are readable."""
+    """
+    Validate that required input files exist and are readable.
+
+    Parameters
+    ----------
+    sam_file : Path
+        Path to SAM file, or '-' for stdin.
+    reference_fasta : Path
+        Path to reference FASTA file.
+    ref_idx : Path
+        Path to reference FASTA index (.fai) file.
+
+    Returns
+    -------
+    None
+        Function validates input files and raises exceptions on failure.
+
+    Raises
+    ------
+    click.ClickException
+        If any required input file is not found.
+    """
     # Allow '-' for stdin SAM input
     if str(sam_file) != '-' and not sam_file.exists():
         raise click.ClickException(f'SAM file not found: {sam_file}')
@@ -57,7 +90,26 @@ def validate_input_files(sam_file: Path, reference_fasta: Path, ref_idx: Path) -
 
 
 def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
-    """Validate that output directories are writable."""
+    """
+    Validate that output directories exist and are writable.
+
+    Parameters
+    ----------
+    output_fasta : Path
+        Path where extended FASTA will be written.
+    stats_report : Path
+        Path where statistics report will be written.
+
+    Returns
+    -------
+    None
+        Function validates and creates output directories as needed.
+
+    Raises
+    ------
+    click.ClickException
+        If output directories cannot be created or are not writable.
+    """
     for output_path in [output_fasta, stats_report]:
         if output_path:
             output_dir = output_path.parent
@@ -71,7 +123,24 @@ def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
 
 
 def read_sam_lines(sam_file: Path) -> Iterator[str]:
-    """Read SAM file lines, handling both files and stdin."""
+    """
+    Read SAM file lines, handling both files and stdin input.
+
+    Parameters
+    ----------
+    sam_file : Path
+        Path to SAM file, or '-' to read from stdin.
+
+    Returns
+    -------
+    Iterator[str]
+        Generator yielding lines from the SAM file.
+
+    Yields
+    ------
+    str
+        Individual lines from the SAM file.
+    """
     if str(sam_file) == '-':
         for line in sys.stdin:
             yield line
@@ -91,7 +160,33 @@ def generate_extension_report(
     motif_stats: Dict[str, Dict[str, int]] = None,
     dry_run: bool = False,
 ) -> str:
-    """Generate a comprehensive statistics report."""
+    """
+    Generate a comprehensive statistics report for contig extension analysis.
+
+    Parameters
+    ----------
+    stats_dict : Dict[str, ContigStats]
+        Dictionary mapping contig names to their statistics.
+    extensions_applied : Dict[str, dict]
+        Dictionary of extensions that were applied to contigs.
+    outliers : Dict[str, List[str]]
+        Dictionary of outlier contigs by category.
+    overall_stats : Dict[str, Dict[str, float]]
+        Overall statistics across all contigs.
+    excluded_contigs : List[str]
+        List of contig names that were excluded from analysis.
+    warnings : List[str]
+        List of warning messages generated during analysis.
+    motif_stats : Dict[str, Dict[str, int]], optional
+        Statistics about motif occurrences. Default is None.
+    dry_run : bool, optional
+        Whether this is a dry run (no actual extensions applied). Default is False.
+
+    Returns
+    -------
+    str
+        Formatted statistics report as a multi-line string.
+    """
     report_lines = []
 
     if dry_run:
@@ -271,6 +366,37 @@ def extend(
 
     SAM_FILE can be a file path or '-' to read from stdin.
     REFERENCE_FASTA should be the original reference used for alignment.
+
+    Parameters
+    ----------
+    ctx : click.Context
+        Click context object.
+    sam_file : Path
+        Path to SAM file or '-' for stdin.
+    reference_fasta : Path
+        Path to reference FASTA file used for alignment.
+    ref_idx : Path
+        Path to reference FASTA index (.fai) file.
+    output_fasta : Path
+        Path where extended FASTA will be written.
+    stats_report : Path
+        Path where statistics report will be written.
+    exclude_outliers : bool
+        Whether to exclude outlier contigs from extension.
+    outlier_threshold : float
+        Threshold for outlier detection.
+    min_overhangs : int
+        Minimum number of overhangs required for extension.
+    max_homopolymer : int
+        Maximum homopolymer length to allow in extensions.
+    min_extension : int
+        Minimum extension length required.
+    dry_run : bool
+        If True, analyze but don't modify contigs.
+    motifs : str
+        Comma-separated motifs to search for in overhangs.
+    fuzzy_motifs : bool
+        Use fuzzy motif matching allowing ±1 character variation.
     """
     logger = setup_logger(ctx.obj.get('log_level', 'INFO'))
 

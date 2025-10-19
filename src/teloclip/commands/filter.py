@@ -88,19 +88,50 @@ def filter_cmd(
     Reads SAM/BAM alignments and outputs only those that are soft-clipped at contig
     ends, optionally filtering for specific motifs like telomeric repeats.
 
-    Examples:
+    Parameters
+    ----------
+    ctx : click.Context
+        Click context object.
+    samfile : file-like
+        SAM format file or stream to process.
+    ref_idx : str
+        Path to reference FASTA index (.fai) file.
+    min_clip : int
+        Minimum soft-clipping length required.
+    max_break : int
+        Maximum distance from contig end to consider as terminal.
+    motifs : str
+        Comma-separated list of DNA motifs to search for.
+    no_rev : bool
+        If True, do not search for reverse complement motifs.
+    fuzzy : bool
+        If True, use fuzzy matching allowing +/- 1 base variance in homopolymers.
+    min_repeats : int
+        Minimum number of motif repeats required for a match.
+    min_anchor : int
+        Minimum number of aligned bases required on non-clipped portion.
+    match_anywhere : bool
+        If True, allow motif matches anywhere in read, not just clipped regions.
 
-    \\b
-    # Basic filtering for terminal soft-clipped reads
-    teloclip filter --ref-idx ref.fa.fai input.sam > output.sam
+    Examples
+    --------
+    Basic filtering for terminal soft-clipped reads:
 
-    \\b
-    # Filter for telomeric motifs with fuzzy matching
-    teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG --fuzzy input.sam
+    .. code-block:: bash
 
-    \\b
-    # Read from stdin, write to stdout
-    samtools view -h input.bam | teloclip filter --ref-idx ref.fa.fai
+        teloclip filter --ref-idx ref.fa.fai input.sam > output.sam
+
+    Filter for telomeric motifs with fuzzy matching:
+
+    .. code-block:: bash
+
+        teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG --fuzzy input.sam
+
+    Read from stdin, write to stdout:
+
+    .. code-block:: bash
+
+        samtools view -h input.bam | teloclip filter --ref-idx ref.fa.fai
     """
     # Fetch contig lengths
     contig_dict = read_fai(ref_idx)

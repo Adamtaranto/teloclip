@@ -65,6 +65,11 @@ class ExtractionStats:
     def record_filter(self, filter_type: str):
         """
         Record filtered alignments.
+
+        Parameters
+        ----------
+        filter_type : str
+            Type of filter applied ('quality' or 'anchor').
         """
         if filter_type == 'quality':
             self.quality_filtered += 1
@@ -74,6 +79,11 @@ class ExtractionStats:
     def generate_report(self) -> str:
         """
         Generate comprehensive extraction report.
+
+        Returns
+        -------
+        str
+            Formatted markdown report with extraction statistics.
         """
 
         lines = []
@@ -113,6 +123,15 @@ class ExtractionStats:
 class EfficientSequenceWriter:
     """
     Memory-efficient sequence writer with buffering and BioPython integration.
+
+    Parameters
+    ----------
+    output_path : Union[str, Path, None], optional
+        Output file path. If None, writes to stdout. Default is None.
+    output_format : str, optional
+        Output format ('fasta' or 'fastq'). Default is 'fasta'.
+    buffer_size : int, optional
+        Number of sequences to buffer before writing. Default is 1000.
     """
 
     def __init__(
@@ -121,8 +140,7 @@ class EfficientSequenceWriter:
         output_format: str = 'fasta',
         buffer_size: int = 1000,
     ):
-        """
-        Initialize writer with optional buffering.
+        """Initialize writer with optional buffering.
 
         Parameters
         ----------
@@ -173,7 +191,8 @@ class EfficientSequenceWriter:
 
     def open(self):
         """
-        Open output file handle."""
+        Open output file handle.
+        """
         if self.output_path is None:
             self.file_handle = sys.stdout
         else:
@@ -258,7 +277,8 @@ class EfficientSequenceWriter:
 
     def close(self):
         """
-        Close writer and cleanup."""
+        Close writer and cleanup.
+        """
         # Write any remaining buffered sequences
         if self.buffer:
             self.flush()
@@ -272,6 +292,17 @@ class EfficientSequenceWriter:
 class MultiFileSequenceWriter:
     """
     Manage multiple sequence writers for different contigs/ends.
+
+    Parameters
+    ----------
+    base_dir : Union[str, Path, None], optional
+        Base output directory. Default is None (uses current directory).
+    prefix : str, optional
+        Prefix for output filenames. Default is None.
+    output_format : str, optional
+        Output format ('fasta' or 'fastq'). Default is 'fasta'.
+    buffer_size : int, optional
+        Buffer size for each writer. Default is 1000.
     """
 
     def __init__(
@@ -281,8 +312,7 @@ class MultiFileSequenceWriter:
         output_format: str = 'fasta',
         buffer_size: int = 1000,
     ):
-        """
-        Initialize multi-file writer manager.
+        """Initialize multi-file writer manager.
 
         Parameters
         ----------
@@ -404,6 +434,8 @@ class MultiFileSequenceWriter:
         """
         Context manager exit.
 
+        Parameters
+        ----------
         exc_type : type
             Exception type if an exception occurred.
         exc_val : Exception

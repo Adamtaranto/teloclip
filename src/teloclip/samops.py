@@ -1,3 +1,7 @@
+"""
+SAM file operations for Teloclip.
+"""
+
 import logging
 import os
 import re
@@ -5,22 +9,6 @@ import sys
 
 from teloclip.motifs import check_sequence_for_patterns
 from teloclip.seqops import isMotifInClip, writefasta
-
-# TODO:
-"""
-- Create a samline class to hold sam line data
-- Create a CIGAR class based on https://github.com/brentp/cigar/blob/master/cigar.py
-- Sam fields as attributes of samline class
-- Calculate clip regions as attributes of samline class
-- Methods to check if left or right clip is terminal
-- Method to check if motif in clips
-- Method to print samline
-- Note if left or right terminal softclip regions present
-- Add and use min_anchor threshold (default 500bp) to ensure that the alignment is anchored to the reference
-- Split left and right clip checks into helper functions
-- Add function: Count Cigar len to left / right of softclip 20S20M2D10M2S = 30 bases of read aligned to ref
-    - Check that aligned length on ref is >= min_anchor
-"""
 
 
 def processSamlines(
@@ -33,6 +21,38 @@ def processSamlines(
     min_repeats=1,
     min_anchor=500,
 ):
+    """
+    Process SAM alignment lines and filter based on clipping and motif criteria.
+
+    This function reads SAM format alignment data and filters alignments based on
+    soft-clipping patterns at contig ends, motif matching, and quality thresholds.
+
+    Parameters
+    ----------
+    samfile : file-like object
+        Input SAM format file or stream.
+    contig_dict : dict
+        Dictionary mapping contig names to their lengths.
+    motif_list : list of str, optional
+        List of motif patterns to search for in sequences. Default is None.
+    match_anywhere : bool, optional
+        If True, search for motifs anywhere in the sequence. If False, search
+        only in clipped regions. Default is False.
+    max_break : int, optional
+        Maximum allowed gap in alignment. Default is 0.
+    min_clip : int, optional
+        Minimum soft-clipping length required. Default is 1.
+    min_repeats : int, optional
+        Minimum number of motif repeats required for a match. Default is 1.
+    min_anchor : int, optional
+        Minimum anchored alignment length required. Default is 500.
+
+    Returns
+    -------
+    None
+        Function processes input and writes filtered results to stdout.
+        Logging information is provided about processing statistics.
+    """
     # SAM line index keys
     if motif_list is None:
         motif_list = []
@@ -155,7 +175,28 @@ def processSamlines(
 
 def splitCIGAR(SAM_CIGAR):
     """
-    Split CIGAR string into list of tuples with format (len,operator)
+    Split CIGAR string into list of tuples with format (length, operator).
+
+    Parses a CIGAR string and converts it into a list of tuples where each
+    tuple contains the length and operation type for each CIGAR element.
+
+    Parameters
+    ----------
+    SAM_CIGAR : str
+        CIGAR string from SAM alignment format.
+
+    Returns
+    -------
+    list of tuple
+        List of tuples with format (length, operator), where length is int
+        and operator is str. For example, '174M76S' becomes [(174, 'M'), (76, 'S')].
+
+    Examples
+    --------
+    >>> splitCIGAR('174M76S')
+    [(174, 'M'), (76, 'S')]
+    >>> splitCIGAR('96S154M')
+    [(96, 'S'), (154, 'M')]
     """
     CIGARlist = []
     for x in re.findall('[0-9]*[A-Z|=]', SAM_CIGAR):
@@ -167,7 +208,30 @@ def splitCIGAR(SAM_CIGAR):
 
 def checkClips(SAM_CIGAR):
     """
-    Get lengths of soft-clipped blocks from either end of an alignment given a CIGAR string.
+    Get lengths of soft-clipped blocks from either end of an alignment.
+
+    Analyzes a CIGAR string to determine the lengths of soft-clipped regions
+    at the start and end of the alignment.
+
+    Parameters
+    ----------
+    SAM_CIGAR : str
+        CIGAR string from SAM alignment format.
+
+    Returns
+    -------
+    tuple of (int or None, int or None)
+        Tuple containing (left_clip_length, right_clip_length). Returns None
+        for positions where no soft-clipping is present.
+
+    Examples
+    --------
+    >>> checkClips('10S100M20S')
+    (10, 20)
+    >>> checkClips('100M')
+    (None, None)
+    >>> checkClips('50S100M')
+    (50, None)
     """
     leftClipLen = None
     rightClipLen = None
@@ -183,9 +247,26 @@ def checkClips(SAM_CIGAR):
 
 def lenCIGAR(SAM_CIGAR):
     """
-    Calculate length of alignment in reference sequence as sum of
-    match, read-deletion, splice, mismatch, and read-match block values.
-    Ignore read-insertions, padding, hard and soft clip blocks.
+    Calculate the length of alignment in reference sequence.
+
+    Calculates the total length of the alignment on the reference sequence by
+    summing match, deletion, splice, mismatch, and sequence match block values.
+    Ignores insertions, padding, hard clips, and soft clips.
+
+    Parameters
+    ----------
+    SAM_CIGAR : str
+        CIGAR string from SAM alignment format.
+
+    Returns
+    -------
+    int
+        Total alignment length on the reference sequence in base pairs.
+
+    Notes
+    -----
+    Includes operations: M (match), D (deletion), N (splice), X (mismatch), = (sequence match)
+    Excludes operations: I (insertion), P (padding), H (hard clip), S (soft clip)
     """
     alnLen = 0
     CIGARlist = splitCIGAR(SAM_CIGAR)
@@ -199,6 +280,7 @@ def lenCIGAR(SAM_CIGAR):
 def calculate_aligned_bases(cigar_string):
     """
     Calculate the number of bases that are actually aligned/matched to the reference.
+
     Only counts M (match), = (sequence match), and X (mismatch) operations.
     Excludes deletions (D), insertions (I), soft clips (S), hard clips (H),
     padding (P), and splicing (N) operations.
@@ -206,11 +288,15 @@ def calculate_aligned_bases(cigar_string):
     This is used for min_anchor validation to ensure sufficient anchoring
     of the read to the reference sequence.
 
-    Args:
-        cigar_string (str): CIGAR string from SAM alignment
+    Parameters
+    ----------
+    cigar_string : str
+        CIGAR string from SAM alignment format.
 
-    Returns:
-        int: Number of aligned bases (M + = + X operations only)
+    Returns
+    -------
+    int
+        Number of aligned bases (M + = + X operations only).
     """
     aligned_bases = 0
     cigar_list = splitCIGAR(cigar_string)
@@ -222,21 +308,52 @@ def calculate_aligned_bases(cigar_string):
 
 def validate_min_anchor(cigar_string, min_anchor):
     """
-    Validate that an alignment has sufficient anchored bases to meet min_anchor requirement.
+    Validate that an alignment has sufficient anchored bases to meet requirement.
 
-    Args:
-        cigar_string (str): CIGAR string from SAM alignment
-        min_anchor (int): Minimum number of aligned bases required
+    Checks if the alignment has enough actually aligned/matched bases to meet
+    the minimum anchor threshold for quality filtering.
 
-    Returns:
-        bool: True if alignment meets min_anchor requirement, False otherwise
+    Parameters
+    ----------
+    cigar_string : str
+        CIGAR string from SAM alignment format.
+    min_anchor : int
+        Minimum number of aligned bases required.
+
+    Returns
+    -------
+    bool
+        True if alignment meets min_anchor requirement, False otherwise.
     """
     aligned_bases = calculate_aligned_bases(cigar_string)
     return aligned_bases >= min_anchor
 
 
 def StreamingSamFilter(samfile=None, contigs=None, max_break=50, min_clip=1):
-    """Rewrite loadSam() as generator."""
+    """
+    Filter SAM alignments to identify overhang reads at contig ends.
+
+    Processes SAM alignment lines as a generator to identify reads with soft-clipping
+    that extend beyond contig boundaries, indicating potential overhang sequences.
+
+    Parameters
+    ----------
+    samfile : file-like object, optional
+        SAM format file or stream. Default is None.
+    contigs : dict, optional
+        Dictionary mapping contig names to their lengths. Default is None.
+    max_break : int, optional
+        Maximum allowed distance from contig end for overhang detection. Default is 50.
+    min_clip : int, optional
+        Minimum soft-clipping length required for overhang. Default is 1.
+
+    Yields
+    ------
+    tuple
+        Tuple containing (position, alignment_end, clip_length, sequence,
+        read_name, contig_name, direction) for each overhang alignment.
+        Direction is 'L' for left overhang, 'R' for right overhang.
+    """
     SAM_QNAME = 0
     SAM_RNAME = 2
     SAM_POS = 3
@@ -306,8 +423,31 @@ def StreamingSamFilter(samfile=None, contigs=None, max_break=50, min_clip=1):
 
 def StreamingSplitByContig(alignments=None, contigs=None, prefix=None, outdir=None):
     """
-    Takes alignment line summaries tagged with overhang information from StreamingSamFilter
-    Writes reads into output files for each end of each contig with at least one alignment found.
+    Split overhang alignments by contig and write to separate FASTA files.
+
+    Takes alignment summaries from StreamingSamFilter and writes overhang reads
+    into output files for each end of each contig that has alignments.
+
+    Parameters
+    ----------
+    alignments : generator, optional
+        Generator of alignment tuples from StreamingSamFilter. Default is None.
+    contigs : dict, optional
+        Dictionary mapping contig names to their lengths. Default is None.
+    prefix : str, optional
+        Prefix for output filenames. Default is None.
+    outdir : str, optional
+        Output directory for FASTA files. Default is None (uses current directory).
+
+    Returns
+    -------
+    None
+        Writes FASTA files directly to disk.
+
+    Notes
+    -----
+    Creates separate files for left (L) and right (R) overhang reads for each contig.
+    Filename format: {prefix}_{contig_name}_{L|R}_overhangs.fna
     """
     # Note: This method opens and closes the output fasta files for EVERY read processed.
     # Probably inefficient but avoids reading everything into memory

@@ -23,12 +23,12 @@ def stream_fasta_sequences(
     Parameters
     ----------
     fasta_path : Union[str, Path]
-        Path to FASTA file
+        Path to FASTA file.
 
     Yields
     ------
     Tuple[str, str, str]
-        (sequence_name, description, sequence) for each sequence in the file
+        (sequence_name, description, sequence) for each sequence in the file.
     """
     with open(fasta_path, 'r') as handle:
         for record in SeqIO.parse(handle, 'fasta'):
@@ -45,12 +45,12 @@ def load_fasta_sequences(fasta_path: Union[str, Path]) -> Dict[str, Tuple[str, s
     Parameters
     ----------
     fasta_path : Union[str, Path]
-        Path to FASTA file
+        Path to FASTA file.
 
     Returns
     -------
     Dict[str, Tuple[str, str]]
-        Dictionary mapping sequence names to (description, sequence) tuples
+        Dictionary mapping sequence names to (description, sequence) tuples.
     """
     sequences = {}
     with open(fasta_path, 'r') as handle:
@@ -70,11 +70,11 @@ def write_fasta_sequences(
     Parameters
     ----------
     sequences : Dict[str, Tuple[str, str]]
-        Dictionary mapping sequence names to (description, sequence) tuples
+        Dictionary mapping sequence names to (description, sequence) tuples.
     output_path : Union[str, Path, None], optional
-        Output file path. If None, writes to stdout
+        Output file path. If None, writes to stdout.
     line_length : int, optional
-        Number of characters per line in output FASTA (default: 80)
+        Number of characters per line in output FASTA (default: 80).
     """
     # Create SeqRecord objects
     seq_records = []
@@ -106,12 +106,20 @@ def stream_write_fasta_sequences(
     Parameters
     ----------
     sequences : Iterator[Tuple[str, str, str]]
-        Iterator yielding (seq_id, description, sequence) tuples
+        Iterator yielding (seq_id, description, sequence) tuples.
     output_path : Union[str, Path, None], optional
-        Output file path. If None, writes to stdout
+        Output file path. If None, writes to stdout.
     """
 
     def create_records():
+        """
+        Convert sequence tuples to SeqRecord objects for BioPython output.
+
+        Yields
+        ------
+        SeqRecord
+            BioPython SeqRecord object for each input sequence tuple.
+        """
         for seq_id, description, sequence in sequences:
             yield SeqRecord(Seq(sequence), id=seq_id, description=description)
 
@@ -132,15 +140,15 @@ def validate_fasta_against_fai(
     Parameters
     ----------
     fasta_path : Union[str, Path]
-        Path to FASTA file
+        Path to FASTA file.
     fai_dict : Dict[str, int]
-        Dictionary from read_fai with sequence names and lengths
+        Dictionary from read_fai with sequence names and lengths.
 
     Returns
     -------
     Tuple[set, set]
         (missing_from_fasta, missing_from_fai) - sets of sequence names that are
-        missing from FASTA file or missing from FAI index respectively
+        missing from FASTA file or missing from FAI index respectively.
     """
     fasta_sequences = set()
 

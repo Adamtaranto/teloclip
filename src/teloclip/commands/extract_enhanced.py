@@ -142,7 +142,47 @@ def extract_cmd(
     that extend beyond contig ends, with advanced filtering, motif analysis, and
     comprehensive statistics reporting.
 
-    Examples:
+    Parameters
+    ----------
+    ctx : click.Context
+        Click context object.
+    samfile : str
+        Path to SAM/BAM file or '-' for stdin.
+    ref_idx : str
+        Path to reference index file (.fai).
+    prefix : str
+        Prefix for output filenames.
+    extract_reads : bool
+        Extract and write overhang sequences.
+    extract_dir : str
+        Directory for output files.
+    min_clip : int
+        Minimum clip length required.
+    max_break : int
+        Maximum gap from contig end to allow.
+    min_anchor : int
+        Minimum anchored alignment length required.
+    min_mapq : int
+        Minimum mapping quality required.
+    include_stats : bool
+        Include statistics in FASTA headers.
+    motifs : tuple
+        Motif sequences to analyze.
+    fuzzy_motifs : bool
+        Use fuzzy motif matching.
+    buffer_size : int
+        I/O buffer size for writing.
+    output_format : str
+        Output format ('fasta' or 'fastq').
+    stats_report : str
+        Path for statistics report output.
+    no_mask_overhangs : bool
+        Disable overhang sequence masking.
+    log_level : str
+        Logging verbosity level.
+
+    Examples
+    --------
 
     \\b
     # Basic extraction to current directory
@@ -262,7 +302,7 @@ def extract_cmd(
 
     except FileNotFoundError as e:
         logger.error(f'File not found: {e}')
-        raise click.ClickException(str(e))
+        raise click.ClickException(str(e)) from e
     except Exception as e:
         logger.error(f'Error during extract operation: {e}')
         raise click.ClickException(str(e)) from e
