@@ -720,6 +720,7 @@ def enhanced_streaming_split_by_contig(
     include_stats: bool = False,
     mask_overhangs: bool = True,
     existing_stats: Optional['ExtractionStats'] = None,
+    use_sam_attributes: bool = False,
 ) -> 'ExtractionStats':
     """
     Efficiently write overhang reads using file handles and buffering.
@@ -750,6 +751,8 @@ def enhanced_streaming_split_by_contig(
         Whether to convert overhang sequences to lowercase.
     existing_stats : ExtractionStats, optional
         Existing statistics object to update (preserves SAM line counts).
+    use_sam_attributes : bool
+        Whether to format statistics as SAM attributes for FASTQ output.
 
     Returns
     -------
@@ -767,6 +770,7 @@ def enhanced_streaming_split_by_contig(
         prefix=prefix,
         output_format=output_format,
         buffer_size=buffer_size,
+        use_sam_attributes=use_sam_attributes,
     ) as writer:
         read_count = 0
 

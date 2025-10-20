@@ -184,7 +184,7 @@ You can inspect these reads and select candidates to manually extend contig ends
 
 ```bash
 # Find clipped alignments containing motif 'TTAGGG' and write reads to separate fasta files for each reference contig end.
-samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG | teloclip extract --ref-idx ref.fa.fai --extract-reads --extract-dir split_overhangs_by_contig
+samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG | teloclip extract --ref-idx ref.fa.fai --extract-dir split_overhangs_by_contig --include-stats --count-motifs TTAGGG --stats-report
 ```
 
 **Automatically extend missing telomeres**
@@ -302,9 +302,10 @@ Options:
 Run `teloclip extract --help` to view the extract command options:
 
 ```code
-Usage: teloclip extract [OPTIONS] [SAMFILE]
+Usage: -c extract [OPTIONS] [SAMFILE]
 
-  Extract overhanging reads for each end of each reference contig.
+  Extract overhanging reads for each end of each reference contig. Reads are
+  always written to output files.
 
 Options:
   --ref-idx PATH                  Path to fai index for reference fasta. Index
@@ -312,8 +313,6 @@ Options:
                                   [required]
   --prefix TEXT                   Use this prefix for output files. Default:
                                   None.
-  --extract-reads                 If set, write overhang reads to fasta by
-                                  contig.
   --extract-dir PATH              Write extracted reads to this directory.
                                   Default: cwd.
   --min-clip INTEGER              Require clip to extend past ref contig end
@@ -321,7 +320,7 @@ Options:
   --max-break INTEGER             Tolerate max N unaligned bases before contig
                                   end.
   --min-anchor INTEGER            Minimum anchored alignment length required
-                                  (default: 500).
+                                  (default: 100).
   --min-mapq INTEGER              Minimum mapping quality required (default:
                                   0).
   --include-stats                 Include mapping quality, clip length, and
@@ -334,8 +333,8 @@ Options:
                                   (default: 1000).
   --output-format [fasta|fastq]   Output format for extracted sequences
                                   (default: fasta).
-  --stats-report PATH             Write extraction statistics to file. Use "-"
-                                  for stdout.
+  --stats-report                  Write extraction statistics to file in
+                                  output directory.
   --no-mask-overhangs             Do not convert overhang sequences to
                                   lowercase.
   --log-level [DEBUG|INFO|WARNING|ERROR]

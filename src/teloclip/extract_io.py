@@ -15,6 +15,202 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 
 
+class MultiFileSequenceWriter:
+    """
+    Context manager for writing sequences to multiple files organized by contig and end type.
+
+    This class creates separate output files for each contig and end type combination
+    (e.g., contig1_L.fasta, contig1_R.fasta) and manages file handles efficiently.
+
+    Parameters
+    ----------
+    base_dir : str or Path
+        Base directory where output files will be created.
+    prefix : str, optional
+        Prefix for output filenames. Default is "teloclip".
+    output_format : str, optional
+        Output format, either 'fasta' or 'fastq'. Default is 'fasta'.
+    buffer_size : int, optional
+        Buffer size for file writing. Default is 8192.
+    use_sam_attributes : bool, optional
+        Format statistics as SAM attributes for FASTQ output. Default is False.
+
+    Examples
+    --------
+    >>> with MultiFileSequenceWriter('/output', 'sample') as writer:
+    ...     writer.write_sequence('chr1', 'L', 'read1', 'ATCG', 'description')
+    """
+
+    def __init__(
+        self,
+        base_dir: Union[str, Path],
+        prefix: str = 'teloclip',
+        output_format: str = 'fasta',
+        buffer_size: int = 8192,
+        use_sam_attributes: bool = False,
+    ):
+        """Initialize the multi-file sequence writer."""
+        self.base_dir = Path(base_dir)
+        self.prefix = prefix
+        self.output_format = output_format.lower()
+        self.buffer_size = buffer_size
+        self.use_sam_attributes = use_sam_attributes
+        self.file_handles = {}
+        self.sequence_counts = defaultdict(int)
+
+        # Validate output format
+        if self.output_format not in ('fasta', 'fastq'):
+            raise ValueError(f'Unsupported output format: {self.output_format}')
+
+    def __enter__(self):
+        """
+        Enter context manager and create base directory.
+
+        Returns
+        -------
+        MultiFileSequenceWriter
+            Returns self for use in with statement.
+        """
+        self.base_dir.mkdir(parents=True, exist_ok=True)
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """
+        Exit context manager and close all file handles.
+
+        Parameters
+        ----------
+        exc_type : type or None
+            Exception type if an exception was raised, None otherwise.
+        exc_val : Exception or None
+            Exception value if an exception was raised, None otherwise.
+        exc_tb : traceback or None
+            Exception traceback if an exception was raised, None otherwise.
+        """
+        for handle in self.file_handles.values():
+            handle.close()
+        self.file_handles.clear()
+
+    def _get_file_handle(self, contig_name: str, end: str):
+        """
+        Get or create file handle for a specific contig and end combination.
+
+        Parameters
+        ----------
+        contig_name : str
+            Name of the contig.
+        end : str
+            End type ('L' for left, 'R' for right).
+
+        Returns
+        -------
+        file handle
+            Open file handle for writing.
+        """
+        key = (contig_name, end)
+
+        if key not in self.file_handles:
+            # Create filename
+            filename = f'{self.prefix}_{contig_name}_{end}.{self.output_format}'
+            filepath = self.base_dir / filename
+
+            # Open file handle
+            self.file_handles[key] = open(filepath, 'w', buffering=self.buffer_size)
+
+        return self.file_handles[key]
+
+    def write_sequence(
+        self,
+        contig_name: str,
+        end: str,
+        seq_id: str,
+        sequence: str,
+        description: str = '',
+        stats: Optional[Dict] = None,
+    ):
+        """
+        Write a sequence to the appropriate file.
+
+        Parameters
+        ----------
+        contig_name : str
+            Name of the contig.
+        end : str
+            End type ('L' for left, 'R' for right).
+        seq_id : str
+            Sequence identifier.
+        sequence : str
+            DNA sequence.
+        description : str, optional
+            Sequence description. Default is empty string.
+        stats : dict, optional
+            Statistics to include in sequence header.
+
+        Raises
+        ------
+        ValueError
+            If output format is not supported or required parameters are missing.
+        """
+        if not contig_name or not end or not seq_id or not sequence:
+            raise ValueError('contig_name, end, seq_id, and sequence are required')
+
+        # Get file handle
+        handle = self._get_file_handle(contig_name, end)
+
+        # Build header
+        header = seq_id
+        if description:
+            header += f' {description}'
+
+        # Add stats to header if provided
+        if stats:
+            if self.use_sam_attributes and self.output_format == 'fastq':
+                # Format as SAM attributes: tag:type:value
+                stats_parts = []
+                for k, v in stats.items():
+                    if isinstance(v, int):
+                        stats_parts.append(f'{k}:i:{v}')
+                    elif isinstance(v, float):
+                        stats_parts.append(f'{k}:f:{v}')
+                    else:
+                        stats_parts.append(f'{k}:Z:{v}')
+                stats_str = ' '.join(stats_parts)
+            else:
+                # Format as key=value pairs (default for FASTA or when SAM attributes disabled)
+                stats_str = ' '.join(f'{k}={v}' for k, v in stats.items())
+            header += f' {stats_str}'
+
+        if self.output_format == 'fasta':
+            # Write FASTA format
+            handle.write(f'>{header}\n')
+            # Write sequence in lines of 80 characters
+            for i in range(0, len(sequence), 80):
+                handle.write(f'{sequence[i : i + 80]}\n')
+
+        elif self.output_format == 'fastq':
+            # Write FASTQ format (with dummy quality scores)
+            quality = 'I' * len(sequence)  # Phred+33 quality score of 40
+            handle.write(f'@{header}\n')
+            handle.write(f'{sequence}\n')
+            handle.write('+\n')
+            handle.write(f'{quality}\n')
+
+        # Update counts
+        key = (contig_name, end)
+        self.sequence_counts[key] += 1
+
+    def get_sequence_counts(self) -> Dict[tuple, int]:
+        """
+        Get the count of sequences written for each contig-end combination.
+
+        Returns
+        -------
+        dict
+            Dictionary mapping (contig_name, end) tuples to sequence counts.
+        """
+        return dict(self.sequence_counts)
+
+
 class ExtractionStats:
     """Track extraction statistics and generate reports."""
 

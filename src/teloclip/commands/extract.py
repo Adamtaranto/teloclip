@@ -4,6 +4,7 @@ Extract sub-command for teloclip CLI.
 
 import logging
 import sys
+from pathlib import Path
 from typing import Dict
 
 import click
@@ -18,7 +19,8 @@ from ..seqops import read_fai, revComp
 
 
 @click.command(
-    'extract', help='Extract overhanging reads for each end of each reference contig.'
+    'extract',
+    help='Extract overhanging reads for each end of each reference contig. Reads are always written to output files.',
 )
 @click.argument('samfile', type=click.File('r'), default=sys.stdin)
 @click.option(
@@ -29,11 +31,6 @@ from ..seqops import read_fai, revComp
 )
 @click.option(
     '--prefix', type=str, help='Use this prefix for output files. Default: None.'
-)
-@click.option(
-    '--extract-reads',
-    is_flag=True,
-    help='If set, write overhang reads to fasta by contig.',
 )
 @click.option(
     '--extract-dir',
@@ -93,8 +90,8 @@ from ..seqops import read_fai, revComp
 )
 @click.option(
     '--stats-report',
-    type=click.Path(),
-    help='Write extraction statistics to file. Use "-" for stdout.',
+    is_flag=True,
+    help='Write extraction statistics to file in output directory.',
 )
 @click.option(
     '--no-mask-overhangs',
@@ -113,7 +110,6 @@ def extract_cmd(
     samfile,
     ref_idx,
     prefix,
-    extract_reads,
     extract_dir,
     min_clip,
     max_break,
@@ -133,7 +129,8 @@ def extract_cmd(
 
     Read SAM alignments and extracts soft-clipped sequences that
     extend beyond contig ends, with advanced filtering, motif analysis, and
-    comprehensive statistics reporting.
+    comprehensive statistics reporting. Overhang sequences are always written
+    to output files organized by contig and end type.
 
     Parameters
     ----------
@@ -145,8 +142,6 @@ def extract_cmd(
         Path to reference index file (.fai).
     prefix : str
         Prefix for output filenames.
-    extract_reads : bool
-        Extract and write overhang sequences.
     extract_dir : str
         Directory for output files.
     min_clip : int
@@ -167,8 +162,8 @@ def extract_cmd(
         I/O buffer size for writing.
     output_format : str
         Output format ('fasta' or 'fastq').
-    stats_report : str
-        Path for statistics report output.
+    stats_report : bool
+        Write extraction statistics to file in output directory.
     no_mask_overhangs : bool
         Disable overhang sequence masking.
     log_level : str
@@ -178,20 +173,20 @@ def extract_cmd(
     --------
 
     # Basic extraction to current directory
-    teloclip extract --ref-idx ref.fa.fai --extract-reads input.sam
+    teloclip extract --ref-idx ref.fa.fai input.sam
 
     # Extract with motif analysis and statistics
-    teloclip extract --ref-idx ref.fa.fai --extract-reads --include-stats \\
-        --count-motifs TTAGGG,CCCTAA --stats-report stats.txt input.sam
+    teloclip extract --ref-idx ref.fa.fai --include-stats \\
+        --count-motifs TTAGGG,CCCTAA --stats-report input.sam
 
     # Extract with quality filtering and custom output
-    teloclip extract --ref-idx ref.fa.fai --extract-reads \\
+    teloclip extract --ref-idx ref.fa.fai \\
         --extract-dir overhangs/ --prefix sample1 --min-mapq 20 \\
         --min-anchor 1000 --output-format fastq input.sam
 
     # Read from stdin with fuzzy motif matching
     samtools view -h input.bam | teloclip extract --ref-idx ref.fa.fai \\
-        --extract-reads --count-motifs TTAGGG --fuzzy-count
+        --count-motifs TTAGGG --fuzzy-count
     """
 
     try:
@@ -251,7 +246,7 @@ def extract_cmd(
                 for motif in unique_motifs:
                     if fuzzy_count:
                         pattern = make_fuzzy_motif_regex(motif)
-                        pattern_name = f'{motif} (fuzzy)'
+                        pattern_name = f'{motif}_fuzzy'
                         logging.debug(f'Created fuzzy pattern for {motif}: {pattern}')
                     else:
                         pattern = make_motif_regex(motif)
@@ -283,50 +278,41 @@ def extract_cmd(
             stats=stats,
         )
 
-        if extract_reads:
-            logging.info('Writing overhang reads by contig.')
+        logging.info('Writing overhang reads by contig.')
 
-            # Use enhanced extraction function
-            final_stats = enhanced_streaming_split_by_contig(
-                alignments=alignments,
-                output_dir=extract_dir,
-                prefix=prefix,
-                output_format=output_format,
-                buffer_size=buffer_size,
-                include_stats=include_stats,
-                mask_overhangs=not no_mask_overhangs,
-                existing_stats=stats,
-            )
+        # Do not mask overhangs if output type is FASTQ
+        if output_format == 'fastq':
+            no_mask_overhangs = True
+            logging.info('Disabling overhang masking for FASTQ output.')
 
-        else:
-            # Process alignments without writing files (for statistics only)
-            for alignment in alignments:
-                stats.record_alignment(
-                    contig_name=alignment['contig_name'],
-                    is_left=(alignment['end'] == 'L'),
-                    motif_counts=alignment.get('motif_counts'),
-                )
-            final_stats = stats
-            logging.info(
-                'Processing complete. Use --extract-reads to write output files.'
-            )
+        # Use enhanced extraction function
+        final_stats = enhanced_streaming_split_by_contig(
+            alignments=alignments,
+            output_dir=extract_dir,
+            prefix=prefix,
+            output_format=output_format,
+            buffer_size=buffer_size,
+            include_stats=include_stats,
+            mask_overhangs=not no_mask_overhangs,
+            existing_stats=stats,
+            use_sam_attributes=(include_stats and output_format == 'fastq'),
+        )
 
         # Generate and output statistics report
         reference_contigs = set(contig_info.keys())
-        if stats_report or not extract_reads:
+        if stats_report:
             report_content = final_stats.generate_report(reference_contigs)
 
-            if stats_report:
-                if stats_report == '-':
-                    logging.info('Writing statistics report to stdout')
-                    print(report_content)
-                else:
-                    logging.info(f'Writing statistics report to {stats_report}')
-                    with open(stats_report, 'w') as f:
-                        f.write(report_content)
-            elif not extract_reads:
-                # Always show stats if not extracting files
-                print(report_content)
+            # Build stats filename using extract_dir and prefix
+            stats_dir = extract_dir if extract_dir else '.'
+            stats_filename = f'{prefix}_stats.txt' if prefix else 'teloclip_stats.txt'
+            stats_path = Path(stats_dir) / stats_filename
+
+            logging.info(f'Writing statistics report to {stats_path}')
+            # Ensure directory exists
+            stats_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(stats_path, 'w') as f:
+                f.write(report_content)
 
         # Final summary
         total_overhangs = final_stats.left_overhangs + final_stats.right_overhangs
