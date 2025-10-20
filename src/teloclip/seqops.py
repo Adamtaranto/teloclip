@@ -6,8 +6,6 @@ and motif analysis in DNA sequences. Includes utilities for FASTA processing,
 sequence transformations, and clipping analysis.
 """
 
-from itertools import groupby
-
 from teloclip.motifs import check_sequence_for_patterns
 from teloclip.utils import isfile
 
@@ -105,93 +103,6 @@ def revComp(seq):
         )
 
     return revcompl(seq)
-
-
-def writeClip(idx, zpad, gap, seq, maplen):
-    """
-    Format and print clipped sequence information.
-
-    Parameters
-    ----------
-    idx : int
-        Sequence index number.
-    zpad : int
-        Zero-padding width for the index.
-    gap : int
-        Gap size to pad with dashes.
-    seq : str
-        Sequence string to output.
-    maplen : int
-        Length of reference sequence covered by alignment.
-
-    Returns
-    -------
-    None
-        Prints formatted output to stdout.
-    """
-    # leftpad idx ID
-    padIdx = str(idx).zfill(zpad) + ':'
-    # If gap between aln end(R) or start(L) and contig end, left pad softclip with '-'
-    padseq = '-' * gap + seq
-    # Format length of ref covered by alingment
-    readlen = 'LEN=' + str(maplen).rjust(6)
-    print('\t'.join([padIdx, readlen, padseq]))
-
-
-def fasta2dict(fasta_name):
-    """
-    Parse FASTA file into a dictionary of sequences.
-
-    Parameters
-    ----------
-    fasta_name : str
-        Path to the FASTA file to parse.
-
-    Returns
-    -------
-    dict
-        Dictionary where keys are sequence names and values are tuples
-        of (header, sequence). The header includes the full FASTA header
-        line and sequence is the concatenated sequence string.
-    """
-    fh = open(fasta_name)
-    faiter = (x[1] for x in groupby(fh, lambda line: line[0] == '>'))
-    contigDict = {}
-    for header in faiter:
-        # Drop the ">"
-        # Split on whitespace and take first item as name
-        header = header.__next__()[1:].strip()
-        name = header.split()[0]
-        # Join all sequence lines to one.
-        seq = ''.join(s.strip() for s in faiter.__next__())
-        contigDict[name] = (header, seq)
-    return contigDict
-
-
-def writefasta(outfile, name, seq, length=80):
-    """
-    Write a sequence to a file in FASTA format.
-
-    Parameters
-    ----------
-    outfile : file object
-        Open file handle to write to.
-    name : str
-        Sequence name for the FASTA header.
-    seq : str
-        Sequence string to write.
-    length : int, optional
-        Line length for sequence wrapping. Default is 80.
-
-    Returns
-    -------
-    None
-        Writes directly to the file handle.
-    """
-    outfile.write('>' + str(name) + '\n')
-    while len(seq) > 0:
-        outfile.write(seq[:length] + '\n')
-        seq = seq[length:]
 
 
 def read_fai(fai):

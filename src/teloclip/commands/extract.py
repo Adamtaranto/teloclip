@@ -1,13 +1,5 @@
 """
 Extract sub-command for teloclip CLI.
-
-This refactored version provides significant performance improvements and new features:
-- Memory-efficient I/O with BioPython SeqIO integration
-- Rich sequence headers with mapping quality and motif statistics
-- Motif analysis integration with exact and fuzzy matching
-- Comprehensive statistics reporting
-- Quality filtering and validation
-- Support for FASTA and FASTQ output formats
 """
 
 import logging
@@ -17,7 +9,6 @@ from typing import Dict
 import click
 
 from ..extract_io import ExtractionStats
-from ..logs import init_logging
 from ..motifs import make_fuzzy_motif_regex, make_motif_regex
 from ..samops import (
     EnhancedStreamingSamFilter,
@@ -63,9 +54,9 @@ from ..seqops import read_fai, revComp
 )
 @click.option(
     '--min-anchor',
-    default=500,
+    default=100,
     type=int,
-    help='Minimum anchored alignment length required (default: 500).',
+    help='Minimum anchored alignment length required (default: 100).',
 )
 @click.option(
     '--min-mapq',
@@ -140,8 +131,8 @@ def extract_cmd(
     """
     Extract overhanging reads for each end of each reference contig.
 
-    This enhanced version reads SAM/BAM alignments and extracts soft-clipped sequences
-    that extend beyond contig ends, with advanced filtering, motif analysis, and
+    Read SAM alignments and extracts soft-clipped sequences that
+    extend beyond contig ends, with advanced filtering, motif analysis, and
     comprehensive statistics reporting.
 
     Parameters
@@ -202,15 +193,12 @@ def extract_cmd(
     samtools view -h input.bam | teloclip extract --ref-idx ref.fa.fai \\
         --extract-reads --count-motifs TTAGGG --fuzzy-count
     """
-    # Initialize logging
-    init_logging(level=getattr(logging, log_level.upper()))
-    logger = logging.getLogger(__name__)
 
     try:
         # Load reference contig info
-        logger.info(f'Loading reference contig info from: {ref_idx}')
+        logging.info(f'Loading reference contig info from: {ref_idx}')
         contig_info = read_fai(ref_idx)
-        logger.info(f'Loaded {len(contig_info)} contigs from reference')
+        logging.info(f'Loaded {len(contig_info)} contigs from reference')
 
         # Prepare motif patterns if specified
         motif_patterns: Dict[str, str] = {}
@@ -221,7 +209,7 @@ def extract_cmd(
                 for motif in count_motifs.split(',')
                 if motif.strip()
             ]
-            logger.info(f'Processing motif list: {", ".join(raw_motifs)}')
+            logging.info(f'Processing motif list: {", ".join(raw_motifs)}')
 
             # Validate motifs - must contain only A, T, G, C
             valid_bases = {'A', 'T', 'G', 'C'}
@@ -232,16 +220,16 @@ def extract_cmd(
                     continue
                 if not all(base in valid_bases for base in motif):
                     invalid_bases = set(motif) - valid_bases
-                    logger.warning(
+                    logging.warning(
                         f'Skipping invalid motif "{motif}": contains invalid bases {invalid_bases}'
                     )
                     continue
                 validated_motifs.append(motif)
 
             if not validated_motifs:
-                logger.warning('No valid motifs found after validation')
+                logging.warning('No valid motifs found after validation')
             else:
-                logger.info(
+                logging.info(
                     f'Validated {len(validated_motifs)} motifs: {", ".join(validated_motifs)}'
                 )
 
@@ -251,11 +239,11 @@ def extract_cmd(
                     all_motifs.add(motif)
                     rev_comp = revComp(motif)
                     all_motifs.add(rev_comp)
-                    logger.debug(f'Motif: {motif} -> Reverse complement: {rev_comp}')
+                    logging.debug(f'Motif: {motif} -> Reverse complement: {rev_comp}')
 
                 # Convert to sorted list for consistent ordering
                 unique_motifs = sorted(all_motifs)
-                logger.info(
+                logging.info(
                     f'Final motif set (including reverse complements): {", ".join(unique_motifs)}'
                 )
 
@@ -264,18 +252,18 @@ def extract_cmd(
                     if fuzzy_count:
                         pattern = make_fuzzy_motif_regex(motif)
                         pattern_name = f'{motif} (fuzzy)'
-                        logger.debug(f'Created fuzzy pattern for {motif}: {pattern}')
+                        logging.debug(f'Created fuzzy pattern for {motif}: {pattern}')
                     else:
                         pattern = make_motif_regex(motif)
                         pattern_name = motif
-                        logger.debug(f'Created exact pattern for {motif}: {pattern}')
+                        logging.debug(f'Created exact pattern for {motif}: {pattern}')
                     motif_patterns[pattern_name] = pattern
 
-                logger.info(
+                logging.info(
                     f'Created {len(motif_patterns)} motif patterns for analysis'
                 )
                 if fuzzy_count:
-                    logger.info(
+                    logging.info(
                         'Using fuzzy matching (±1 character variation) for motif counting'
                     )
 
@@ -283,7 +271,7 @@ def extract_cmd(
         stats = ExtractionStats()
 
         # Create enhanced streaming filter
-        logger.info('Processing alignments. Searching for overhangs.')
+        logging.info('Processing alignments. Searching for overhangs.')
         alignments = EnhancedStreamingSamFilter(
             samfile=samfile,
             contigs=contig_info,
@@ -296,7 +284,7 @@ def extract_cmd(
         )
 
         if extract_reads:
-            logger.info('Writing overhang reads by contig.')
+            logging.info('Writing overhang reads by contig.')
 
             # Use enhanced extraction function
             final_stats = enhanced_streaming_split_by_contig(
@@ -307,6 +295,7 @@ def extract_cmd(
                 buffer_size=buffer_size,
                 include_stats=include_stats,
                 mask_overhangs=not no_mask_overhangs,
+                existing_stats=stats,
             )
 
         else:
@@ -318,20 +307,21 @@ def extract_cmd(
                     motif_counts=alignment.get('motif_counts'),
                 )
             final_stats = stats
-            logger.info(
+            logging.info(
                 'Processing complete. Use --extract-reads to write output files.'
             )
 
         # Generate and output statistics report
+        reference_contigs = set(contig_info.keys())
         if stats_report or not extract_reads:
-            report_content = final_stats.generate_report()
+            report_content = final_stats.generate_report(reference_contigs)
 
             if stats_report:
                 if stats_report == '-':
-                    logger.info('Writing statistics report to stdout')
+                    logging.info('Writing statistics report to stdout')
                     print(report_content)
                 else:
-                    logger.info(f'Writing statistics report to {stats_report}')
+                    logging.info(f'Writing statistics report to {stats_report}')
                     with open(stats_report, 'w') as f:
                         f.write(report_content)
             elif not extract_reads:
@@ -339,21 +329,43 @@ def extract_cmd(
                 print(report_content)
 
         # Final summary
-        logger.info(
-            f'Extraction complete: processed {final_stats.total_alignments} alignments, '
-            f'found {final_stats.left_overhangs + final_stats.right_overhangs} overhangs '
-            f'from {len(final_stats.contigs_processed)} contigs'
+        total_overhangs = final_stats.left_overhangs + final_stats.right_overhangs
+        contigs_with_zero_overhangs = len(reference_contigs) - len(
+            final_stats.contigs_with_overhangs
         )
+        logging.info(
+            f'Extraction complete: processed {final_stats.total_sam_lines} SAM lines, '
+            f'found {total_overhangs} overhangs from {len(final_stats.contigs_with_overhangs)} contigs'
+        )
+        logging.info(
+            f'Contig summary: {len(reference_contigs)} total, '
+            f'{len(final_stats.contigs_with_overhangs)} with overhangs, '
+            f'{contigs_with_zero_overhangs} with no overhangs'
+        )
+
+        # Show filter statistics if any alignments were filtered
+        if final_stats.total_filtered > 0:
+            logging.info('Filtering summary:')
+            for filter_type, count in final_stats.filter_counts.items():
+                if count > 0:
+                    percentage = (
+                        (count / final_stats.total_sam_lines) * 100
+                        if final_stats.total_sam_lines > 0
+                        else 0
+                    )
+                    logging.info(
+                        f'  - {filter_type.replace("_", " ").title()}: {count} ({percentage:.1f}%)'
+                    )
 
         if motif_patterns and final_stats.motif_matches:
             total_motif_matches = sum(final_stats.motif_matches.values())
-            logger.info(
+            logging.info(
                 f'Motif analysis: found {total_motif_matches} motif matches across all patterns'
             )
 
     except FileNotFoundError as e:
-        logger.error(f'File not found: {e}')
+        logging.error(f'File not found: {e}')
         raise click.ClickException(str(e)) from e
     except Exception as e:
-        logger.error(f'Error during extract operation: {e}')
+        logging.error(f'Error during extract operation: {e}')
         raise click.ClickException(str(e)) from e

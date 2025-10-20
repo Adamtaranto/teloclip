@@ -51,40 +51,6 @@ def setup_logger(level):
     return logger
 
 
-def validate_input_files(sam_file: Path, reference_fasta: Path, ref_idx: Path) -> None:
-    """
-    Validate that required input files exist and are readable.
-
-    Parameters
-    ----------
-    sam_file : Path
-        Path to SAM file, or '-' for stdin.
-    reference_fasta : Path
-        Path to reference FASTA file.
-    ref_idx : Path
-        Path to reference FASTA index (.fai) file.
-
-    Returns
-    -------
-    None
-        Function validates input files and raises exceptions on failure.
-
-    Raises
-    ------
-    click.ClickException
-        If any required input file is not found.
-    """
-    # Allow '-' for stdin SAM input
-    if str(sam_file) != '-' and not sam_file.exists():
-        raise click.ClickException(f'SAM file not found: {sam_file}')
-
-    if not reference_fasta.exists():
-        raise click.ClickException(f'Reference FASTA not found: {reference_fasta}')
-
-    if not ref_idx.exists():
-        raise click.ClickException(f'Reference index not found: {ref_idx}')
-
-
 def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
     """
     Validate that output directories exist and are writable.

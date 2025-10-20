@@ -4,19 +4,15 @@ Tests sequence operation functions including FASTA I/O,
 reverse complement, and sequence filtering utilities.
 """
 
-import unittest.mock
 from unittest.mock import mock_open, patch
 
 from teloclip.seqops import (
     addRevComplement,
-    fasta2dict,
     filterList,
     isMotifInClip,
     makeMask,
     read_fai,
     revComp,
-    writeClip,
-    writefasta,
 )
 
 
@@ -116,103 +112,6 @@ class TestRevComp:
         result = revComp('')
         expected = ''
         assert result == expected
-
-
-class TestWriteClip:
-    """Test clip writing function."""
-
-    def test_write_clip_basic(self, capsys):
-        """Test basic clip writing."""
-        writeClip(1, 4, 10, 'ATCG', 20)
-
-        # Capture the printed output
-        captured = capsys.readouterr()
-        output = captured.out.strip()
-
-        # Verify the output format
-        assert '0001:' in output  # Zero-padded index
-        assert 'ATCG' in output  # Sequence
-        assert 'LEN=' in output  # Length field
-        assert '----------ATCG' in output  # Gap padding with sequence
-
-    def test_write_clip_different_padding(self, capsys):
-        """Test clip writing with different zero padding."""
-        writeClip(99, 3, 5, 'TTAGGG', 100)
-
-        captured = capsys.readouterr()
-        output = captured.out.strip()
-
-        assert '099:' in output  # Zero-padded to 3 digits
-        assert 'TTAGGG' in output  # Sequence
-        assert '-----TTAGGG' in output  # Gap padding
-
-
-class TestFasta2dict:
-    """Test FASTA file reading function."""
-
-    @patch(
-        'builtins.open',
-        new_callable=mock_open,
-        read_data='>seq1\nATCGATCG\n>seq2\nTTAGGGCC\n',
-    )
-    def test_fasta2dict_simple(self, mock_file):
-        """Test reading simple FASTA file."""
-        result = fasta2dict('test.fasta')
-
-        # Function returns dict with (header, sequence) tuples as values
-        expected = {'seq1': ('seq1', 'ATCGATCG'), 'seq2': ('seq2', 'TTAGGGCC')}
-        assert result == expected
-
-    @patch(
-        'builtins.open',
-        new_callable=mock_open,
-        read_data='>seq1\nATCG\nATCG\n>seq2\nTTAG\nGGCC\n',
-    )
-    def test_fasta2dict_multiline_sequences(self, mock_file):
-        """Test reading FASTA with multi-line sequences."""
-        result = fasta2dict('test.fasta')
-
-        expected = {'seq1': ('seq1', 'ATCGATCG'), 'seq2': ('seq2', 'TTAGGGCC')}
-        assert result == expected
-
-    @patch('builtins.open', new_callable=mock_open, read_data='')
-    def test_fasta2dict_empty_file(self, mock_file):
-        """Test reading empty FASTA file."""
-        result = fasta2dict('empty.fasta')
-
-        assert result == {}
-
-
-class TestWriteFasta:
-    """Test FASTA writing function."""
-
-    @patch('builtins.open', new_callable=mock_open)
-    def test_write_fasta_simple(self, mock_file):
-        """Test writing simple FASTA entry."""
-        file_obj = mock_file.return_value
-        writefasta(file_obj, 'test_seq', 'ATCGATCG')
-
-        # Check that the right content was written
-        expected_calls = [
-            unittest.mock.call('>test_seq\n'),
-            unittest.mock.call('ATCGATCG\n'),
-        ]
-        file_obj.write.assert_has_calls(expected_calls)
-
-    @patch('builtins.open', new_callable=mock_open)
-    def test_write_fasta_long_sequence(self, mock_file):
-        """Test writing FASTA with line wrapping."""
-        file_obj = mock_file.return_value
-        long_seq = 'A' * 100  # 100 A's
-        writefasta(file_obj, 'long_seq', long_seq, length=50)
-
-        # Check that sequence was wrapped at 50 characters
-        expected_calls = [
-            unittest.mock.call('>long_seq\n'),
-            unittest.mock.call('A' * 50 + '\n'),
-            unittest.mock.call('A' * 50 + '\n'),
-        ]
-        file_obj.write.assert_has_calls(expected_calls)
 
 
 class TestReadFai:
@@ -478,23 +377,6 @@ class TestSeqopsIntegration:
         # All manual reverse complements should be in expanded list
         for rev_comp in manual_rev_comps:
             assert rev_comp in expanded_motifs
-
-    @patch('builtins.open', new_callable=mock_open, read_data='>test_seq\nATCGATCG\n')
-    def test_fasta_write_read_consistency(self, mock_file):
-        """Test FASTA write and read consistency."""
-        # Test reading
-        sequences = fasta2dict('test.fasta')
-
-        # fasta2dict returns dict with (header, sequence) tuples as values
-        header, sequence = sequences['test_seq']
-
-        # Test writing (mock the file operations)
-        mock_file.reset_mock()
-        file_obj = mock_file.return_value
-        writefasta(file_obj, header, sequence)
-
-        # Check that write operations were called
-        assert file_obj.write.called
 
     def test_mask_and_filter_integration(self):
         """Test mask creation and filtering integration."""

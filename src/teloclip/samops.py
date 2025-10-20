@@ -56,9 +56,23 @@ def processSamlines(
         Function processes input and writes filtered results to stdout.
         Logging information is provided about processing statistics.
     """
+    # Compile motif regex patterns and include min_repeats
+    # for faster repeated matching.
+    if motif_list:
+        if min_repeats > 1:
+            logging.info(f'Applying minimum repeats filter: {min_repeats}')
+            motif_list = [
+                rf'({motif})' + r'{' + f'{min_repeats},' + r'}' for motif in motif_list
+            ]
+        compiled_motifs = [re.compile(motif) for motif in motif_list]
+    else:
+        compiled_motifs = []
+
+    logging.info(
+        f'Compiled motif patterns: {", ".join([str(motif) for motif in compiled_motifs])}'
+    )
+
     # SAM line index keys
-    if motif_list is None:
-        motif_list = []
     SAM_QNAME = 0
     SAM_RNAME = 2
     SAM_POS = 3
@@ -143,12 +157,12 @@ def processSamlines(
             elif motif_list and keepLine:
                 if isMotifInClip(
                     samline,
-                    motif_list,
+                    compiled_motifs,
                     leftClip,
                     rightClip,
                     leftClipLen,
                     rightClipLen,
-                    min_repeats,
+                    1,  # min_repeats already applied in compiled_motifs
                 ):
                     sys.stdout.write(line)
                     motifCount += 1
@@ -163,6 +177,7 @@ def processSamlines(
             f'Processed {samlineCount} SAM records.\n'
             f'Found {keepCount} alignments soft-clipped at contig ends.\n'
             f'Filtered {anchorFilteredCount} alignments below min_anchor threshold ({min_anchor}bp).\n'
+            f'Found {bothCount} alignments spanning entire contigs.\n'
             f'Output {motifCount} alignments containing motif matches.\n'
             f'Discarded {removeCount} total alignments after all filtering.'
         )
@@ -585,17 +600,25 @@ class EnhancedStreamingSamFilter:
             if line.startswith('@'):
                 continue
 
+            # Count all non-header SAM lines processed
+            if self.stats:
+                self.stats.record_sam_line()
+
             try:
                 samline = line.strip().split('\t')
 
                 # Basic validation
                 if len(samline) < 11:
                     logging.warning(f'Malformed SAM line: {line.strip()}')
+                    if self.stats:
+                        self.stats.record_filter('malformed')
                     continue
 
                 # Check for soft clipping (and no hard clipping)
                 cigar = samline[self.SAM_CIGAR]
                 if 'S' not in cigar or 'H' in cigar:
+                    if self.stats:
+                        self.stats.record_filter('soft_clip')
                     continue
 
                 # Quality filtering
@@ -696,6 +719,7 @@ def enhanced_streaming_split_by_contig(
     buffer_size: int = 1000,
     include_stats: bool = False,
     mask_overhangs: bool = True,
+    existing_stats: Optional['ExtractionStats'] = None,
 ) -> 'ExtractionStats':
     """
     Efficiently write overhang reads using file handles and buffering.
@@ -724,6 +748,8 @@ def enhanced_streaming_split_by_contig(
         Whether to include statistics in sequence headers.
     mask_overhangs : bool
         Whether to convert overhang sequences to lowercase.
+    existing_stats : ExtractionStats, optional
+        Existing statistics object to update (preserves SAM line counts).
 
     Returns
     -------
@@ -732,7 +758,8 @@ def enhanced_streaming_split_by_contig(
     """
     from .extract_io import ExtractionStats, MultiFileSequenceWriter
 
-    stats = ExtractionStats()
+    # Use existing stats if provided, otherwise create new one
+    stats = existing_stats if existing_stats is not None else ExtractionStats()
 
     # Initialize multi-file writer
     with MultiFileSequenceWriter(
@@ -799,5 +826,6 @@ def enhanced_streaming_split_by_contig(
                 motif_counts=alignment.get('motif_counts'),
             )
 
-    logging.info(f'Total alignments processed: {read_count}')
+    logging.info(f'Total alignments processed: {stats.total_sam_lines}')
+    logging.info(f'Alignments with valid overhangs: {read_count}')
     return stats
