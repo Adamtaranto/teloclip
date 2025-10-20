@@ -10,13 +10,14 @@ to avoid loading entire genomes into memory.
 
 import logging
 from pathlib import Path
+import re
 import sys
 from typing import Dict, List
 
 import click
+import pysam
 
 from ..analysis import ContigStats, calculate_overhang_statistics
-from ..logs import init_logging
 from ..motifs import make_fuzzy_motif_regex, make_motif_regex
 from ..seqops import read_fai, revComp
 from ..streaming_analysis import (
@@ -29,26 +30,6 @@ from ..streaming_io import (
     copy_unmodified_contigs,
     validate_indexed_files,
 )
-
-
-def setup_logger(level):
-    """
-    Setup logger with the specified logging level.
-
-    Parameters
-    ----------
-    level : int
-        Logging level (e.g., logging.INFO, logging.DEBUG).
-
-    Returns
-    -------
-    logging.Logger
-        Configured logger instance.
-    """
-    init_logging()
-    logger = logging.getLogger()
-    logger.setLevel(level)
-    return logger
 
 
 def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
@@ -217,17 +198,94 @@ def generate_extension_report(
     return '\n'.join(report_lines)
 
 
+def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern]:
+    """
+    Generate motif regex patterns from a comma-delimited string.
+
+    Parameters
+    ----------
+    motif_str : str
+        Comma-delimited motif sequences.
+    fuzzy : bool, optional
+        Whether to use fuzzy matching allowing ±1 character variation. Default is False.
+
+    Returns
+    -------
+    Dict[str, re.Pattern]
+        Dictionary mapping motif sequences to compiled regex patterns.
+    """
+
+    # Initialize motif patterns dictionary
+    motif_patterns = {}
+    # Parse comma-delimited motifs
+    raw_motifs = [
+        motif.strip().upper() for motif in motif_str.split(',') if motif.strip()
+    ]
+    logging.info(f'Processing motif list: {", ".join(raw_motifs)}')
+
+    # Validate motifs - must contain only A, T, G, C
+    valid_bases = {'A', 'T', 'G', 'C'}
+    validated_motifs = []
+
+    for motif in raw_motifs:
+        if not motif:  # Skip empty motifs
+            continue
+        if not all(base in valid_bases for base in motif):
+            invalid_bases = set(motif) - valid_bases
+            logging.warning(
+                f'Skipping invalid motif "{motif}": contains invalid bases {invalid_bases}'
+            )
+            continue
+        validated_motifs.append(motif)
+
+    if not validated_motifs:
+        logging.warning('No valid motifs found after validation')
+    else:
+        logging.info(
+            f'Validated {len(validated_motifs)} motifs: {", ".join(validated_motifs)}'
+        )
+
+        # Add reverse complements and create unique set
+        all_motifs = set()
+        for motif in validated_motifs:
+            all_motifs.add(motif)
+            rev_comp = revComp(motif)
+            all_motifs.add(rev_comp)
+            logging.debug(f'Motif: {motif} -> Reverse complement: {rev_comp}')
+
+        # Convert to sorted list for consistent ordering
+        unique_motifs = sorted(all_motifs)
+        logging.info(
+            f'Final motif set (including reverse complements): {", ".join(unique_motifs)}'
+        )
+
+        # Create regex patterns for each unique motif
+        for motif in unique_motifs:
+            if fuzzy:
+                pattern = make_fuzzy_motif_regex(motif)
+                pattern_name = f'{motif}_fuzzy'
+                logging.debug(f'Created fuzzy pattern for {motif}: {pattern}')
+            else:
+                pattern = make_motif_regex(motif)
+                pattern_name = motif
+                logging.debug(f'Created exact pattern for {motif}: {pattern}')
+
+            motif_patterns[pattern_name] = pattern
+
+        logging.info(f'Created {len(motif_patterns)} motif patterns for analysis')
+        if fuzzy:
+            logging.info(
+                'Using fuzzy matching (±1 character variation) for motif counting'
+            )
+
+    return motif_patterns
+
+
 @click.command(
     help='Extend contigs using overhang analysis from soft-clipped alignments.'
 )
 @click.argument('bam_file', type=click.Path(exists=True, path_type=Path))
 @click.argument('reference_fasta', type=click.Path(exists=True, path_type=Path))
-@click.option(
-    '--ref-idx',
-    required=True,
-    type=click.Path(exists=True, path_type=Path),
-    help='Path to fai index for reference fasta',
-)
 @click.option(
     '--output-fasta', type=click.Path(path_type=Path), help='Extended FASTA output file'
 )
@@ -272,8 +330,8 @@ def generate_extension_report(
 @click.option(
     '--min-anchor',
     type=int,
-    default=500,
-    help='Minimum anchor length required for alignment (default: 500)',
+    default=100,
+    help='Minimum anchor length required for alignment (default: 100)',
 )
 @click.option(
     '--dry-run', is_flag=True, help='Report extensions without modifying sequences'
@@ -288,12 +346,17 @@ def generate_extension_report(
     is_flag=True,
     help='Use fuzzy motif matching allowing ±1 character variation when counting motifs',
 )
+@click.option(
+    '--log-level',
+    default='INFO',
+    type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR'], case_sensitive=False),
+    help='Logging level (default: INFO).',
+)
 @click.pass_context
 def extend(
     ctx,
     bam_file,
     reference_fasta,
-    ref_idx,
     output_fasta,
     stats_report,
     exclude_outliers,
@@ -306,145 +369,87 @@ def extend(
     dry_run,
     count_motifs,
     fuzzy_count,
+    log_level,
 ):
     """
-    Extend contigs using overhang analysis from soft-clipped alignments.
+    Extend contigs based on alignment overhangs.
 
-    This command analyzes soft-clipped alignments to identify overhanging sequences
-    that extend beyond contig ends, then automatically extends contigs using the
-    longest suitable overhangs.
-
-    This version uses streaming I/O and indexed access for memory-efficient
-    processing of large genomes.
+    This command analyzes soft-clipped reads aligned to contig ends to extend
+    sequences where there is sufficient evidence of consensus sequence beyond
+    the current contig boundaries.
 
     Parameters
     ----------
     ctx : click.Context
         Click context object.
-    bam_file : Path
-        Path to indexed BAM file (.bai index must exist).
-    reference_fasta : Path
-        Path to indexed reference FASTA file (.fai index must exist).
-    ref_idx : Path
-        Path to reference FASTA index (.fai) file.
-    output_fasta : Path
-        Path where extended FASTA will be written.
-    stats_report : Path
-        Path where statistics report will be written.
+    bam_file : str
+        Path to sorted and indexed BAM file.
+    reference_fasta : str
+        Path to reference FASTA file (must be indexed).
+    output_fasta : str
+        Path for output extended FASTA file.
+    stats_report : str
+        Path for output statistics report.
     exclude_outliers : bool
-        Whether to exclude outlier contigs from extension.
+        Exclude outlier overhangs from analysis.
     outlier_threshold : float
-        Threshold for outlier detection.
+        Z-score threshold for outlier detection.
     min_overhangs : int
         Minimum number of overhangs required for extension.
     max_homopolymer : int
-        Maximum homopolymer length to allow in extensions.
+        Maximum homopolymer length allowed in extensions.
     min_extension : int
-        Minimum extension length required.
+        Minimum extension length to report.
     max_break : int
-        Maximum gap allowed between alignment and contig end.
+        Maximum distance from contig end to search for overhangs.
     min_anchor : int
-        Minimum anchor length required for alignment.
+        Minimum anchor length in aligned portion.
     dry_run : bool
-        If True, analyze but don't modify contigs.
-    count_motifs : str
-        Comma-delimited motif sequences to count in overhang regions.
-    fuzzy_count : bool
-        Use fuzzy motif matching allowing ±1 character variation when counting motifs.
+        Perform analysis without writing output files.
+    count_motifs : bool
+        Count telomeric motifs in extensions.
+    fuzzy_count : int
+        Number of mismatches allowed in motif counting.
+    log_level : str
+        Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
     """
-    import pysam
+    from ..logs import init_logging
 
-    logger = setup_logger(ctx.obj.get('log_level', 'INFO'))
+    # Initialize logging for this command
+    init_logging(log_level)
+
+    ctx.ensure_object(dict)
 
     try:
         # Validate indexed files
-        logger.info('Validating indexed input files...')
+        logging.info('Validating indexed input files...')
         is_valid, error_msg = validate_indexed_files(reference_fasta, bam_file)
         if not is_valid:
             raise click.ClickException(error_msg)
+
+        # Set ref_idx as the reference FASTA with additional suffix .fai
+        ref_idx = reference_fasta.parent / (reference_fasta.name + '.fai')
 
         # Validate output directories
         if output_fasta or stats_report:
             validate_output_directories(output_fasta, stats_report)
 
-        logger.info('Reading reference genome index...')
+        logging.info('Reading reference genome index...')
         contig_dict = read_fai(ref_idx)
-        logger.info(f'Loaded {len(contig_dict)} contigs from reference')
+        logging.info(f'Loaded {len(contig_dict)} contigs from reference')
 
         # Prepare motif patterns if specified
         motif_patterns = {}
         if count_motifs:
-            # Parse comma-delimited motifs
-            raw_motifs = [
-                motif.strip().upper()
-                for motif in count_motifs.split(',')
-                if motif.strip()
-            ]
-            logger.info(f'Processing motif list: {", ".join(raw_motifs)}')
-
-            # Validate motifs - must contain only A, T, G, C
-            valid_bases = {'A', 'T', 'G', 'C'}
-            validated_motifs = []
-
-            for motif in raw_motifs:
-                if not motif:  # Skip empty motifs
-                    continue
-                if not all(base in valid_bases for base in motif):
-                    invalid_bases = set(motif) - valid_bases
-                    logger.warning(
-                        f'Skipping invalid motif "{motif}": contains invalid bases {invalid_bases}'
-                    )
-                    continue
-                validated_motifs.append(motif)
-
-            if not validated_motifs:
-                logger.warning('No valid motifs found after validation')
-            else:
-                logger.info(
-                    f'Validated {len(validated_motifs)} motifs: {", ".join(validated_motifs)}'
-                )
-
-                # Add reverse complements and create unique set
-                all_motifs = set()
-                for motif in validated_motifs:
-                    all_motifs.add(motif)
-                    rev_comp = revComp(motif)
-                    all_motifs.add(rev_comp)
-                    logger.debug(f'Motif: {motif} -> Reverse complement: {rev_comp}')
-
-                # Convert to sorted list for consistent ordering
-                unique_motifs = sorted(all_motifs)
-                logger.info(
-                    f'Final motif set (including reverse complements): {", ".join(unique_motifs)}'
-                )
-
-                # Create regex patterns for each unique motif
-                for motif in unique_motifs:
-                    if fuzzy_count:
-                        pattern = make_fuzzy_motif_regex(motif)
-                        pattern_name = f'{motif} (fuzzy)'
-                        logger.debug(f'Created fuzzy pattern for {motif}: {pattern}')
-                    else:
-                        pattern = make_motif_regex(motif)
-                        pattern_name = motif
-                        logger.debug(f'Created exact pattern for {motif}: {pattern}')
-                    motif_patterns[pattern_name] = pattern
-
-                logger.info(
-                    f'Created {len(motif_patterns)} motif patterns for analysis'
-                )
-                if fuzzy_count:
-                    logger.info(
-                        'Using fuzzy matching (±1 character variation) for motif counting'
-                    )
+            motif_patterns = get_motif_regex(count_motifs, fuzzy_count)
 
         # Open indexed files
-        logger.info('Opening indexed BAM and FASTA files...')
+        logging.info('Opening indexed BAM and FASTA files...')
         with StreamingGenomeProcessor(reference_fasta, bam_file) as processor:
             bam_file_handle = pysam.AlignmentFile(str(bam_file), 'rb')
 
             # Stream contigs for extension analysis
-            logger.info('Streaming contigs for extension analysis...')
+            logging.info('Streaming contigs for extension analysis...')
             extensions_applied = {}
             excluded_contigs = []
             warnings = []
@@ -463,13 +468,13 @@ def extend(
                 outlier_threshold=outlier_threshold,
             ):
                 all_stats[contig_name] = contig_stats
-                logger.debug(f'Processing contig {contig_name} for extension...')
+                logging.debug(f'Processing contig {contig_name} for extension...')
 
                 # Get the original sequence for this contig
                 try:
                     original_sequence = processor.get_contig_sequence(contig_name)
                 except KeyError:
-                    logger.warning(
+                    logging.warning(
                         f'Contig {contig_name} not found in FASTA file, skipping'
                     )
                     continue
@@ -495,12 +500,12 @@ def extend(
                     ext_info = extension_result.extension_info
                     end_name = 'left' if ext_info['is_left'] else 'right'
                     if dry_run:
-                        logger.info(
+                        logging.info(
                             f'[DRY RUN] Would extend {contig_name} {end_name} end: '
                             f'+{ext_info["overhang_length"]}bp from read {ext_info["read_name"]}'
                         )
                     else:
-                        logger.info(
+                        logging.info(
                             f'Extended {contig_name} {end_name} end: '
                             f'+{ext_info["overhang_length"]}bp from read {ext_info["read_name"]}'
                         )
@@ -508,13 +513,13 @@ def extend(
             # Calculate overall statistics if we have data
             if all_stats:
                 overall_stats = calculate_overhang_statistics(all_stats)
-                logger.info(f'Processed {len(all_stats)} contigs with overhangs')
+                logging.info(f'Processed {len(all_stats)} contigs with overhangs')
             else:
                 overall_stats = {'left': {}, 'right': {}}
 
             # Write extended sequences
             if not dry_run:
-                logger.info('Writing extended sequences...')
+                logging.info('Writing extended sequences...')
                 with BufferedContigWriter(output_fasta) as writer:
                     # Write extended contigs
                     extended_contig_names = set()
@@ -568,24 +573,24 @@ def extend(
         if stats_report:
             if str(stats_report) == '-':
                 # Write to stdout when explicitly requested with '-'
-                logger.info('Writing statistics report to stdout')
+                logging.info('Writing statistics report to stdout')
                 print(report_content)
             else:
-                logger.info(f'Writing statistics report to {stats_report}')
+                logging.info(f'Writing statistics report to {stats_report}')
                 with open(stats_report, 'w') as f:
                     f.write(report_content)
         else:
             # Default: write report to stderr if no file specified
-            logger.info('Writing statistics report to stderr')
+            logging.info('Writing statistics report to stderr')
             print(report_content, file=sys.stderr)
 
         # Summary
         if dry_run:
-            logger.info(
+            logging.info(
                 f'Dry-run analysis complete: {len(extensions_applied)} contigs would be extended'
             )
         else:
-            logger.info(
+            logging.info(
                 f'Extension complete: {len(extensions_applied)} contigs extended'
             )
 
@@ -602,16 +607,16 @@ def extend(
                 ]
             )
             if total_motifs_found > 0:
-                logger.info(
+                logging.info(
                     f'Motif analysis: found {total_motifs_found} motif matches '
                     f'in {contigs_with_motifs} extended contigs'
                 )
 
         if excluded_contigs:
-            logger.info(f'Excluded {len(excluded_contigs)} outlier contigs')
+            logging.info(f'Excluded {len(excluded_contigs)} outlier contigs')
         if warnings:
-            logger.info(f'Generated {len(warnings)} warnings')
+            logging.info(f'Generated {len(warnings)} warnings')
 
     except Exception as e:
-        logger.error(f'Error during extend operation: {e}')
+        logging.error(f'Error during extend operation: {e}')
         raise click.ClickException(str(e)) from e

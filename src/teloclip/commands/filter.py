@@ -9,6 +9,7 @@ import sys
 
 import click
 
+from teloclip.logs import init_logging
 from teloclip.motifs import make_fuzzy_motif_regex, make_motif_regex
 from teloclip.samops import processSamlines
 from teloclip.seqops import addRevComplement, read_fai
@@ -72,6 +73,12 @@ from teloclip.seqops import addRevComplement, read_fai
     is_flag=True,
     help='If set, motif match may occur in unclipped region of reads.',
 )
+@click.option(
+    '--log-level',
+    default='INFO',
+    type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR'], case_sensitive=False),
+    help='Logging level (default: INFO).',
+)
 @click.pass_context
 def filter_cmd(
     ctx,
@@ -85,6 +92,7 @@ def filter_cmd(
     min_repeats,
     min_anchor,
     match_anywhere,
+    log_level,
 ):
     """
     Filter SAM file for clipped alignments containing unassembled telomeric repeats.
@@ -116,6 +124,8 @@ def filter_cmd(
         Minimum number of aligned bases required on non-clipped portion.
     match_anywhere : bool
         If True, allow motif matches anywhere in read, not just clipped regions.
+    log_level : str
+        Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
 
     Examples
     --------
@@ -137,6 +147,9 @@ def filter_cmd(
 
         samtools view -h input.bam | teloclip filter --ref-idx ref.fa.fai
     """
+    # Initialize logging
+    init_logging(log_level)
+
     # Fetch contig lengths
     contig_dict = read_fai(ref_idx)
 

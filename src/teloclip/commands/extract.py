@@ -10,6 +10,7 @@ from typing import Dict
 import click
 
 from ..extract_io import ExtractionStats
+from ..logs import init_logging
 from ..motifs import make_fuzzy_motif_regex, make_motif_regex
 from ..samops import (
     EnhancedStreamingSamFilter,
@@ -89,7 +90,7 @@ from ..seqops import read_fai, revComp
     help='Output format for extracted sequences (default: fasta).',
 )
 @click.option(
-    '--stats-report',
+    '--report-stats',
     is_flag=True,
     help='Write extraction statistics to file in output directory.',
 )
@@ -120,7 +121,7 @@ def extract_cmd(
     fuzzy_count,
     buffer_size,
     output_format,
-    stats_report,
+    report_stats,
     no_mask_overhangs,
     log_level,
 ):
@@ -162,7 +163,7 @@ def extract_cmd(
         I/O buffer size for writing.
     output_format : str
         Output format ('fasta' or 'fastq').
-    stats_report : bool
+    report_stats : bool
         Write extraction statistics to file in output directory.
     no_mask_overhangs : bool
         Disable overhang sequence masking.
@@ -177,7 +178,7 @@ def extract_cmd(
 
     # Extract with motif analysis and statistics
     teloclip extract --ref-idx ref.fa.fai --include-stats \\
-        --count-motifs TTAGGG,CCCTAA --stats-report input.sam
+        --count-motifs TTAGGG,CCCTAA --report-stats input.sam
 
     # Extract with quality filtering and custom output
     teloclip extract --ref-idx ref.fa.fai \\
@@ -188,6 +189,9 @@ def extract_cmd(
     samtools view -h input.bam | teloclip extract --ref-idx ref.fa.fai \\
         --count-motifs TTAGGG --fuzzy-count
     """
+
+    # Initialize logging for this command
+    init_logging(log_level)
 
     try:
         # Load reference contig info
@@ -300,7 +304,7 @@ def extract_cmd(
 
         # Generate and output statistics report
         reference_contigs = set(contig_info.keys())
-        if stats_report:
+        if report_stats:
             report_content = final_stats.generate_report(reference_contigs)
 
             # Build stats filename using extract_dir and prefix

@@ -2,27 +2,17 @@
 Main CLI entry point for teloclip with sub-commands.
 """
 
-import logging
-
 import click
 
 from teloclip._version import __version__
-from teloclip.logs import init_logging
 
 
 @click.group(
     help='A tool for the recovery of unassembled telomeres from soft-clipped read alignments.'
 )
-@click.option('--verbose', '-v', is_flag=True, help='Enable verbose logging')
-@click.option('--quiet', '-q', is_flag=True, help='Suppress all but error messages')
-@click.option(
-    '--log-level',
-    type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR'], case_sensitive=False),
-    help='Set specific log level',
-)
 @click.version_option(version=__version__, prog_name='teloclip')
 @click.pass_context
-def main(ctx, verbose, quiet, log_level):
+def main(ctx):
     """
     A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
 
@@ -32,33 +22,9 @@ def main(ctx, verbose, quiet, log_level):
     ----------
     ctx : click.Context
         Click context object for passing information between commands.
-    verbose : bool
-        If True, enable verbose logging (DEBUG level).
-    quiet : bool
-        If True, suppress all but error messages (ERROR level).
-    log_level : str
-        Specific log level to set (DEBUG, INFO, WARNING, ERROR).
     """
     # Ensure that ctx.obj exists and is a dict (in case `cli()` is called by itself)
     ctx.ensure_object(dict)
-
-    # Configure logging based on options
-    if log_level:
-        level = getattr(logging, log_level.upper())
-    elif verbose:
-        level = logging.DEBUG
-    elif quiet:
-        level = logging.ERROR
-    else:
-        level = logging.INFO
-
-    # Initialize logging
-    init_logging()
-    logger = logging.getLogger()
-    logger.setLevel(level)
-
-    # Store logging level in context for sub-commands
-    ctx.obj['log_level'] = level
 
 
 def register_commands():
@@ -74,9 +40,6 @@ def register_commands():
     except ImportError as e:
         # Handle gracefully during development
         click.echo(f'Warning: Could not import commands: {e}', err=True)
-
-
-# Remove the placeholder extend command since we now have the real implementation
 
 
 if __name__ == '__main__':
