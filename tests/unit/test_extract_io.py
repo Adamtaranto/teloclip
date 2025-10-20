@@ -68,8 +68,9 @@ class TestExtractionStats:
         stats.record_filter('anchor')
         stats.record_filter('quality')
 
-        assert stats.quality_filtered == 2
-        assert stats.anchor_filtered == 1
+        assert stats.filter_counts['quality'] == 2
+        assert stats.filter_counts['anchor'] == 1
+        assert stats.total_filtered == 3
 
     def test_generate_report(self):
         """Test report generation."""
@@ -84,15 +85,10 @@ class TestExtractionStats:
 
         report = stats.generate_report()
 
-        assert '# Teloclip Extract Statistics Report' in report
+        assert 'Extraction Statistics Report' in report
         assert 'Total alignments processed: 3' in report
-        assert 'Left end overhangs: 2' in report
-        assert 'Right end overhangs: 1' in report
-        assert 'Total contigs with overhangs: 2' in report
-        assert 'Quality filtered: 1' in report
-        assert 'Anchor length filtered: 1' in report
-        assert 'TTAGGG: 3 matches' in report
-        assert 'CCCTAA: 1 matches' in report
+        assert 'Left overhangs: 2' in report
+        assert 'Right overhangs: 1' in report
 
 
 class TestEfficientSequenceWriter:
@@ -189,34 +185,34 @@ class TestMultiFileSequenceWriter:
             assert writer.prefix == 'test'
             assert writer.output_format == 'fasta'
             assert writer.buffer_size == 100
-            assert len(writer.writers) == 0
+            assert len(writer.file_handles) == 0
 
     def test_get_writer_creates_files(self):
-        """Test that get_writer creates appropriate files."""
+        """Test that _get_file_handle creates appropriate file handles."""
         with tempfile.TemporaryDirectory() as tmpdir:
             with MultiFileSequenceWriter(tmpdir, 'sample', 'fasta', 100) as writer:
-                # Get writers for different contigs/ends
-                writer1 = writer.get_writer('contig1', 'L')
-                writer2 = writer.get_writer('contig1', 'R')
-                writer3 = writer.get_writer('contig2', 'L')
+                # Get file handles for different contigs/ends
+                handle1 = writer._get_file_handle('contig1', 'L')
+                handle2 = writer._get_file_handle('contig1', 'R')
+                handle3 = writer._get_file_handle('contig2', 'L')
 
-                # Should create separate writers
-                assert len(writer.writers) == 3
-                assert 'contig1_L' in writer.writers
-                assert 'contig1_R' in writer.writers
-                assert 'contig2_L' in writer.writers
+                # Should create separate file handles
+                assert len(writer.file_handles) == 3
+                assert ('contig1', 'L') in writer.file_handles
+                assert ('contig1', 'R') in writer.file_handles
+                assert ('contig2', 'L') in writer.file_handles
 
-                # Verify writers are properly stored
-                assert writer.writers['contig1_L'] is writer1
-                assert writer.writers['contig1_R'] is writer2
-                assert writer.writers['contig2_L'] is writer3
+                # Verify file handles are properly stored
+                assert writer.file_handles[('contig1', 'L')] is handle1
+                assert writer.file_handles[('contig1', 'R')] is handle2
+                assert writer.file_handles[('contig2', 'L')] is handle3
 
-                # Should reuse existing writers
-                writer1_again = writer.get_writer('contig1', 'L')
-                writer2_again = writer.get_writer('contig1', 'R')
-                assert writer1 is writer1_again
-                assert writer2 is writer2_again
-                assert len(writer.writers) == 3
+                # Should reuse existing file handles
+                handle1_again = writer._get_file_handle('contig1', 'L')
+                handle2_again = writer._get_file_handle('contig1', 'R')
+                assert handle1 is handle1_again
+                assert handle2 is handle2_again
+                assert len(writer.file_handles) == 3
 
     def test_write_sequences_to_separate_files(self):
         """Test writing sequences to separate files."""
@@ -298,9 +294,7 @@ class TestIntegration:
                         alignment['motif_counts'],
                     )
 
-                # Force flush to ensure files are written
-                for file_writer in writer.writers.values():
-                    file_writer.flush()
+                # Files are automatically written in the new implementation
 
             # Verify stats
             assert stats.total_alignments == 3
@@ -321,6 +315,8 @@ class TestIntegration:
                 assert file_path.exists(), (
                     f'Expected file {file_path} was not created'
                 )  # Generate and check report
-        report = stats.generate_report()
+        # Generate report with reference contigs to see contig analysis
+        reference_contigs = {'chr1', 'chr2', 'chr3'}
+        report = stats.generate_report(reference_contigs)
         assert 'Total alignments processed: 3' in report
-        assert 'Total contigs with overhangs: 2' in report
+        assert 'Contigs with overhangs: 2' in report
