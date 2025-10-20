@@ -4,6 +4,7 @@ Filter sub-command for teloclip CLI.
 Filters SAM files for clipped alignments containing unassembled telomeric repeats.
 """
 
+import logging
 import sys
 
 import click
@@ -152,14 +153,13 @@ def filter_cmd(
         # Make unique set.
         motif_list = list(set(motif_list))
 
+        # Log motifs being searched for
+        logging.info(f'Searching for motifs: {", ".join(motif_list)}')
+
         # Create regex patterns for each motif
         if fuzzy:
             # Create fuzzy regex patterns for each motif
-            click.echo(
-                'Using option --fuzzy to find inexact motif matches. '
-                'Tolerate +/- 1 base variance in motif homopolymers.',
-                err=True,
-            )
+            logging.info('Tolerate +/- 1 base variance in motif homopolymers.')
             motif_list = [make_fuzzy_motif_regex(motif) for motif in motif_list]
         else:
             # Create exact regex patterns for each motif
