@@ -4,10 +4,6 @@ Tests SAM/BAM processing functions including CIGAR string parsing,
 anchor validation, soft clip detection, and terminal position analysis.
 """
 
-from unittest.mock import mock_open, patch
-
-import pytest
-
 from teloclip.samops import (
     CIGARinfo,
     SAMinfo,
@@ -177,35 +173,39 @@ class TestLenCIGAR:
 class TestProcessSamlines:
     """Test main SAM processing function."""
 
-    @pytest.mark.xfail(
-        reason='Function signature mismatch in processSamlines - needs investigation'
-    )
-    @patch('builtins.open', new_callable=mock_open)
-    def test_process_samlines_basic(self, mock_file, temp_dir, sample_sam_alignments):
+    def test_process_samlines_basic(self, sample_sam_alignments):
         """Test basic SAM processing without filters."""
-        # Mock file reading - each line should be a complete string
-        # The function expects line[0][0] so maybe it expects line to be a list of strings?
-        test_sam_lines = [
-            ['@HD\tVN:1.0\tSO:unsorted'],
-        ] + [[line] for line in sample_sam_alignments]
+        # Create test SAM lines as strings (not nested lists)
+        test_sam_lines = ['@HD\tVN:1.0\tSO:unsorted'] + sample_sam_alignments
 
-        mock_file.return_value.__iter__.return_value = iter(test_sam_lines)
-
-        # Process without strict filters
+        # Process without strict filters, requesting counts for testing
         counts = processSamlines(
-            samfile='test.sam',
-            contig_dict={'contig01': 1000},
+            samfile=test_sam_lines,
+            contig_dict={
+                'contig01': 1000,
+                'contig02': 2000,
+                'contig03': 1500,
+            },
             motif_list=[],
             match_anywhere=False,
             max_break=0,
             min_clip=1,
             min_repeats=1,
             min_anchor=0,  # No anchor filtering
+            return_counts=True,  # Request counts for testing
         )
 
         # Should return a dictionary with counts
         assert isinstance(counts, dict)
         assert 'samlineCount' in counts
+        assert 'keepCount' in counts
+        assert 'motifCount' in counts
+        assert 'removeCount' in counts
+        assert 'anchorFilteredCount' in counts
+        assert 'bothCount' in counts
+
+        # Should have processed some SAM records (not counting header)
+        assert counts['samlineCount'] > 0
 
 
 class TestSAMinfo:

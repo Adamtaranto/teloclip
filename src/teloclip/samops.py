@@ -23,6 +23,7 @@ def processSamlines(
     min_clip=1,
     min_repeats=1,
     min_anchor=500,
+    return_counts=False,
 ):
     """
     Process SAM alignment lines and filter based on clipping and motif criteria.
@@ -49,11 +50,17 @@ def processSamlines(
         Minimum number of motif repeats required for a match. Default is 1.
     min_anchor : int, optional
         Minimum anchored alignment length required. Default is 500.
+    return_counts : bool, optional
+        If True, return processing statistics as a dictionary instead of None.
+        Default is False for backward compatibility.
 
     Returns
     -------
-    None
-        Function processes input and writes filtered results to stdout.
+    None or dict
+        If return_counts is False (default), function processes input and writes
+        filtered results to stdout, returning None. If return_counts is True,
+        returns a dictionary with processing statistics including samlineCount,
+        keepCount, motifCount, removeCount, anchorFilteredCount, and bothCount.
         Logging information is provided about processing statistics.
     """
     # Compile motif regex patterns and include min_repeats
@@ -189,6 +196,17 @@ def processSamlines(
             f'Found {bothCount} alignments spanning entire contigs.\n'
             f'Discarded {removeCount} total alignments after all filtering.'
         )
+
+    # Return counts if requested for testing purposes
+    if return_counts:
+        return {
+            'samlineCount': samlineCount,
+            'keepCount': keepCount,
+            'motifCount': motifCount,
+            'removeCount': removeCount,
+            'anchorFilteredCount': anchorFilteredCount,
+            'bothCount': bothCount,
+        }
 
 
 def splitCIGAR(SAM_CIGAR):
