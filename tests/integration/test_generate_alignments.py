@@ -23,8 +23,8 @@ Each alignment includes:
 """
 
 import argparse
-import random
 from pathlib import Path
+import random
 from typing import Dict, List, Optional
 
 

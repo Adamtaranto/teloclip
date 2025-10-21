@@ -62,6 +62,11 @@ class TeloclipExtendRunner:
         # Build command (BAM file first, then FASTA)
         cmd = ['teloclip', 'extend', str(alignments_bam), str(genome_fasta)]
 
+        # Always specify an output file to ensure predictable behavior
+        prefix = output_prefix or 'teloclip_extend'
+        output_file = self.temp_dir / f'{prefix}_extended.fasta'
+        cmd.extend(['--output-fasta', str(output_file)])
+
         # Add optional parameters
         if output_prefix:
             cmd.extend(['--prefix', output_prefix])
@@ -76,9 +81,7 @@ class TeloclipExtendRunner:
             cmd.extend(['--screen-terminal-bases', str(screen_terminal_bases)])
 
         if additional_args:
-            cmd.extend(additional_args)
-
-        # Run command in temp directory
+            cmd.extend(additional_args)  # Run command in temp directory
         result = subprocess.run(
             cmd,
             cwd=self.temp_dir,
@@ -94,14 +97,15 @@ class TeloclipExtendRunner:
             'log_file': None,
         }
 
-        # Look for expected output files
+        # Since we always specify --output-fasta, the output file should be predictable
+        if output_file.exists():
+            output_files['extended_fasta'] = output_file
+
+        # Look for other files with the prefix
         prefix = output_prefix or 'teloclip_extend'
         for file_path in self.temp_dir.glob(f'{prefix}*'):
-            if file_path.suffix == '.fasta':
-                if 'polished' in file_path.name:
-                    output_files['polished_fasta'] = file_path
-                else:
-                    output_files['extended_fasta'] = file_path
+            if file_path.suffix == '.fasta' and 'polished' in file_path.name:
+                output_files['polished_fasta'] = file_path
             elif file_path.suffix == '.log':
                 output_files['log_file'] = file_path
 

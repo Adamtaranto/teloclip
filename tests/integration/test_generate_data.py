@@ -6,10 +6,10 @@ This script creates synthetic genome contigs and corresponding SAM alignments
 with specific characteristics to test all edge cases in the teloclip extend functionality.
 """
 
-import random
-from pathlib import Path
-from typing import Dict
 import argparse
+from pathlib import Path
+import random
+from typing import Dict
 
 
 def generate_random_sequence(length: int, gc_content: float = 0.5) -> str:
