@@ -1,7 +1,7 @@
 """Test extend command CLI functionality."""
 
-import shutil
 from pathlib import Path
+import shutil
 
 import pytest
 

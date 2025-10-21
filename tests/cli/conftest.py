@@ -1,8 +1,8 @@
 """Fixtures and helpers for CLI tests."""
 
+from pathlib import Path
 import subprocess
 import tempfile
-from pathlib import Path
 from typing import List, Optional, Tuple
 
 import pytest

@@ -21,12 +21,12 @@ Each test uses the pre-generated synthetic datasets to ensure consistent,
 reproducible testing without requiring external dependencies.
 """
 
-import pytest
+from pathlib import Path
 import subprocess
 import tempfile
-from pathlib import Path
 from typing import Dict, List, Optional
 
+import pytest
 
 # Test data paths
 TEST_DATA_DIR = Path(__file__).parent / 'test_data'
