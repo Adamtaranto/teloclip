@@ -24,12 +24,10 @@ A tool for the recovery of unassembled telomeres from raw long-reads using soft-
   - [Installation](#installation)
 - [Example Usage](#example-usage)
   - [Optional Quality Control](#optional-quality-control)
-  - [Extending contigs](#extending-contigs)
 - [Options](#options)
   - [Main Command](#main-command)
   - [Filter Sub-command Options](#filter-sub-command-options)
   - [Extract Sub-command Options](#extract-sub-command-options)
-  - [Legacy Command Support](#legacy-command-support)
 - [Citing Teloclip](#citing-teloclip)
 - [Publications using Teloclip](#publications-using-teloclip)
 - [Issues](#issues)
@@ -227,7 +225,7 @@ The final telomere-extended assembly should be re-polished using available long 
 
 Users may wish to exclude reads below a minimum length or read quality score to reduce the risk of incorrect alignments.
 
-In some cases it may be also be useful to prioritise primary alignments. This can be done by pre-filtering alignments with `samtools view`. You can decode sam flags [here](https://broadinstitute.github.io/picard/explain-flags.html).
+In some cases it may be also be useful to prioritise primary alignments. This can be done by pre-filtering alignments with `samtools view`. You can [decode sam flags here](https://broadinstitute.github.io/picard/explain-flags.html).
 
 ```bash
 # Exclude secondary alignments.
