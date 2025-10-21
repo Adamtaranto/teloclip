@@ -1,5 +1,5 @@
 """
-Enhanced I/O module for streaming telomere sequence extraction.
+I/O module for streaming telomere sequence extraction.
 
 This module provides memory-efficient FASTA/FASTQ writing with buffering,
 statistics tracking, and BioPython integration for the extract command.
