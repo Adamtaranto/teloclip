@@ -4,8 +4,8 @@ Tests logging initialization and configuration functions.
 """
 
 import logging
-import tempfile
 from pathlib import Path
+import tempfile
 from unittest.mock import patch
 
 import pytest
