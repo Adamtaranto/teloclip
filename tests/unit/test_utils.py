@@ -102,12 +102,12 @@ class TestValidateOutputDirectories:
 
     def test_validate_output_directories_permission_error(self):
         """Test handling of permission errors during directory creation."""
-        # Use a path that should cause permission issues
-        invalid_path = Path('/root/cannot_create/output.fasta')
-
-        with pytest.raises(click.ClickException) as exc_info:
-            validate_output_directories(invalid_path, None)
-
+        invalid_path = Path('/some/path/output.fasta')
+        with patch.object(
+            Path, 'mkdir', side_effect=PermissionError('Permission denied')
+        ):
+            with pytest.raises(click.ClickException) as exc_info:
+                validate_output_directories(invalid_path, None)
         assert 'Cannot create output directory' in str(exc_info.value)
 
 
