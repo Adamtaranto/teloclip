@@ -72,7 +72,7 @@ class TeloclipExtendRunner:
             cmd.extend(['--prefix', output_prefix])
 
         if exclude_contigs:
-            cmd.extend(['--exclude-contigs'] + exclude_contigs)
+            cmd.extend(['--exclude-contigs', ','.join(exclude_contigs)])
 
         if exclude_contigs_file:
             cmd.extend(['--exclude-contigs-file', str(exclude_contigs_file)])
@@ -337,19 +337,31 @@ class TestContigExclusion:
 
         assert result['returncode'] == 0
 
+        # Read original and extended sequences
+        original_seqs = read_fasta_sequences(SYNTHETIC_FASTA)
         extended_seqs = read_fasta_sequences(result['output_files']['extended_fasta'])
 
-        # Excluded contigs should not be in output
-        for excluded in excluded_contigs:
-            assert excluded not in extended_seqs, (
-                f'Excluded contig {excluded} found in output'
+        # All contigs (including excluded ones) should be in output
+        for contig_name in original_seqs.keys():
+            assert contig_name in extended_seqs, (
+                f'Contig {contig_name} missing from output'
             )
 
-        # Non-excluded contigs should be present
+        # Excluded contigs should NOT be extended (same length as original)
+        for excluded in excluded_contigs:
+            original_len = len(original_seqs[excluded])
+            extended_len = len(extended_seqs[excluded])
+            assert extended_len == original_len, (
+                f'Excluded contig {excluded} was extended: {original_len} -> {extended_len}'
+            )
+
+        # Non-excluded contigs should potentially be extended (length >= original)
         non_excluded = ['contig_1', 'contig_2', 'contig_3', 'contig_4', 'contig_5']
         for included in non_excluded:
-            assert included in extended_seqs, (
-                f'Expected contig {included} not found in output'
+            original_len = len(original_seqs[included])
+            extended_len = len(extended_seqs[included])
+            assert extended_len >= original_len, (
+                f'Non-excluded contig {included} became shorter: {original_len} -> {extended_len}'
             )
 
     def test_exclude_contigs_file(self, runner, temp_dir, test_data_available):
@@ -365,11 +377,24 @@ class TestContigExclusion:
 
         assert result['returncode'] == 0
 
+        # Read original and extended sequences
+        original_seqs = read_fasta_sequences(SYNTHETIC_FASTA)
         extended_seqs = read_fasta_sequences(result['output_files']['extended_fasta'])
 
-        # Excluded contigs should not be in output
-        assert 'contig_6' not in extended_seqs
-        assert 'contig_7' not in extended_seqs
+        # All contigs (including excluded ones) should be in output
+        for contig_name in original_seqs.keys():
+            assert contig_name in extended_seqs, (
+                f'Contig {contig_name} missing from output'
+            )
+
+        # Excluded contigs should NOT be extended (same length as original)
+        excluded_contigs = ['contig_6', 'contig_7']
+        for excluded in excluded_contigs:
+            original_len = len(original_seqs[excluded])
+            extended_len = len(extended_seqs[excluded])
+            assert extended_len == original_len, (
+                f'Excluded contig {excluded} was extended: {original_len} -> {extended_len}'
+            )
 
 
 class TestControlScenarios:
@@ -532,22 +557,21 @@ class TestFullIntegration:
         assert result['returncode'] == 0, f'Full pipeline failed: {result["stderr"]}'
 
         # Validate output
+        original_seqs = read_fasta_sequences(SYNTHETIC_FASTA)
         extended_seqs = read_fasta_sequences(result['output_files']['extended_fasta'])
 
-        # Should have most contigs except excluded ones
-        expected_contigs = [
-            'contig_1',
-            'contig_2',
-            'contig_3',
-            'contig_4',
-            'contig_5',
-            'contig_7',
-        ]
-        for contig in expected_contigs:
-            assert contig in extended_seqs, f'Expected contig {contig} not found'
+        # All contigs (including excluded ones) should be in output
+        for contig_name in original_seqs.keys():
+            assert contig_name in extended_seqs, (
+                f'Contig {contig_name} missing from output'
+            )
 
-        # Excluded contig should not be present
-        assert 'contig_6' not in extended_seqs, 'Excluded contig_6 found in output'
+        # Excluded contig should NOT be extended (same length as original)
+        original_len = len(original_seqs['contig_6'])
+        extended_len = len(extended_seqs['contig_6'])
+        assert extended_len == original_len, (
+            f'Excluded contig_6 was extended: {original_len} -> {extended_len}'
+        )
 
         # Output files should use custom prefix
         assert 'full_test' in str(result['output_files']['extended_fasta'])
