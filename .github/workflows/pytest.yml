@@ -16,14 +16,14 @@ jobs:
 
     steps:
       # Checkout the latest commit associated with the PR
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
       - name: Debug matrix value
         run: echo "Python version is ${{ matrix.python-version }}"
 
       # Set up Miniconda
       - name: Set up Miniconda
-        uses: conda-incubator/setup-miniconda@v2
+        uses: conda-incubator/setup-miniconda@v3
         with:
           auto-update-conda: true  # Optional: update Conda to the latest version
           python-version: ${{ matrix.python-version }}
