@@ -8,7 +8,8 @@ from teloclip._version import __version__
 
 
 @click.group(
-    help='A tool for the recovery of unassembled telomeres from soft-clipped read alignments.'
+    help='A tool for the recovery of unassembled telomeres from soft-clipped read alignments.',
+    invoke_without_command=True,
 )
 @click.version_option(version=__version__, prog_name='teloclip')
 @click.pass_context
@@ -25,6 +26,11 @@ def main(ctx):
     """
     # Ensure that ctx.obj exists and is a dict (in case `cli()` is called by itself)
     ctx.ensure_object(dict)
+
+    # Check if no subcommand was invoked and show help
+    if ctx.invoked_subcommand is None:
+        click.echo(ctx.get_help())
+        ctx.exit(0)
 
 
 def register_commands():
