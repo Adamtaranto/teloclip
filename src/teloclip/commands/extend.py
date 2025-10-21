@@ -994,7 +994,7 @@ def extend(
             if extensions_applied and not dry_run:
                 logging.info(
                     'IMPORTANT: Extended contigs should be polished with appropriate tools '
-                    '(e.g., Pilon, Racon, or Medaka) to improve accuracy before downstream analysis'
+                    '(e.g., Medaka for ONT data, and Pypolca for Illumina data) to improve accuracy before downstream analysis.'
                 )
 
         # Motif analysis summary
