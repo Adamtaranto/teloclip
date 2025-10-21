@@ -15,6 +15,7 @@ import sys
 from typing import Dict, List
 
 import click
+import pyfaidx
 import pysam
 
 from ..analysis import ContigStats, calculate_overhang_statistics
@@ -73,6 +74,7 @@ def generate_extension_report(
     excluded_contigs: List[str],
     warnings: List[str],
     motif_stats: Dict[str, Dict[str, int]] = None,
+    terminal_motif_counts: Dict[str, Dict[str, Dict[str, int]]] = None,
     dry_run: bool = False,
 ) -> str:
     """
@@ -94,6 +96,8 @@ def generate_extension_report(
         List of warning messages generated during analysis.
     motif_stats : Dict[str, Dict[str, int]], optional
         Statistics about motif occurrences. Default is None.
+    terminal_motif_counts : Dict[str, Dict[str, Dict[str, int]]], optional
+        Pre-extension terminal motif counts. Default is None.
     dry_run : bool, optional
         Whether this is a dry run (no actual extensions applied). Default is False.
 
@@ -144,15 +148,54 @@ def generate_extension_report(
             report_lines.append(f'  Bases trimmed: {ext_info["trim_length"]}')
         report_lines.append('')
 
-    # Motif analysis results
+    # Terminal motif screening results
+    if terminal_motif_counts:
+        report_lines.append('## Terminal Region Motif Analysis (Pre-Extension)')
+        report_lines.append('')
+        for contig_name, terminal_counts in terminal_motif_counts.items():
+            left_total = sum(terminal_counts['left'].values())
+            right_total = sum(terminal_counts['right'].values())
+            if left_total > 0 or right_total > 0:
+                report_lines.append(f'### {contig_name}')
+                report_lines.append(f'  Left terminal: {left_total} total motifs')
+                for motif_name, count in terminal_counts['left'].items():
+                    if count > 0:
+                        report_lines.append(f'    {motif_name}: {count}')
+                report_lines.append(f'  Right terminal: {right_total} total motifs')
+                for motif_name, count in terminal_counts['right'].items():
+                    if count > 0:
+                        report_lines.append(f'    {motif_name}: {count}')
+                report_lines.append('')
+
+    # Extension motif analysis results
     if motif_stats:
-        report_lines.append('## Motif Analysis Results')
+        report_lines.append('## Extension Region Motif Analysis (Post-Extension)')
         report_lines.append('')
         for contig_name, motif_counts in motif_stats.items():
             if any(count > 0 for count in motif_counts.values()):
                 report_lines.append(f'### {contig_name}')
                 for motif_name, count in motif_counts.items():
-                    report_lines.append(f'  {motif_name}: {count} matches')
+                    if count > 0:
+                        report_lines.append(f'  {motif_name}: {count} matches')
+
+                        # Calculate gain if terminal counts available
+                        if (
+                            terminal_motif_counts
+                            and contig_name in terminal_motif_counts
+                        ):
+                            # Determine which terminal was extended
+                            extension_info = extensions_applied.get(contig_name, {})
+                            if extension_info:
+                                is_left = extension_info.get('is_left', False)
+                                terminal_side = 'left' if is_left else 'right'
+                                pre_count = terminal_motif_counts[contig_name][
+                                    terminal_side
+                                ].get(motif_name, 0)
+                                gain = count - pre_count
+                                if gain != 0:
+                                    report_lines.append(
+                                        f'    Gain from extension: {gain:+d}'
+                                    )
                 report_lines.append('')
 
     # Outliers detected
@@ -196,6 +239,282 @@ def generate_extension_report(
         )
 
     return '\n'.join(report_lines)
+
+
+def count_terminal_motifs(
+    fasta_file: Path,
+    contig_dict: Dict[str, int],
+    motif_patterns: Dict[str, re.Pattern],
+    terminal_length: int,
+) -> Dict[str, Dict[str, Dict[str, int]]]:
+    """
+    Count motifs in terminal regions of contigs.
+
+    Parameters
+    ----------
+    fasta_file : Path
+        Path to indexed FASTA file.
+    contig_dict : Dict[str, int]
+        Dictionary mapping contig names to their lengths.
+    motif_patterns : Dict[str, re.Pattern]
+        Dictionary of compiled motif regex patterns.
+    terminal_length : int
+        Number of bases to extract from each terminal end.
+
+    Returns
+    -------
+    Dict[str, Dict[str, Dict[str, int]]]
+        Nested dictionary: contig_name -> {left: {motif: count}, right: {motif: count}}.
+
+    Raises
+    ------
+    click.ClickException
+        If FASTA file cannot be opened or contigs cannot be accessed.
+    """
+    terminal_counts = {}
+    warnings_issued = []
+
+    if terminal_length <= 0 or not motif_patterns:
+        return terminal_counts
+
+    try:
+        # Open FASTA file with pyfaidx
+        fasta = pyfaidx.Fasta(str(fasta_file))
+
+        for contig_name, contig_length in contig_dict.items():
+            # Check if terminal length is too large relative to contig
+            if terminal_length > contig_length * 0.5:
+                warning_msg = (
+                    f'Terminal screening length ({terminal_length}) is > 50% '
+                    f'of contig {contig_name} length ({contig_length})'
+                )
+                if warning_msg not in warnings_issued:
+                    logging.warning(warning_msg)
+                    warnings_issued.append(warning_msg)
+
+            # Adjust terminal length for short contigs
+            actual_length = min(terminal_length, contig_length // 2)
+            if actual_length <= 0:
+                continue
+
+            try:
+                # Get terminal sequences
+                left_seq = str(fasta[contig_name][:actual_length]).upper()
+                right_seq = str(fasta[contig_name][-actual_length:]).upper()
+
+                # Initialize counts for this contig
+                terminal_counts[contig_name] = {
+                    'left': {},
+                    'right': {},
+                }
+
+                # Count motifs in each terminal region
+                for motif_name, pattern in motif_patterns.items():
+                    left_matches = len(pattern.findall(left_seq))
+                    right_matches = len(pattern.findall(right_seq))
+
+                    terminal_counts[contig_name]['left'][motif_name] = left_matches
+                    terminal_counts[contig_name]['right'][motif_name] = right_matches
+
+            except (KeyError, IndexError) as e:
+                logging.warning(
+                    f'Could not access contig {contig_name} in FASTA file: {e}'
+                )
+                continue
+
+        fasta.close()
+
+    except Exception as e:
+        raise click.ClickException(
+            f'Error reading FASTA file for terminal motif screening: {e}'
+        ) from e
+
+    return terminal_counts
+
+
+def read_excluded_contigs_file(exclude_file: Path) -> List[str]:
+    """
+    Read contig names from a file, handling different line endings.
+
+    Parameters
+    ----------
+    exclude_file : Path
+        Path to file containing contig names (one per line).
+
+    Returns
+    -------
+    List[str]
+        List of contig names from the file.
+
+    Raises
+    ------
+    click.ClickException
+        If file cannot be read or is empty.
+    """
+    try:
+        # Read file with universal newlines to handle different line endings
+        with open(exclude_file, 'r', newline=None) as f:
+            raw_lines = f.readlines()
+
+        # Process lines: strip whitespace and filter out empty lines
+        contig_names = []
+        for line_num, line in enumerate(raw_lines, 1):
+            # Strip all whitespace (including \r, \n, spaces, tabs)
+            cleaned_line = line.strip()
+
+            # Skip empty lines
+            if not cleaned_line:
+                logging.debug(f'Skipping empty line {line_num} in {exclude_file}')
+                continue
+
+            contig_names.append(cleaned_line)
+
+        if not contig_names:
+            raise click.ClickException(
+                f'No valid contig names found in exclusion file: {exclude_file}'
+            )
+
+        logging.info(f'Read {len(contig_names)} contig names from {exclude_file}')
+        return contig_names
+
+    except FileNotFoundError:
+        raise click.ClickException(
+            f'Exclusion file not found: {exclude_file}'
+        ) from None
+    except IOError as e:
+        raise click.ClickException(
+            f'Error reading exclusion file {exclude_file}: {e}'
+        ) from e
+
+
+def parse_excluded_contigs(
+    exclude_contigs_str: str, contig_dict: Dict[str, int]
+) -> set:
+    """
+    Parse and validate excluded contig names.
+
+    Parameters
+    ----------
+    exclude_contigs_str : str
+        Comma-delimited string of contig names to exclude.
+    contig_dict : Dict[str, int]
+        Dictionary mapping contig names to their lengths.
+
+    Returns
+    -------
+    set
+        Set of valid contig names to exclude.
+    """
+    excluded_set = set()
+
+    if not exclude_contigs_str:
+        return excluded_set
+
+    # Parse comma-delimited contig names
+    raw_contigs = [
+        contig.strip() for contig in exclude_contigs_str.split(',') if contig.strip()
+    ]
+
+    if not raw_contigs:
+        return excluded_set
+
+    logging.info(f'Processing exclusion list: {", ".join(raw_contigs)}')
+
+    # Validate each contig name
+    for contig_name in raw_contigs:
+        if contig_name in contig_dict:
+            excluded_set.add(contig_name)
+            logging.info(f'Contig "{contig_name}" will be excluded from extension')
+        else:
+            logging.warning(
+                f'Excluded contig "{contig_name}" not found in reference FASTA index'
+            )
+
+    if excluded_set:
+        logging.info(f'Total contigs excluded: {len(excluded_set)}')
+    else:
+        logging.warning('No valid contigs found in exclusion list')
+
+    return excluded_set
+
+
+def combine_excluded_contigs(
+    exclude_contigs_str: str,
+    exclude_contigs_file: Path,
+    contig_dict: Dict[str, int],
+) -> set:
+    """
+    Combine excluded contig names from string and file sources.
+
+    Parameters
+    ----------
+    exclude_contigs_str : str
+        Comma-delimited string of contig names to exclude.
+    exclude_contigs_file : Path
+        Path to file containing contig names to exclude.
+    contig_dict : Dict[str, int]
+        Dictionary mapping contig names to their lengths.
+
+    Returns
+    -------
+    set
+        Combined set of valid contig names to exclude.
+    """
+    all_excluded_names = []
+
+    # Collect from string source
+    if exclude_contigs_str:
+        string_contigs = [
+            contig.strip()
+            for contig in exclude_contigs_str.split(',')
+            if contig.strip()
+        ]
+        if string_contigs:
+            all_excluded_names.extend(string_contigs)
+            logging.info(f'Found {len(string_contigs)} contigs from --exclude-contigs')
+
+    # Collect from file source
+    if exclude_contigs_file:
+        file_contigs = read_excluded_contigs_file(exclude_contigs_file)
+        if file_contigs:
+            all_excluded_names.extend(file_contigs)
+            logging.info(
+                f'Found {len(file_contigs)} contigs from --exclude-contigs-file'
+            )
+
+    # Check if both sources provided and warn
+    if exclude_contigs_str and exclude_contigs_file:
+        logging.warning(
+            'Both --exclude-contigs and --exclude-contigs-file provided. '
+            'Combining contig names from both sources.'
+        )
+
+    if not all_excluded_names:
+        return set()
+
+    # Create unique set and validate against contig dictionary
+    unique_names = set(all_excluded_names)
+    duplicates_removed = len(all_excluded_names) - len(unique_names)
+    if duplicates_removed > 0:
+        logging.info(f'Removed {duplicates_removed} duplicate contig names')
+
+    # Validate each contig name
+    excluded_set = set()
+    for contig_name in unique_names:
+        if contig_name in contig_dict:
+            excluded_set.add(contig_name)
+            logging.info(f'Contig "{contig_name}" will be excluded from extension')
+        else:
+            logging.warning(
+                f'Excluded contig "{contig_name}" not found in reference FASTA index'
+            )
+
+    if excluded_set:
+        logging.info(f'Total unique contigs excluded: {len(excluded_set)}')
+    else:
+        logging.warning('No valid contigs found in exclusion sources')
+
+    return excluded_set
 
 
 def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern]:
@@ -262,15 +581,16 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
         # Create regex patterns for each unique motif
         for motif in unique_motifs:
             if fuzzy:
-                pattern = make_fuzzy_motif_regex(motif)
+                pattern_str = make_fuzzy_motif_regex(motif)
                 pattern_name = f'{motif}_fuzzy'
-                logging.debug(f'Created fuzzy pattern for {motif}: {pattern}')
+                logging.debug(f'Created fuzzy pattern for {motif}: {pattern_str}')
             else:
-                pattern = make_motif_regex(motif)
+                pattern_str = make_motif_regex(motif)
                 pattern_name = motif
-                logging.debug(f'Created exact pattern for {motif}: {pattern}')
+                logging.debug(f'Created exact pattern for {motif}: {pattern_str}')
 
-            motif_patterns[pattern_name] = pattern
+            # Compile the pattern for use with re.findall
+            motif_patterns[pattern_name] = re.compile(pattern_str)
 
         logging.info(f'Created {len(motif_patterns)} motif patterns for analysis')
         if fuzzy:
@@ -312,8 +632,8 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
 @click.option(
     '--max-homopolymer',
     type=int,
-    default=50,
-    help='Maximum homopolymer run length allowed (default: 50)',
+    default=100,
+    help='Maximum homopolymer run length allowed (default: 100)',
 )
 @click.option(
     '--min-extension',
@@ -347,6 +667,28 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
     help='Use fuzzy motif matching allowing ±1 character variation when counting motifs',
 )
 @click.option(
+    '--prefix',
+    type=str,
+    default='teloclip_extended',
+    help='Prefix for default output filenames (default: teloclip_extended)',
+)
+@click.option(
+    '--screen-terminal-bases',
+    type=int,
+    default=0,
+    help='Number of terminal bases to screen for motifs in original contigs (default: 0, disabled)',
+)
+@click.option(
+    '--exclude-contigs',
+    type=str,
+    help='Comma-delimited list of contig names to exclude from extension (e.g., "chrM,chrC,scaffold_123")',
+)
+@click.option(
+    '--exclude-contigs-file',
+    type=click.Path(exists=True, path_type=Path),
+    help='Text file containing contig names to exclude (one per line)',
+)
+@click.option(
     '--log-level',
     default='INFO',
     type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR'], case_sensitive=False),
@@ -369,6 +711,10 @@ def extend(
     dry_run,
     count_motifs,
     fuzzy_count,
+    prefix,
+    screen_terminal_bases,
+    exclude_contigs,
+    exclude_contigs_file,
     log_level,
 ):
     """
@@ -410,6 +756,14 @@ def extend(
         Count telomeric motifs in extensions.
     fuzzy_count : int
         Number of mismatches allowed in motif counting.
+    prefix : str
+        Prefix for default output filenames.
+    screen_terminal_bases : int
+        Number of terminal bases to screen for motifs in original contigs.
+    exclude_contigs : str
+        Comma-delimited list of contig names to exclude from extension.
+    exclude_contigs_file : Path
+        Path to file containing contig names to exclude (one per line).
     log_level : str
         Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
     """
@@ -430,6 +784,15 @@ def extend(
         # Set ref_idx as the reference FASTA with additional suffix .fai
         ref_idx = reference_fasta.parent / (reference_fasta.name + '.fai')
 
+        # Handle default output filenames if not specified
+        if not output_fasta and not dry_run:
+            # Default to stdout (will be handled in writer logic)
+            output_fasta = None
+
+        if not stats_report:
+            # Default stats to stderr (already handled in existing logic)
+            stats_report = None
+
         # Validate output directories
         if output_fasta or stats_report:
             validate_output_directories(output_fasta, stats_report)
@@ -438,10 +801,29 @@ def extend(
         contig_dict = read_fai(ref_idx)
         logging.info(f'Loaded {len(contig_dict)} contigs from reference')
 
+        # Parse excluded contigs from both string and file sources
+        excluded_contig_set = combine_excluded_contigs(
+            exclude_contigs, exclude_contigs_file, contig_dict
+        )
+
         # Prepare motif patterns if specified
         motif_patterns = {}
         if count_motifs:
             motif_patterns = get_motif_regex(count_motifs, fuzzy_count)
+
+        # Perform terminal motif screening if requested
+        terminal_motif_counts = {}
+        if screen_terminal_bases > 0 and motif_patterns:
+            logging.info(
+                f'Screening {screen_terminal_bases} terminal bases for motifs...'
+            )
+            terminal_motif_counts = count_terminal_motifs(
+                reference_fasta, contig_dict, motif_patterns, screen_terminal_bases
+            )
+            total_screened = len(terminal_motif_counts)
+            logging.info(
+                f'Completed terminal motif screening for {total_screened} contigs'
+            )
 
         # Open indexed files
         logging.info('Opening indexed BAM and FASTA files...')
@@ -469,6 +851,16 @@ def extend(
             ):
                 all_stats[contig_name] = contig_stats
                 logging.debug(f'Processing contig {contig_name} for extension...')
+
+                # Check if this contig is explicitly excluded
+                if contig_name in excluded_contig_set:
+                    total_overhangs = contig_stats.left_count + contig_stats.right_count
+                    logging.info(
+                        f'Excluding contig "{contig_name}" (found {total_overhangs} overhangs: '
+                        f'{contig_stats.left_count} left, {contig_stats.right_count} right)'
+                    )
+                    excluded_contigs.append(contig_name)
+                    continue
 
                 # Get the original sequence for this contig
                 try:
@@ -519,7 +911,10 @@ def extend(
 
             # Write extended sequences
             if not dry_run:
-                logging.info('Writing extended sequences...')
+                if output_fasta:
+                    logging.info(f'Writing extended sequences to {output_fasta}...')
+                else:
+                    logging.info('Writing extended sequences to stdout...')
                 with BufferedContigWriter(output_fasta) as writer:
                     # Write extended contigs
                     extended_contig_names = set()
@@ -566,6 +961,7 @@ def extend(
             excluded_contigs,
             warnings,
             motif_stats,
+            terminal_motif_counts,
             dry_run,
         )
 
@@ -593,6 +989,13 @@ def extend(
             logging.info(
                 f'Extension complete: {len(extensions_applied)} contigs extended'
             )
+
+            # Add polishing reminder for actual extensions
+            if extensions_applied and not dry_run:
+                logging.info(
+                    'IMPORTANT: Extended contigs should be polished with appropriate tools '
+                    '(e.g., Pilon, Racon, or Medaka) to improve accuracy before downstream analysis'
+                )
 
         # Motif analysis summary
         if motif_patterns and motif_stats:

@@ -16,7 +16,7 @@ classifiers = [
     "Topic :: Scientific/Engineering :: Bio-Informatics",
 ]
 
-dependencies = ["click", "rich", "biopython", "pysam"]
+dependencies = ["click", "rich", "biopython", "pysam", "pyfaidx"]
 
 dynamic = ["version"]
 
