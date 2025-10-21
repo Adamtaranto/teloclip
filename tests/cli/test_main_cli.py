@@ -105,7 +105,6 @@ def assert_contains(text: str, expected: str, case_sensitive: bool = True):
 class TestMainCLI:
     """Test main teloclip CLI entry point."""
 
-    @pytest.mark.xfail(reason='Version output may be missing or unstable', strict=False)
     def test_version_flag(self, cli_runner):
         """Test --version displays correct version."""
         exit_code, stdout, stderr = cli_runner.run_teloclip(['--version'])
