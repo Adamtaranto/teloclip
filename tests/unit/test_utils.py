@@ -3,17 +3,17 @@
 Tests utility functions.
 """
 
-import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch
 import sys
+import tempfile
+from unittest.mock import Mock, patch
 
-import pytest
 import click
+import pytest
 
-from teloclip.utils import isfile
 from teloclip.commands.extend import validate_output_directories
 from teloclip.extract_io import create_fasta_index
+from teloclip.utils import isfile
 
 
 class TestIsFile:

@@ -3,13 +3,13 @@
 Tests the contig exclusion and motif parsing utilities.
 """
 
+from pathlib import Path
 import re
 import tempfile
-from pathlib import Path
 from unittest.mock import patch
 
-import pytest
 import click
+import pytest
 
 from teloclip.commands.extend import (
     combine_excluded_contigs,

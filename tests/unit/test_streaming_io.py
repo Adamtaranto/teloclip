@@ -3,8 +3,8 @@
 Tests file validation and streaming utilities.
 """
 
-import tempfile
 from pathlib import Path
+import tempfile
 
 from teloclip.streaming_io import validate_indexed_files
 
