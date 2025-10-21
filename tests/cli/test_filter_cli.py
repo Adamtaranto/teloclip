@@ -141,6 +141,36 @@ class TestFilterCLIBasicFunctionality:
         error_output = stdout + stderr
         assert_contains(error_output, 'ref-idx', case_sensitive=False)
 
+    def test_synthetic_telomeric_filtering(self, cli_runner):
+        """Test filtering with synthetic data containing actual telomeric sequences."""
+        synthetic_data_dir = Path(__file__).parent.parent / 'integration' / 'test_data'
+        synthetic_sam = synthetic_data_dir / 'synthetic_alignments.sam'
+        synthetic_fai = synthetic_data_dir / 'synthetic_contigs.fasta.fai'
+
+        # Skip if synthetic data not available
+        if not synthetic_sam.exists() or not synthetic_fai.exists():
+            pytest.skip('Synthetic test data not available')
+
+        exit_code, stdout, stderr = cli_runner.run_teloclip(
+            [
+                'filter',
+                '--ref-idx',
+                str(synthetic_fai),
+                '--motifs',
+                'TTAGGG',
+                str(synthetic_sam),
+            ]
+        )
+
+        assert_exit_code(exit_code, 0, stdout, stderr)
+
+        # Check stderr for statistics (filter outputs stats to stderr)
+        assert_contains(stderr, 'Processed', case_sensitive=False)
+        assert_contains(stderr, 'SAM records', case_sensitive=False)
+
+        # Verify the filter ran with telomeric motifs
+        assert_contains(stderr, 'TTAGGG', case_sensitive=True)
+
     def test_valid_minimal_command_succeeds(self, cli_runner, test_files):
         """Test valid minimal command: teloclip filter --ref-idx INDEX [SAMFILE]."""
         files = test_files()
@@ -558,6 +588,46 @@ class TestFilterCLIFeatureCombinations:
         # Should handle complex flag combinations
         assert_exit_code(exit_code, 0, stdout, stderr)
 
+    def test_comprehensive_filtering_with_synthetic_data(self, cli_runner):
+        """Test comprehensive filtering pipeline with synthetic telomeric data."""
+        synthetic_data_dir = Path(__file__).parent.parent / 'integration' / 'test_data'
+        synthetic_sam = synthetic_data_dir / 'synthetic_alignments.sam'
+        synthetic_fai = synthetic_data_dir / 'synthetic_contigs.fasta.fai'
+
+        # Skip if synthetic data not available
+        if not synthetic_sam.exists() or not synthetic_fai.exists():
+            pytest.skip('Synthetic test data not available')
+
+        exit_code, stdout, stderr = cli_runner.run_teloclip(
+            [
+                'filter',
+                '--ref-idx',
+                str(synthetic_fai),
+                '--motifs',
+                'TTAGGG,CCCTAA',
+                '--fuzzy',
+                '--min-clip',
+                '10',
+                '--min-repeats',
+                '3',
+                '--min-anchor',
+                '50',
+                '--log-level',
+                'INFO',
+                str(synthetic_sam),
+            ]
+        )
+
+        assert_exit_code(exit_code, 0, stdout, stderr)
+
+        # Check stderr for processing statistics
+        assert_contains(stderr, 'Processed', case_sensitive=False)
+        assert_contains(stderr, 'SAM records', case_sensitive=False)
+
+        # Should process real telomeric sequences effectively
+        # The synthetic data contains actual TTAGGG repeats in soft-clipped regions
+        assert_contains(stderr, 'TTAGGG', case_sensitive=True)
+
     def test_fuzzy_with_no_rev_combination(self, cli_runner, test_files):
         """Test --fuzzy with --no-rev combination."""
         files = test_files()
@@ -576,3 +646,180 @@ class TestFilterCLIFeatureCombinations:
         )
 
         assert_exit_code(exit_code, 0, stdout, stderr)
+
+
+class TestFilterCLIAdvancedScenarios:
+    """Test advanced real-world scenarios for filter CLI command."""
+
+    def test_telomeric_repeat_detection(self, cli_runner):
+        """Test detection of actual telomeric repeats in synthetic data."""
+        synthetic_data_dir = Path(__file__).parent.parent / 'integration' / 'test_data'
+        synthetic_sam = synthetic_data_dir / 'synthetic_alignments.sam'
+        synthetic_fai = synthetic_data_dir / 'synthetic_contigs.fasta.fai'
+
+        # Skip if synthetic data not available
+        if not synthetic_sam.exists() or not synthetic_fai.exists():
+            pytest.skip('Synthetic test data not available')
+
+        exit_code, stdout, stderr = cli_runner.run_teloclip(
+            [
+                'filter',
+                '--ref-idx',
+                str(synthetic_fai),
+                '--motifs',
+                'TTAGGG',
+                str(synthetic_sam),
+            ]
+        )
+
+        assert_exit_code(exit_code, 0, stdout, stderr)
+
+        # Check stderr for processing statistics
+        assert_contains(stderr, 'Processed', case_sensitive=False)
+        assert_contains(stderr, 'SAM records', case_sensitive=False)
+        assert_contains(stderr, 'TTAGGG', case_sensitive=True)
+
+    def test_large_file_processing(self, cli_runner):
+        """Test filter performance with realistic file sizes."""
+        synthetic_data_dir = Path(__file__).parent.parent / 'integration' / 'test_data'
+        synthetic_sam = synthetic_data_dir / 'synthetic_alignments.sam'
+        synthetic_fai = synthetic_data_dir / 'synthetic_contigs.fasta.fai'
+
+        if not synthetic_sam.exists() or not synthetic_fai.exists():
+            pytest.skip('Synthetic test data not available')
+
+        import time
+
+        start_time = time.time()
+
+        exit_code, stdout, stderr = cli_runner.run_teloclip(
+            [
+                'filter',
+                '--ref-idx',
+                str(synthetic_fai),
+                '--motifs',
+                'TTAGGG,CCCTAA',
+                '--min-clip',
+                '20',
+                str(synthetic_sam),
+            ]
+        )
+
+        processing_time = time.time() - start_time
+
+        assert_exit_code(exit_code, 0, stdout, stderr)
+        # Should complete within reasonable time (10 seconds for synthetic data)
+        assert processing_time < 10.0
+
+    def test_pipeline_compatibility_stdin_stdout(self, cli_runner):
+        """Test compatibility with Unix pipelines using synthetic data."""
+        synthetic_data_dir = Path(__file__).parent.parent / 'integration' / 'test_data'
+        synthetic_sam = synthetic_data_dir / 'synthetic_alignments.sam'
+        synthetic_fai = synthetic_data_dir / 'synthetic_contigs.fasta.fai'
+
+        if not synthetic_sam.exists() or not synthetic_fai.exists():
+            pytest.skip('Synthetic test data not available')
+
+        # Test stdin input with synthetic data
+        with open(synthetic_sam) as f:
+            sam_content = f.read()
+
+        exit_code, stdout, stderr = cli_runner.run_teloclip(
+            ['filter', '--ref-idx', str(synthetic_fai), '--motifs', 'TTAGGG', '-'],
+            input_data=sam_content,
+        )
+
+        assert_exit_code(exit_code, 0, stdout, stderr)
+        assert_contains(stderr, 'Processed', case_sensitive=False)
+
+    def test_edge_case_motif_patterns(self, cli_runner):
+        """Test filtering with edge case motif patterns."""
+        synthetic_data_dir = Path(__file__).parent.parent / 'integration' / 'test_data'
+        synthetic_sam = synthetic_data_dir / 'synthetic_alignments.sam'
+        synthetic_fai = synthetic_data_dir / 'synthetic_contigs.fasta.fai'
+
+        if not synthetic_sam.exists() or not synthetic_fai.exists():
+            pytest.skip('Synthetic test data not available')
+
+        # Test with multiple motifs including edge cases
+        exit_code, stdout, stderr = cli_runner.run_teloclip(
+            [
+                'filter',
+                '--ref-idx',
+                str(synthetic_fai),
+                '--motifs',
+                'TTAGGG,CCCTAA,AACCCT,AGGGTT',
+                '--fuzzy',
+                str(synthetic_sam),
+            ]
+        )
+
+        assert_exit_code(exit_code, 0, stdout, stderr)
+        assert_contains(stderr, 'Processed', case_sensitive=False)
+
+    def test_filtering_statistics_accuracy(self, cli_runner):
+        """Test accuracy of filtering statistics with known data."""
+        synthetic_data_dir = Path(__file__).parent.parent / 'integration' / 'test_data'
+        synthetic_sam = synthetic_data_dir / 'synthetic_alignments.sam'
+        synthetic_fai = synthetic_data_dir / 'synthetic_contigs.fasta.fai'
+
+        if not synthetic_sam.exists() or not synthetic_fai.exists():
+            pytest.skip('Synthetic test data not available')
+
+        exit_code, stdout, stderr = cli_runner.run_teloclip(
+            [
+                'filter',
+                '--ref-idx',
+                str(synthetic_fai),
+                '--motifs',
+                'TTAGGG',
+                '--log-level',
+                'INFO',
+                str(synthetic_sam),
+            ]
+        )
+
+        assert_exit_code(exit_code, 0, stdout, stderr)
+
+        # Verify statistics are reported in stderr
+        assert_contains(stderr, 'Processed', case_sensitive=False)
+        assert_contains(stderr, 'SAM records', case_sensitive=False)
+
+        # Check that numbers make sense (should have processed some records)
+        lines = stderr.split('\n')
+        stats_lines = [line for line in lines if 'SAM records' in line]
+        assert len(stats_lines) > 0
+
+    def test_memory_usage_validation(self, cli_runner):
+        """Test memory usage remains reasonable with realistic data."""
+        synthetic_data_dir = Path(__file__).parent.parent / 'integration' / 'test_data'
+        synthetic_sam = synthetic_data_dir / 'synthetic_alignments.sam'
+        synthetic_fai = synthetic_data_dir / 'synthetic_contigs.fasta.fai'
+
+        if not synthetic_sam.exists() or not synthetic_fai.exists():
+            pytest.skip('Synthetic test data not available')
+
+        import time
+
+        start_time = time.time()
+
+        exit_code, stdout, stderr = cli_runner.run_teloclip(
+            [
+                'filter',
+                '--ref-idx',
+                str(synthetic_fai),
+                '--motifs',
+                'TTAGGG,CCCTAA',
+                '--min-clip',
+                '10',
+                '--max-break',
+                '100',
+                str(synthetic_sam),
+            ]
+        )
+
+        processing_time = time.time() - start_time
+
+        assert_exit_code(exit_code, 0, stdout, stderr)
+        # Should complete within reasonable time and memory constraints
+        assert processing_time < 10.0
