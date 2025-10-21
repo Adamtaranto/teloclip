@@ -195,7 +195,7 @@ Before using overhangs identified by Teloclip to extend contigs you should inspe
 
 Check for conflicting soft-clipped sequences. These indicate non-specific read alignments. You may need to tighten your alignment criteria or manually remove low-confidence alignments.
 
-Note: Circular genomes (i.e. mitochondria, chloroplasts, and nitroplasts) will always yield soft-clipped overhangs and should not be extended. We attempt to exclude these with `--exclude-outliers` which will skip contigs with unusually high overhang depths.
+Note: Circular genomes (i.e. mitochondria, chloroplasts, and nitroplasts) will always yield soft-clipped overhangs and should not be extended. We attempt to exclude these with `--exclude-outliers` which will skip contigs with unusually high overhang depths. You can explicitly exclude known circular contigs by providing names to `--exclude-contigs`.
 
 ```bash
 # Create required indices (one-time setup)
@@ -209,10 +209,11 @@ samtools index overhangs.sorted.bam
 
 # Use `--dry-run` option to report proposed changes without applying them.
 teloclip extend overhangs.sorted.bam ref.fa \
-  --ref-idx ref.fa.fai \
   --output-fasta extended.fasta \
   --stats-report extension_report.txt \
   --count-motifs TTAGGG \
+  --screen-terminal-bases 1000 \
+  --exclude-contigs ctg_007_mitochondrial
   --dry-run
 ```
 
@@ -272,29 +273,34 @@ Usage: teloclip filter [OPTIONS] [SAMFILE]
   repeats.
 
 Options:
-  --ref-idx PATH             Path to fai index for reference fasta. Index
-                             fasta using `samtools faidx FASTA`  [required]
-  --min-clip INTEGER         Require clip to extend past ref contig end by at
-                             least N bases.
-  --max-break INTEGER        Tolerate max N unaligned bases before contig end.
-  --motifs TEXT              If set keep only reads containing given motif/s
-                             from comma delimited list of strings. By default
-                             also search for reverse complement of motifs.
-                             i.e. TTAGGG,TTAAGGG will also match
-                             CCCTAA,CCCTTAA
-  --no-rev                   If set do NOT search for reverse complement of
-                             specified motifs.
-  --fuzzy                    If set, tolerate +/- 1 variation in motif
-                             homopolymer runs i.e. TTAGGG -> T{1,3}AG{2,4}.
-                             Default: Off
-  -r, --min-repeats INTEGER  Minimum number of sequential pattern matches
-                             required for a hit to be reported. Default: 1
-  --min-anchor INTEGER       Minimum number of aligned bases (anchor) required
-                             on the non-clipped portion of the read. Default:
-                             500
-  --match-anywhere           If set, motif match may occur in unclipped region
-                             of reads.
-  --help                     Show this message and exit.
+  --ref-idx PATH                  Path to fai index for reference fasta. Index
+                                  fasta using `samtools faidx FASTA`
+                                  [required]
+  --min-clip INTEGER              Require clip to extend past ref contig end
+                                  by at least N bases.
+  --max-break INTEGER             Tolerate max N unaligned bases before contig
+                                  end.
+  --motifs TEXT                   If set keep only reads containing given
+                                  motif/s from comma delimited list of
+                                  strings. By default also search for reverse
+                                  complement of motifs. i.e. TTAGGG,TTAAGGG
+                                  will also match CCCTAA,CCCTTAA
+  --no-rev                        If set do NOT search for reverse complement
+                                  of specified motifs.
+  --fuzzy                         If set, tolerate +/- 1 variation in motif
+                                  homopolymer runs i.e. TTAGGG ->
+                                  T{1,3}AG{2,4}. Default: Off
+  -r, --min-repeats INTEGER       Minimum number of sequential pattern matches
+                                  required for a hit to be reported. Default:
+                                  1
+  --min-anchor INTEGER            Minimum number of aligned bases (anchor)
+                                  required on the non-clipped portion of the
+                                  read. Default: 500
+  --match-anywhere                If set, motif match may occur in unclipped
+                                  region of reads.
+  --log-level [DEBUG|INFO|WARNING|ERROR]
+                                  Logging level (default: INFO).
+  --help                          Show this message and exit.
 ```
 
 ### Extract Sub-command Options
@@ -302,7 +308,7 @@ Options:
 Run `teloclip extract --help` to view the extract command options:
 
 ```code
-Usage: -c extract [OPTIONS] [SAMFILE]
+Usage: teloclip extract [OPTIONS] [SAMFILE]
 
   Extract overhanging reads for each end of each reference contig. Reads are
   always written to output files.
@@ -333,7 +339,7 @@ Options:
                                   (default: 1000).
   --output-format [fasta|fastq]   Output format for extracted sequences
                                   (default: fasta).
-  --stats-report                  Write extraction statistics to file in
+  --report-stats                  Write extraction statistics to file in
                                   output directory.
   --no-mask-overhangs             Do not convert overhang sequences to
                                   lowercase.
@@ -352,28 +358,41 @@ Usage: teloclip extend [OPTIONS] BAM_FILE REFERENCE_FASTA
   Extend contigs using overhang analysis from soft-clipped alignments.
 
 Options:
-  --ref-idx PATH             Path to fai index for reference fasta  [required]
-  --output-fasta PATH        Extended FASTA output file
-  --stats-report PATH        Statistics report output file
-  --exclude-outliers         Exclude outlier contigs from extension
-  --outlier-threshold FLOAT  Z-score threshold for outlier detection (default:
-                             2.0)
-  --min-overhangs INTEGER    Minimum supporting overhangs required (default:
-                             1)
-  --max-homopolymer INTEGER  Maximum homopolymer run length allowed (default:
-                             50)
-  --min-extension INTEGER    Minimum overhang length for extension (default:
-                             1)
-  --max-break INTEGER        Maximum gap allowed between alignment and contig
-                             end (default: 10)
-  --min-anchor INTEGER       Minimum anchor length required for alignment
-                             (default: 500)
-  --dry-run                  Report extensions without modifying sequences
-  --count-motifs TEXT        Comma-delimited motif sequences to count in
-                             overhang regions (e.g., "TTAGGG,CCCTAA")
-  --fuzzy-count              Use fuzzy motif matching allowing ±1 character
-                             variation when counting motifs
-  --help                     Show this message and exit.
+  --output-fasta PATH             Extended FASTA output file
+  --stats-report PATH             Statistics report output file
+  --exclude-outliers              Exclude outlier contigs from extension
+  --outlier-threshold FLOAT       Z-score threshold for outlier detection
+                                  (default: 2.0)
+  --min-overhangs INTEGER         Minimum supporting overhangs required
+                                  (default: 1)
+  --max-homopolymer INTEGER       Maximum homopolymer run length allowed
+                                  (default: 100)
+  --min-extension INTEGER         Minimum overhang length for extension
+                                  (default: 1)
+  --max-break INTEGER             Maximum gap allowed between alignment and
+                                  contig end (default: 10)
+  --min-anchor INTEGER            Minimum anchor length required for alignment
+                                  (default: 100)
+  --dry-run                       Report extensions without modifying
+                                  sequences
+  --count-motifs TEXT             Comma-delimited motif sequences to count in
+                                  overhang regions (e.g., "TTAGGG,CCCTAA")
+  --fuzzy-count                   Use fuzzy motif matching allowing ±1
+                                  character variation when counting motifs
+  --prefix TEXT                   Prefix for default output filenames
+                                  (default: teloclip_extended)
+  --screen-terminal-bases INTEGER
+                                  Number of terminal bases to screen for
+                                  motifs in original contigs (default: 0,
+                                  disabled)
+  --exclude-contigs TEXT          Comma-delimited list of contig names to
+                                  exclude from extension (e.g.,
+                                  "chrM,chrC,scaffold_123")
+  --exclude-contigs-file PATH     Text file containing contig names to exclude
+                                  (one per line)
+  --log-level [DEBUG|INFO|WARNING|ERROR]
+                                  Logging level (default: INFO).
+  --help                          Show this message and exit.
 ```
 
 ## Citing Teloclip
