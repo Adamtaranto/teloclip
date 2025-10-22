@@ -2,7 +2,7 @@ cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "teloclip"
 version: 0.3.0
-date-released: 2025-10-19
+date-released: 2025-10-22
 authors:
   - family-names: Taranto
     given-names: Adam
