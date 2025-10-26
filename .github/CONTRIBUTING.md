@@ -3,7 +3,7 @@
 Thank you for your interest in contributing to teloclip! This document provides guidelines and instructions for contributing to this project.
 
 ## Table of Contents
-- [Code of Conduct](#code-of-conduct)
+
 - [How to Contribute](#how-to-contribute)
   - [Reporting Bugs](#reporting-bugs)
   - [Suggesting Features](#suggesting-features)
@@ -13,10 +13,6 @@ Thank you for your interest in contributing to teloclip! This document provides 
 - [Testing](#testing)
 - [Pull Request Process](#pull-request-process)
 - [Questions and Contact](#questions-and-contact)
-
-## Code of Conduct
-
-Our project is committed to providing a welcoming and inclusive experience for everyone. We expect all participants to adhere to our Code of Conduct in all project spaces.
 
 ## How to Contribute
 
@@ -54,9 +50,9 @@ To set up your development environment:
 
 1. Clone your fork of the repository
 
-   ```bash
-   git clone https://github.com/adamtaranto/teloclip.git
-   cd teloclip
+  ```bash
+  git clone https://github.com/adamtaranto/teloclip.git
+  cd teloclip
   ```
 
 3. Create and activate a virtual environment
@@ -72,40 +68,56 @@ To set up your development environment:
   pip install -e ".[dev]"
   ```
 
+4. Enable git pre-commit checks
+
+  ```bash
+  pre-commit install
+  ```
+
+5. Create a new feature branch
+
+  ```bash
+  git checkout -b your_new_feature
+  ```
+
 ## Style Guidelines
 
-We follow PEP 8 style guidelines and use NumPy-style docstrings.
+We follow PEP 8 style guidelines and use numpydoc-style docstrings.
 
 Key points:
 
 - Maximum line length of 88 characters
 - Use type hints
-- Document functions and classes with NumPy-style docstrings
+- Document functions and classes with numpydoc-style docstrings
 - Use descriptive variable names
-- Format code with Black
+- Format code with ruff
 - Sort imports with isort
 
 ## Testing
 
 Before submitting a pull request:
 
-1. Ensure all tests pass
+1. For new functionality, add appropriate tests
+
+2. Ensure all tests pass
 
 ```bash
 pytest tests/
 ```
 
-2. For new functionality, add appropriate tests
-3. Ensure test coverage remains high
+3. Run pre-commit checks
+
+```bash
+pre-commit run --all-files
+```
 
 ## Pull Request Process
 
 1. Update documentation if needed
 2. Update the README.md if needed
-3. Update the CHANGELOG.md with a description of your changes
-4. Ensure all tests pass and code quality checks succeed
-5. Submit your pull request with a clear description of the changes
-6. Address any feedback from maintainers
+3. Ensure all tests pass and code quality checks succeed
+4. Submit your pull request with a clear description of the changes
+5. Address any feedback from maintainers
 
 ## Questions and Contact
 

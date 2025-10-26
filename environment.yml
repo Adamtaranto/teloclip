@@ -3,17 +3,18 @@ channels:
   - conda-forge
   - bioconda
 dependencies:
-  - python >=3.12
+  - bioconda::winnowmap
   - minimap2
-  - samtools
-  #- bioconda::winnowmap
   - pip
+  - pyfaidx
+  - pysam
+  - python >=3.12
+  - samtools
   - pip:
       - click
       - hatch
       - isort
       - numpydoc-validation
-      - pandas
       - pre-commit
       - pytest
       - pytest-cov

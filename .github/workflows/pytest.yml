@@ -1,33 +1,26 @@
 name: Python Tests
-
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
-
+    branches: [main]
 jobs:
   test:
     runs-on: ubuntu-latest
-
     strategy:
       matrix:
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
-
     steps:
       # Checkout the latest commit associated with the PR
-      - uses: actions/checkout@v4
-      
+      - uses: actions/checkout@v5
       - name: Debug matrix value
         run: echo "Python version is ${{ matrix.python-version }}"
-
       # Set up Miniconda
       - name: Set up Miniconda
-        uses: conda-incubator/setup-miniconda@v2
+        uses: conda-incubator/setup-miniconda@v3
         with:
-          auto-update-conda: true  # Optional: update Conda to the latest version
+          auto-update-conda: true # Optional: update Conda to the latest version
           python-version: ${{ matrix.python-version }}
-
       # Install any additional dependencies not included in the pyproject.toml file
       - name: Install additional dependencies
         run: |
@@ -35,17 +28,14 @@ jobs:
           python -m pip install --upgrade pip
           pip install '.[dev]'  # Install all dependencies, including test-specific ones
         shell: bash -l {0}
-      
       - name: Verify pytest installation
         run: python -m pytest --version
         shell: bash -l {0}
-
       # Run pytest on the specified directory
       - name: Test with pytest
         run: |
           pytest
         shell: bash -l {0}
-
       # Upload coverage report to Codecov
       # Only upload coverage for the latest Python version
       - name: Upload coverage reports to Codecov
