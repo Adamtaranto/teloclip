@@ -42,13 +42,13 @@ from ..seqops import read_fai, revComp
     '--min-clip',
     default=1,
     type=int,
-    help='Require clip to extend past ref contig end by at least N bases.',
+    help='Require clip to extend past ref contig end by at least N bases. Default: 1',
 )
 @click.option(
     '--max-break',
     default=50,
     type=int,
-    help='Tolerate max N unaligned bases before contig end.',
+    help='Tolerate max N unaligned bases before contig end. Default: 50',
 )
 @click.option(
     '--min-anchor',

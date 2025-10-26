@@ -30,13 +30,13 @@ from teloclip.seqops import addRevComplement, read_fai
     '--min-clip',
     default=1,
     type=int,
-    help='Require clip to extend past ref contig end by at least N bases.',
+    help='Require clip to extend past ref contig end by at least N bases. Default: 1',
 )
 @click.option(
     '--max-break',
     default=50,
     type=int,
-    help='Tolerate max N unaligned bases before contig end.',
+    help='Tolerate max N unaligned bases before contig end. Default: 50',
 )
 @click.option(
     '--motifs',
@@ -64,9 +64,9 @@ from teloclip.seqops import addRevComplement, read_fai
 )
 @click.option(
     '--min-anchor',
-    default=500,
+    default=100,
     type=int,
-    help='Minimum number of aligned bases (anchor) required on the non-clipped portion of the read. Default: 500',
+    help='Minimum number of aligned bases (anchor) required on the non-clipped portion of the read. Default: 100',
 )
 @click.option(
     '--match-anywhere',
