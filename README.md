@@ -235,13 +235,19 @@ The final telomere-extended assembly should be re-polished using available long 
 
 **Additional filters**
 
-Users may wish to exclude reads below a minimum length or read quality score to reduce the risk of incorrect alignments.
+Users may wish to exclude reads below a minimum mapping quality score to reduce the risk of incorrect alignments.
 
-In some cases it may be also be useful to prioritise primary alignments. This can be done by pre-filtering alignments with `samtools view`. You can [decode sam flags here](https://broadinstitute.github.io/picard/explain-flags.html).
+Similarly, multi-mapping reads will generate secondary alignments. To exclude non-specific aligments you can pre-filtering with `samtools view`. You can [decode sam flags here](https://broadinstitute.github.io/picard/explain-flags.html).
+
+Note: As of version teloclip v0.3.0, `filter` and `extract` will exclude secondary alignments by default.
 
 ```bash
-# Exclude secondary alignments.
-samtools view -h -F 0x100 in.sam | teloclip filter --ref-idx ref.fa.fai > noSA.sam
+# Use samtools to filter reads below a MAPQ 30
+samtools view -h -q 30 input.sam | teloclip filter --ref-idx ref.fa.fai > min_mapq_30.sam
+
+# Exclude secondary alignments by filtering with samtools
+# Note: Secondary alignments are filtered by default in teloclip >=v0.3.0, use '--keep-secondary' to keep.
+samtools view -h -F 0x100 input.sam | teloclip filter --ref-idx ref.fa.fai > no_secondary.sam
 ```
 
 ## Options
@@ -287,9 +293,9 @@ Options:
                                   fasta using `samtools faidx FASTA`
                                   [required]
   --min-clip INTEGER              Require clip to extend past ref contig end
-                                  by at least N bases.
+                                  by at least N bases. Default: 1
   --max-break INTEGER             Tolerate max N unaligned bases before contig
-                                  end.
+                                  end. Default: 50
   --motifs TEXT                   If set keep only reads containing given
                                   motif/s from comma delimited list of
                                   strings. By default also search for reverse
@@ -297,6 +303,9 @@ Options:
                                   will also match CCCTAA,CCCTTAA
   --no-rev                        If set do NOT search for reverse complement
                                   of specified motifs.
+  --keep-secondary                If set, include secondary alignments in
+                                  output. Default: Off (exclude secondary
+                                  alignments).
   --fuzzy                         If set, tolerate +/- 1 variation in motif
                                   homopolymer runs i.e. TTAGGG ->
                                   T{1,3}AG{2,4}. Default: Off
@@ -305,7 +314,7 @@ Options:
                                   1
   --min-anchor INTEGER            Minimum number of aligned bases (anchor)
                                   required on the non-clipped portion of the
-                                  read. Default: 500
+                                  read. Default: 100
   --match-anywhere                If set, motif match may occur in unclipped
                                   region of reads.
   --log-level [DEBUG|INFO|WARNING|ERROR]
@@ -332,13 +341,16 @@ Options:
   --extract-dir PATH              Write extracted reads to this directory.
                                   Default: cwd.
   --min-clip INTEGER              Require clip to extend past ref contig end
-                                  by at least N bases.
+                                  by at least N bases. Default: 1
   --max-break INTEGER             Tolerate max N unaligned bases before contig
-                                  end.
+                                  end. Default: 50
   --min-anchor INTEGER            Minimum anchored alignment length required
                                   (default: 100).
   --min-mapq INTEGER              Minimum mapping quality required (default:
                                   0).
+  --keep-secondary                If set, include secondary alignments in
+                                  output. Default: Off (exclude secondary
+                                  alignments).
   --include-stats                 Include mapping quality, clip length, and
                                   motif counts in FASTA headers.
   --count-motifs TEXT             Comma-delimited motif sequences to count in
@@ -376,7 +388,7 @@ Options:
   --min-overhangs INTEGER         Minimum supporting overhangs required
                                   (default: 1)
   --max-homopolymer INTEGER       Maximum homopolymer run length allowed
-                                  (default: 100)
+                                  (default: 500)
   --min-extension INTEGER         Minimum overhang length for extension
                                   (default: 1)
   --max-break INTEGER             Maximum gap allowed between alignment and

@@ -6,6 +6,7 @@ statistics tracking, and BioPython integration for the extract command.
 """
 
 from collections import defaultdict
+import logging
 from pathlib import Path
 import sys
 from typing import Dict, Optional, Union
@@ -389,7 +390,16 @@ class ExtractionStats:
     def __init__(self):
         """Initialize statistics counters."""
         self.total_sam_lines = 0
-        self.filter_counts = {'soft_clip': 0, 'quality': 0, 'anchor': 0}
+        self.filter_counts = {
+            'unmapped': 0,
+            'secondary': 0,
+            'soft_clip': 0,
+            'quality': 0,
+            'anchor': 0,
+            'max_break': 0,
+            'min_clip': 0,
+            'motifs': 0,
+        }
         self.total_filtered = 0
         self.total_passed_to_split = 0
         # Track which contigs have overhangs found
@@ -536,6 +546,23 @@ class ExtractionStats:
         lines.append(f'Right overhangs: {self.right_overhangs:,}')
 
         return '\n'.join(lines)
+
+    def log_exclusion_summary(self):
+        """Log comprehensive exclusion criteria summary."""
+        logging.info(
+            f'Processed {self.total_sam_lines} SAM records.\n'
+            f'Passed to processing: {self.total_passed_to_split}\n'
+            f'Exclusion summary:\n'
+            f'  - Unmapped reads: {self.filter_counts["unmapped"]}\n'
+            f'  - Secondary alignments: {self.filter_counts["secondary"]}\n'
+            f'  - No soft-clips: {self.filter_counts["soft_clip"]}\n'
+            f'  - Below quality threshold: {self.filter_counts["quality"]}\n'
+            f'  - Below min_anchor threshold: {self.filter_counts["anchor"]}\n'
+            f'  - Beyond max_break threshold: {self.filter_counts["max_break"]}\n'
+            f'  - Below min_clip threshold: {self.filter_counts["min_clip"]}\n'
+            f'  - No telomeric motifs: {self.filter_counts["motifs"]}\n'
+            f'Total filtered: {self.total_filtered} alignments after all filtering.'
+        )
 
 
 class BufferedContigWriter:

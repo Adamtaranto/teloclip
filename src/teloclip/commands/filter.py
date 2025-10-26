@@ -50,6 +50,11 @@ from teloclip.seqops import addRevComplement, read_fai
     help='If set do NOT search for reverse complement of specified motifs.',
 )
 @click.option(
+    '--keep-secondary',
+    is_flag=True,
+    help='If set, include secondary alignments in output. Default: Off (exclude secondary alignments).',
+)
+@click.option(
     '--fuzzy',
     is_flag=True,
     help='If set, tolerate +/- 1 variation in motif homopolymer runs '
@@ -88,6 +93,7 @@ def filter_cmd(
     max_break,
     motifs,
     no_rev,
+    keep_secondary,
     fuzzy,
     min_repeats,
     min_anchor,
@@ -116,6 +122,8 @@ def filter_cmd(
         Comma-separated list of DNA motifs to search for.
     no_rev : bool
         If True, do not search for reverse complement motifs.
+    keep_secondary : bool
+        If True, include secondary alignments in output.
     fuzzy : bool
         If True, use fuzzy matching allowing +/- 1 base variance in homopolymers.
     min_repeats : int
@@ -178,6 +186,8 @@ def filter_cmd(
             # Create exact regex patterns for each motif
             motif_list = [make_motif_regex(motif) for motif in motif_list]
 
+    exclude_secondary = not keep_secondary
+
     # Process SAM lines
     processSamlines(
         samfile,
@@ -188,4 +198,5 @@ def filter_cmd(
         min_clip=min_clip,
         min_repeats=min_repeats,
         min_anchor=min_anchor,
+        exclude_secondary=exclude_secondary,
     )

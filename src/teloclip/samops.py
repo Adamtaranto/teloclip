@@ -22,8 +22,9 @@ def processSamlines(
     max_break=0,
     min_clip=1,
     min_repeats=1,
-    min_anchor=500,
+    min_anchor=100,
     return_counts=False,
+    exclude_secondary=True,
 ):
     """
     Process SAM alignment lines and filter based on clipping and motif criteria.
@@ -53,6 +54,8 @@ def processSamlines(
     return_counts : bool, optional
         If True, return processing statistics as a dictionary instead of None.
         Default is False for backward compatibility.
+    exclude_secondary : bool, optional
+        If True, exclude secondary alignments (FLAG & 256). Default is True.
 
     Returns
     -------
@@ -82,6 +85,7 @@ def processSamlines(
 
     # SAM line index keys
     SAM_QNAME = 0
+    SAM_FLAG = 1
     SAM_RNAME = 2
     SAM_POS = 3
     SAM_CIGAR = 5
@@ -95,6 +99,14 @@ def processSamlines(
     samlineCount = 0
     anchorFilteredCount = 0
 
+    # Exclusion criteria counters
+    excluded_unmapped = 0
+    excluded_secondary = 0
+    excluded_min_clip = 0
+    excluded_max_break = 0
+    excluded_min_anchor = 0
+    excluded_motifs = 0
+
     # Read SAM from stdin
     for line in samfile:
         keepLine = False
@@ -106,10 +118,25 @@ def processSamlines(
             continue
         samlineCount += 1
         samline = line.split('\t')
+
+        # Check for unmapped reads (FLAG & 4)
+        flag = int(samline[SAM_FLAG])
+        if flag & 4:
+            excluded_unmapped += 1
+            removeCount += 1
+            continue
+
+        # Check for secondary alignments (FLAG & 256)
+        if flag & 256 and exclude_secondary:
+            excluded_secondary += 1
+            removeCount += 1
+            continue
+
         # Check if line contains soft-clip and no hard-clipping.
         if 'S' in samline[SAM_CIGAR] and 'H' not in samline[SAM_CIGAR]:
             # Check if alignment meets minimum anchor requirement
             if not validate_min_anchor(samline[SAM_CIGAR], min_anchor):
+                excluded_min_anchor += 1
                 anchorFilteredCount += 1
                 removeCount += 1
                 continue
@@ -117,11 +144,21 @@ def processSamlines(
             # Get length of left and right overhangs
             leftClipLen, rightClipLen = checkClips(samline[SAM_CIGAR])
             alnLen = lenCIGAR(samline[SAM_CIGAR])
+
+            # Track exclusion reasons for reads with clips
+            left_excluded_max_break = False
+            left_excluded_min_clip = False
+            right_excluded_max_break = False
+            right_excluded_min_clip = False
+
             # Check for left overhang
             if leftClipLen:
-                if (int(samline[SAM_POS]) <= max_break) and (
-                    leftClipLen >= (int(samline[SAM_POS]) + min_clip)
-                ):
+                pos = int(samline[SAM_POS])
+                if pos > max_break:
+                    left_excluded_max_break = True
+                elif leftClipLen < (pos + min_clip):
+                    left_excluded_min_clip = True
+                else:
                     # Overhang is on contig left
                     keepLine = True
                     leftClip = True
@@ -137,9 +174,11 @@ def processSamlines(
                     )
                 alnEnd = int(samline[SAM_POS]) + alnLen
                 # Check if overhang is on contig right end
-                if ((ContigLen - alnEnd) <= max_break) and (
-                    alnEnd + rightClipLen >= ContigLen + 1
-                ):
+                if (ContigLen - alnEnd) > max_break:
+                    right_excluded_max_break = True
+                elif alnEnd + rightClipLen < ContigLen + 1:
+                    right_excluded_min_clip = True
+                else:
                     rightClip = True
                     # Check if already found left OH
                     if not keepLine:
@@ -153,6 +192,14 @@ def processSamlines(
                             + str(samline[SAM_RNAME])
                         )
                         bothCount += 1
+
+            # Track exclusion reasons for reads that weren't kept
+            if not keepLine and (leftClipLen or rightClipLen):
+                if left_excluded_max_break or right_excluded_max_break:
+                    excluded_max_break += 1
+                elif left_excluded_min_clip or right_excluded_min_clip:
+                    excluded_min_clip += 1
+
             # Optional check for Telomeric repeat motifs
             if motif_list and keepLine and match_anywhere:
                 if check_sequence_for_patterns(
@@ -161,6 +208,7 @@ def processSamlines(
                     sys.stdout.write(line)
                     motifCount += 1
                 else:
+                    excluded_motifs += 1
                     removeCount += 1
             elif motif_list and keepLine:
                 if isMotifInClip(
@@ -175,6 +223,7 @@ def processSamlines(
                     sys.stdout.write(line)
                     motifCount += 1
                 else:
+                    excluded_motifs += 1
                     removeCount += 1
             elif keepLine:
                 sys.stdout.write(line)
@@ -184,18 +233,29 @@ def processSamlines(
         logging.info(
             f'Processed {samlineCount} SAM records.\n'
             f'Found {keepCount} alignments soft-clipped at contig ends.\n'
-            f'Filtered {anchorFilteredCount} alignments below min_anchor threshold ({min_anchor}bp).\n'
             f'Found {bothCount} alignments spanning entire contigs.\n'
             f'Output {motifCount} alignments containing motif matches.\n'
-            f'Discarded {removeCount} total alignments after all filtering.'
+            f'Exclusion summary:\n'
+            f'  - Unmapped reads: {excluded_unmapped}\n'
+            f'  - Secondary alignments: {excluded_secondary}\n'
+            f'  - Below min_anchor threshold ({min_anchor}bp): {excluded_min_anchor}\n'
+            f'  - Beyond max_break threshold ({max_break}bp): {excluded_max_break}\n'
+            f'  - Below min_clip threshold: {excluded_min_clip}\n'
+            f'  - No telomeric motifs: {excluded_motifs}\n'
+            f'Total discarded: {removeCount} alignments after all filtering.'
         )
     else:
         logging.info(
             f'Processed {samlineCount} SAM records.\n'
             f'Found {keepCount} alignments soft-clipped at contig ends.\n'
-            f'Filtered {anchorFilteredCount} alignments below min_anchor threshold ({min_anchor}bp).\n'
             f'Found {bothCount} alignments spanning entire contigs.\n'
-            f'Discarded {removeCount} total alignments after all filtering.'
+            f'Exclusion summary:\n'
+            f'  - Unmapped reads: {excluded_unmapped}\n'
+            f'  - Secondary alignments: {excluded_secondary}\n'
+            f'  - Below min_anchor threshold ({min_anchor}bp): {excluded_min_anchor}\n'
+            f'  - Beyond max_break threshold ({max_break}bp): {excluded_max_break}\n'
+            f'  - Below min_clip threshold: {excluded_min_clip}\n'
+            f'Total discarded: {removeCount} alignments after all filtering.'
         )
 
     # Return counts if requested for testing purposes
@@ -207,6 +267,12 @@ def processSamlines(
             'removeCount': removeCount,
             'anchorFilteredCount': anchorFilteredCount,
             'bothCount': bothCount,
+            'excluded_unmapped': excluded_unmapped,
+            'excluded_secondary': excluded_secondary,
+            'excluded_min_anchor': excluded_min_anchor,
+            'excluded_max_break': excluded_max_break,
+            'excluded_min_clip': excluded_min_clip,
+            'excluded_motifs': excluded_motifs,
         }
 
 
@@ -452,6 +518,8 @@ class EnhancedStreamingSamFilter:
         Compiled motif regex patterns. Default is None.
     stats : ExtractionStats, optional
         Statistics tracker. Default is None.
+    exclude_secondary : bool, optional
+        If True, exclude secondary alignments. Default is True.
     """
 
     def __init__(
@@ -464,6 +532,7 @@ class EnhancedStreamingSamFilter:
         min_mapq: int = 0,
         motif_patterns: Optional[Dict[str, str]] = None,
         stats: Optional['ExtractionStats'] = None,
+        exclude_secondary: bool = True,
     ):
         """
         Initialize enhanced streaming filter.
@@ -486,6 +555,8 @@ class EnhancedStreamingSamFilter:
             Compiled motif regex patterns
         stats : ExtractionStats, optional
             Statistics tracker
+        exclude_secondary : bool, optional
+            If True, exclude secondary alignments. Default is True.
         """
         self.samfile = samfile
         self.contigs = contigs
@@ -633,6 +704,19 @@ class EnhancedStreamingSamFilter:
                         self.stats.record_filter('malformed')
                     continue
 
+                # Check for unmapped reads (FLAG & 4)
+                flag = int(samline[self.SAM_FLAG])
+                if flag & 4:
+                    if self.stats:
+                        self.stats.record_filter('unmapped')
+                    continue
+
+                # Check for secondary alignments (FLAG & 256)
+                if flag & 256 and self.exclude_secondary:
+                    if self.stats:
+                        self.stats.record_filter('secondary')
+                    continue
+
                 # Check for soft clipping (and no hard clipping)
                 cigar = samline[self.SAM_CIGAR]
                 if 'S' not in cigar or 'H' in cigar:
@@ -671,11 +755,20 @@ class EnhancedStreamingSamFilter:
                 sequence = samline[self.SAM_SEQ]
                 read_name = samline[self.SAM_QNAME]
 
-                # Motifs will be counted per overhang region (done below for each clip)
+                # Track exclusion reasons and process overhangs
 
                 # Check for left overhang
-                if left_clip_len and left_clip_len >= self.min_clip:
-                    if pos <= self.max_break and left_clip_len >= (pos + self.min_clip):
+                if left_clip_len:
+                    if left_clip_len < self.min_clip:
+                        # Track min_clip exclusion but continue to check right overhang
+                        if self.stats:
+                            self.stats.record_filter('min_clip')
+                    elif pos > self.max_break:
+                        # Track max_break exclusion but continue to check right overhang
+                        if self.stats:
+                            self.stats.record_filter('max_break')
+                    elif left_clip_len >= (pos + self.min_clip):
+                        # Valid left overhang
                         aln_end = pos + aln_len
                         # Extract left overhang sequence (clipped region) and convert to uppercase for motif counting
                         overhang_seq = sequence[:left_clip_len].upper()
@@ -684,6 +777,11 @@ class EnhancedStreamingSamFilter:
                         motif_counts = None
                         if self.motif_patterns:
                             motif_counts = self._count_motifs_in_sequence(overhang_seq)
+                            # Check if no motifs found and track exclusion
+                            if not any(count > 0 for count in motif_counts.values()):
+                                if self.stats:
+                                    self.stats.record_filter('motifs')
+                                continue  # Skip this overhang
 
                         yield {
                             'aln_start': pos,
@@ -697,13 +795,24 @@ class EnhancedStreamingSamFilter:
                             'motif_counts': motif_counts,
                             'overhang_seq': overhang_seq,
                         }
+                    else:
+                        # Does not meet min_clip requirement relative to position
+                        if self.stats:
+                            self.stats.record_filter('min_clip')
 
                 # Check for right overhang
-                if right_clip_len and right_clip_len >= self.min_clip:
+                if right_clip_len:
                     aln_end = pos + aln_len
-                    if (
-                        contig_len - aln_end
-                    ) <= self.max_break and aln_end + right_clip_len >= contig_len + 1:
+                    if right_clip_len < self.min_clip:
+                        # Track min_clip exclusion
+                        if self.stats:
+                            self.stats.record_filter('min_clip')
+                    elif (contig_len - aln_end) > self.max_break:
+                        # Track max_break exclusion
+                        if self.stats:
+                            self.stats.record_filter('max_break')
+                    elif aln_end + right_clip_len >= contig_len + 1:
+                        # Valid right overhang
                         # Extract right overhang sequence (clipped region) and convert to uppercase for motif counting
                         overhang_seq = sequence[-right_clip_len:].upper()
 
@@ -711,6 +820,11 @@ class EnhancedStreamingSamFilter:
                         motif_counts = None
                         if self.motif_patterns:
                             motif_counts = self._count_motifs_in_sequence(overhang_seq)
+                            # Check if no motifs found and track exclusion
+                            if not any(count > 0 for count in motif_counts.values()):
+                                if self.stats:
+                                    self.stats.record_filter('motifs')
+                                continue  # Skip this overhang
 
                         yield {
                             'aln_start': pos,

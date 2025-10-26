@@ -63,6 +63,11 @@ from ..seqops import read_fai, revComp
     help='Minimum mapping quality required (default: 0).',
 )
 @click.option(
+    '--keep-secondary',
+    is_flag=True,
+    help='If set, include secondary alignments in output. Default: Off (exclude secondary alignments).',
+)
+@click.option(
     '--include-stats',
     is_flag=True,
     help='Include mapping quality, clip length, and motif counts in FASTA headers.',
@@ -116,6 +121,7 @@ def extract_cmd(
     max_break,
     min_anchor,
     min_mapq,
+    keep_secondary,
     include_stats,
     count_motifs,
     fuzzy_count,
@@ -153,6 +159,8 @@ def extract_cmd(
         Minimum anchored alignment length required.
     min_mapq : int
         Minimum mapping quality required.
+    keep_secondary : bool
+        If True, include secondary alignments in output.
     include_stats : bool
         Include statistics in FASTA headers.
     count_motifs : str
@@ -269,6 +277,9 @@ def extract_cmd(
         # Initialize statistics tracker
         stats = ExtractionStats()
 
+        # Track whether to exclude secondary alignments
+        exclude_secondary = not keep_secondary
+
         # Create enhanced streaming filter
         logging.info('Processing alignments. Searching for overhangs.')
         alignments = EnhancedStreamingSamFilter(
@@ -280,6 +291,7 @@ def extract_cmd(
             min_mapq=min_mapq,
             motif_patterns=motif_patterns,
             stats=stats,
+            exclude_secondary=exclude_secondary,
         )
 
         logging.info('Writing overhang reads by contig.')
@@ -301,6 +313,9 @@ def extract_cmd(
             existing_stats=stats,
             use_sam_attributes=(include_stats and output_format == 'fastq'),
         )
+
+        # Log comprehensive exclusion summary
+        final_stats.log_exclusion_summary()
 
         # Generate and output statistics report
         reference_contigs = set(contig_info.keys())
