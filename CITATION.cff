@@ -1,7 +1,7 @@
 cff-version: 1.2.0
 message: "If you use this software, please cite it as below."
 title: "teloclip"
-version: 0.3.0
+version: 0.3.2
 date-released: 2025-10-26
 authors:
   - family-names: Taranto
