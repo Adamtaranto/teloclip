@@ -106,6 +106,7 @@ def collect_contig_overhangs_streaming(
                 is_left=True,
                 clip_length=left_clip,
                 anchor_length=anchor_length,
+                contig_name=contig_name,
             )
             contig_stats.left_overhangs.append(overhang)
 
@@ -126,6 +127,7 @@ def collect_contig_overhangs_streaming(
                 is_left=False,
                 clip_length=right_clip,
                 anchor_length=anchor_length,
+                contig_name=contig_name,
             )
             contig_stats.right_overhangs.append(overhang)
 
@@ -229,7 +231,7 @@ def process_single_contig_extension(
     dry_run: bool = False,
 ) -> Optional[ExtensionResult]:
     """
-    Process extension for a single contig.
+    Process extension for a single contig, handling both ends if valid.
 
     Parameters
     ----------
@@ -256,76 +258,168 @@ def process_single_contig_extension(
     # Import here to avoid circular imports
     import re
 
-    from .analysis import detect_homopolymer_runs, select_best_overhang
+    from .analysis import select_best_overhang
     from .extension import apply_contig_extension
 
     warnings = []
 
-    # Check each end for extension opportunities
-    for is_left in [True, False]:
-        overhangs = (
-            contig_stats.left_overhangs if is_left else contig_stats.right_overhangs
+    # Find best overhangs for both ends
+    best_left_overhang = None
+    best_right_overhang = None
+
+    # Check left end
+    if contig_stats.left_overhangs:
+        best_left_overhang = select_best_overhang(
+            contig_stats.left_overhangs, min_extension, max_homopolymer
         )
-        end_name = 'left' if is_left else 'right'
 
-        if not overhangs:
-            continue
+    # Check right end
+    if contig_stats.right_overhangs:
+        best_right_overhang = select_best_overhang(
+            contig_stats.right_overhangs, min_extension, max_homopolymer
+        )
 
-        # Select best overhang
-        best_overhang = select_best_overhang(overhangs, min_extension, max_homopolymer)
+    # If no valid overhangs found, return None
+    if not best_left_overhang and not best_right_overhang:
+        return None
 
-        if best_overhang is None:
-            continue
+    # Apply extensions in order: left first, then right
+    # This maintains correct positioning since left extensions don't affect right positions
+    working_sequence = original_sequence
+    final_extension_info = {}
 
-        # Check for homopolymer runs
-        homo_runs = detect_homopolymer_runs(best_overhang.sequence, max_homopolymer)
-        if homo_runs:
-            warning_msg = (
-                f'Homopolymer run detected in {contig_name} {end_name} extension: '
-                f'{homo_runs[0][0]}x{homo_runs[0][3]} at position {homo_runs[0][1]}'
-            )
-            warnings.append(warning_msg)
-
-        # Apply extension
+    # Process left extension first
+    if best_left_overhang:
         if not dry_run:
             try:
-                extended_seq, ext_info = apply_contig_extension(
-                    original_sequence, best_overhang, contig_stats.contig_length
+                working_sequence, left_ext_info = apply_contig_extension(
+                    working_sequence, best_left_overhang, contig_stats.contig_length
                 )
+                # Update the extension info with left extension details
+                final_extension_info.update(
+                    {'left_' + k: v for k, v in left_ext_info.items()}
+                )
+                final_extension_info['has_left_extension'] = True
             except ValueError as e:
-                warnings.append(f'Extension failed for {contig_name}: {e}')
-                continue
+                warnings.append(f'Left extension failed for {contig_name}: {e}')
+                best_left_overhang = None
         else:
-            # Simulate extension for dry run
-            extended_seq = original_sequence  # Don't actually extend
-            ext_info = {
-                'overhang_length': best_overhang.length,
-                'read_name': best_overhang.read_name,
-                'is_left': is_left,
-                'original_length': contig_stats.contig_length,
-                'final_length': contig_stats.contig_length + best_overhang.length,
-                'trim_length': 0,
-            }
-
-        # Count motifs if patterns provided
-        motif_counts = {}
-        if motif_patterns:
-            target_seq = (
-                extended_seq
-                if not dry_run
-                else original_sequence + best_overhang.sequence
+            # Simulate left extension for dry run
+            final_extension_info.update(
+                {
+                    'left_overhang_length': best_left_overhang.length,
+                    'left_read_name': best_left_overhang.read_name,
+                    'left_trim_length': 0,
+                    'has_left_extension': True,
+                }
             )
-            for pattern_name, pattern_str in motif_patterns.items():
-                matches = re.findall(pattern_str, target_seq)
-                motif_counts[pattern_name] = len(matches)
 
-        return ExtensionResult(
-            contig_name=contig_name,
-            original_length=contig_stats.contig_length,
-            extended_sequence=extended_seq,
-            extension_info=ext_info,
-            warnings=warnings,
-            motif_counts=motif_counts,
+    # Process right extension second
+    if best_right_overhang:
+        if not dry_run:
+            try:
+                # For right extension after left extension, we need to adjust the overhang position
+                # The right overhang alignment coordinates are relative to the original contig,
+                # but we need to apply it to the extended sequence
+                adjusted_right_overhang = OverhangInfo(
+                    sequence=best_right_overhang.sequence,
+                    length=best_right_overhang.length,
+                    # Adjust alignment positions to account for left extension
+                    alignment_pos=best_right_overhang.alignment_pos
+                    + (len(working_sequence) - contig_stats.contig_length),
+                    alignment_end=best_right_overhang.alignment_end
+                    + (len(working_sequence) - contig_stats.contig_length),
+                    read_name=best_right_overhang.read_name,
+                    is_left=best_right_overhang.is_left,
+                    clip_length=best_right_overhang.clip_length,
+                    anchor_length=best_right_overhang.anchor_length,
+                    contig_name=best_right_overhang.contig_name,
+                )
+
+                # Apply to the current working sequence (which may already include left extension)
+                working_sequence, right_ext_info = apply_contig_extension(
+                    working_sequence,
+                    adjusted_right_overhang,
+                    # Use the current length, not the original length
+                    len(working_sequence),
+                )
+                # Update the extension info with right extension details
+                final_extension_info.update(
+                    {'right_' + k: v for k, v in right_ext_info.items()}
+                )
+                final_extension_info['has_right_extension'] = True
+            except ValueError as e:
+                warnings.append(f'Right extension failed for {contig_name}: {e}')
+                best_right_overhang = None
+        else:
+            # Simulate right extension for dry run
+            final_extension_info.update(
+                {
+                    'right_overhang_length': best_right_overhang.length,
+                    'right_read_name': best_right_overhang.read_name,
+                    'right_trim_length': 0,
+                    'has_right_extension': True,
+                }
+            )
+
+    # If all extensions failed, return None
+    if not final_extension_info:
+        return None
+
+    # Add overall extension info
+    final_extension_info.update(
+        {
+            'original_length': contig_stats.contig_length,
+            'final_length': len(working_sequence)
+            if not dry_run
+            else contig_stats.contig_length
+            + (best_left_overhang.length if best_left_overhang else 0)
+            + (best_right_overhang.length if best_right_overhang else 0),
+            'contig_name': contig_name,
+        }
+    )
+
+    # For backward compatibility, set primary extension info to the first successful extension
+    if best_left_overhang:
+        final_extension_info.update(
+            {
+                'overhang_length': best_left_overhang.length,
+                'read_name': best_left_overhang.read_name,
+                'is_left': True,
+                'trim_length': final_extension_info.get('left_trim_length', 0),
+            }
+        )
+    elif best_right_overhang:
+        final_extension_info.update(
+            {
+                'overhang_length': best_right_overhang.length,
+                'read_name': best_right_overhang.read_name,
+                'is_left': False,
+                'trim_length': final_extension_info.get('right_trim_length', 0),
+            }
         )
 
-    return None  # No suitable extension found
+    # Count motifs if patterns provided
+    motif_counts = {}
+    if motif_patterns:
+        target_seq = working_sequence if not dry_run else original_sequence
+
+        # Add extensions to target sequence for dry run
+        if dry_run:
+            if best_left_overhang:
+                target_seq = best_left_overhang.sequence + target_seq
+            if best_right_overhang:
+                target_seq = target_seq + best_right_overhang.sequence
+
+        for pattern_name, pattern_str in motif_patterns.items():
+            matches = re.findall(pattern_str, target_seq)
+            motif_counts[pattern_name] = len(matches)
+
+    return ExtensionResult(
+        contig_name=contig_name,
+        original_length=contig_stats.contig_length,
+        extended_sequence=working_sequence,
+        extension_info=final_extension_info,
+        warnings=warnings,
+        motif_counts=motif_counts,
+    )

@@ -137,15 +137,46 @@ def generate_extension_report(
 
     for contig_name, ext_info in extensions_applied.items():
         report_lines.append(f'### {contig_name}')
-        report_lines.append(
-            f'  Direction: {"Left" if ext_info["is_left"] else "Right"}'
-        )
         report_lines.append(f'  Original length: {ext_info["original_length"]:,}')
-        report_lines.append(f'  Extension length: {ext_info["overhang_length"]}')
         report_lines.append(f'  Final length: {ext_info["final_length"]:,}')
-        report_lines.append(f'  Source read: {ext_info["read_name"]}')
-        if ext_info['trim_length'] > 0:
-            report_lines.append(f'  Bases trimmed: {ext_info["trim_length"]}')
+
+        # Report left extension if present
+        if ext_info.get('has_left_extension', False):
+            left_length = ext_info.get('left_overhang_length', 0)
+            left_read = ext_info.get('left_read_name', 'unknown')
+            left_trim = ext_info.get('left_trim_length', 0)
+            report_lines.append(
+                f'  Left extension: +{left_length}bp from read {left_read}'
+            )
+            if left_trim > 0:
+                report_lines.append(f'    Left bases trimmed: {left_trim}')
+
+        # Report right extension if present
+        if ext_info.get('has_right_extension', False):
+            right_length = ext_info.get('right_overhang_length', 0)
+            right_read = ext_info.get('right_read_name', 'unknown')
+            right_trim = ext_info.get('right_trim_length', 0)
+            report_lines.append(
+                f'  Right extension: +{right_length}bp from read {right_read}'
+            )
+            if right_trim > 0:
+                report_lines.append(f'    Right bases trimmed: {right_trim}')
+
+        # Fallback for backward compatibility (single extension)
+        if not ext_info.get('has_left_extension', False) and not ext_info.get(
+            'has_right_extension', False
+        ):
+            direction = 'Left' if ext_info.get('is_left', False) else 'Right'
+            report_lines.append(f'  Direction: {direction}')
+            report_lines.append(
+                f'  Extension length: {ext_info.get("overhang_length", 0)}'
+            )
+            report_lines.append(
+                f'  Source read: {ext_info.get("read_name", "unknown")}'
+            )
+            if ext_info.get('trim_length', 0) > 0:
+                report_lines.append(f'  Bases trimmed: {ext_info["trim_length"]}')
+
         report_lines.append('')
 
     # Terminal motif screening results
@@ -632,8 +663,8 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
 @click.option(
     '--max-homopolymer',
     type=int,
-    default=100,
-    help='Maximum homopolymer run length allowed (default: 100)',
+    default=500,
+    help='Maximum homopolymer run length allowed (default: 500)',
 )
 @click.option(
     '--min-extension',
@@ -839,6 +870,7 @@ def extend(
             all_stats = {}
 
             # Collect statistics for contigs that meet extension criteria
+            extension_results = {}  # Store ExtensionResult objects for writing phase
             for contig_name, contig_stats in stream_contigs_for_extension(
                 bam_file_handle,
                 contig_dict,
@@ -883,24 +915,48 @@ def extend(
                 )
 
                 if extension_result:
+                    # Store the complete ExtensionResult for later use
+                    extension_results[contig_name] = extension_result
                     extensions_applied[contig_name] = extension_result.extension_info
                     warnings.extend(extension_result.warnings)
                     if extension_result.motif_counts:
                         motif_stats[contig_name] = extension_result.motif_counts
 
-                    # Log successful extension
+                    # Log successful extension(s)
                     ext_info = extension_result.extension_info
-                    end_name = 'left' if ext_info['is_left'] else 'right'
-                    if dry_run:
-                        logging.info(
-                            f'[DRY RUN] Would extend {contig_name} {end_name} end: '
-                            f'+{ext_info["overhang_length"]}bp from read {ext_info["read_name"]}'
+
+                    # Log both extensions if present
+                    if ext_info.get('has_left_extension', False):
+                        left_length = ext_info.get(
+                            'left_overhang_length', ext_info.get('overhang_length', 0)
                         )
-                    else:
-                        logging.info(
-                            f'Extended {contig_name} {end_name} end: '
-                            f'+{ext_info["overhang_length"]}bp from read {ext_info["read_name"]}'
+                        left_read = ext_info.get(
+                            'left_read_name', ext_info.get('read_name', 'unknown')
                         )
+                        if dry_run:
+                            logging.info(
+                                f'[DRY RUN] Would extend {contig_name} left end: '
+                                f'+{left_length}bp from read {left_read}'
+                            )
+                        else:
+                            logging.info(
+                                f'Extended {contig_name} left end: '
+                                f'+{left_length}bp from read {left_read}'
+                            )
+
+                    if ext_info.get('has_right_extension', False):
+                        right_length = ext_info.get('right_overhang_length', 0)
+                        right_read = ext_info.get('right_read_name', 'unknown')
+                        if dry_run:
+                            logging.info(
+                                f'[DRY RUN] Would extend {contig_name} right end: '
+                                f'+{right_length}bp from read {right_read}'
+                            )
+                        else:
+                            logging.info(
+                                f'Extended {contig_name} right end: '
+                                f'+{right_length}bp from read {right_read}'
+                            )
 
             # Calculate overall statistics if we have data
             if all_stats:
@@ -916,31 +972,14 @@ def extend(
                 else:
                     logging.info('Writing extended sequences to stdout...')
                 with BufferedContigWriter(output_fasta) as writer:
-                    # Write extended contigs
+                    # Write extended contigs using stored results
                     extended_contig_names = set()
-                    for contig_name, extension_result in [
-                        (name, er)
-                        for name, er in [
-                            (
-                                n,
-                                process_single_contig_extension(
-                                    n,
-                                    all_stats[n],
-                                    processor.get_contig_sequence(n),
-                                    min_extension,
-                                    max_homopolymer,
-                                    motif_patterns,
-                                    dry_run,
-                                ),
-                            )
-                            for n in extensions_applied.keys()
-                        ]
-                        if er is not None
-                    ]:
+                    for contig_name, extension_result in extension_results.items():
                         writer.write_contig(
                             contig_name, extension_result.extended_sequence
                         )
                         extended_contig_names.add(contig_name)
+                        logging.debug(f'Wrote extended sequence for {contig_name}')
 
                     # Copy unmodified contigs
                     copy_unmodified_contigs(

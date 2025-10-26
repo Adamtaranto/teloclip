@@ -6,6 +6,7 @@ statistics about overhanging sequences that can be used to extend draft contigs.
 """
 
 from dataclasses import dataclass, field
+import logging
 import statistics
 from typing import Dict, Iterator, List, Optional, Tuple
 
@@ -24,6 +25,7 @@ class OverhangInfo:
     is_left: bool
     clip_length: int
     anchor_length: int
+    contig_name: str
 
 
 @dataclass
@@ -176,6 +178,7 @@ def collect_overhang_stats(
                 is_left=True,
                 clip_length=left_clip,
                 anchor_length=anchor_length,
+                contig_name=ref_name,
             )
             stats[ref_name].left_overhangs.append(overhang)
 
@@ -195,6 +198,7 @@ def collect_overhang_stats(
                 is_left=False,
                 clip_length=right_clip,
                 anchor_length=anchor_length,
+                contig_name=ref_name,
             )
             stats[ref_name].right_overhangs.append(overhang)
 
@@ -479,11 +483,27 @@ def select_best_overhang(
     candidates = rank_overhangs_by_length(candidates)
 
     # Check for homopolymer runs in order of preference
+    excluded_count = 0
     for overhang in candidates:
         homo_runs = detect_homopolymer_runs(overhang.sequence, max_homopolymer)
-        if not homo_runs:  # No concerning homopolymer runs
+        if homo_runs:  # Has concerning homopolymer runs
+            side = 'left' if overhang.is_left else 'right'
+            warning_msg = (
+                f'Excluding overhang from read {overhang.read_name} on {side} side of '
+                f'contig {overhang.contig_name}: homopolymer run {homo_runs[0][0]}x{homo_runs[0][3]} '
+                f'at position {homo_runs[0][1]}-{homo_runs[0][2]} (length {homo_runs[0][3]}) '
+                f'exceeds threshold ({max_homopolymer})'
+            )
+            logging.warning(warning_msg)
+            excluded_count += 1
+        else:
             return overhang
 
-    # If all have homopolymer issues, return the longest one anyway
-    # but this should be flagged in reporting
-    return candidates[0] if candidates else None
+    # If all candidates have homopolymer issues, return None
+    if excluded_count > 0:
+        logging.warning(
+            f'All {excluded_count} candidate overhangs contain homopolymer runs '
+            f'exceeding threshold ({max_homopolymer}). No extension will be applied.'
+        )
+
+    return None

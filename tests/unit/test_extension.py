@@ -94,7 +94,7 @@ class TestExtendContig:
     def test_extend_left_end(self):
         """Test extending left end of contig."""
         sequence = 'ATCGATCGATCG'
-        overhang = OverhangInfo('GGGG', 4, 1, 100, 'read1', True, 4, 96)
+        overhang = OverhangInfo('GGGG', 4, 1, 100, 'read1', True, 4, 96, 'test_contig')
 
         result = extend_contig(sequence, overhang, 0, is_left_end=True)
 
@@ -103,7 +103,9 @@ class TestExtendContig:
     def test_extend_right_end(self):
         """Test extending right end of contig."""
         sequence = 'ATCGATCGATCG'
-        overhang = OverhangInfo('AAAA', 4, 995, 1000, 'read1', False, 4, 96)
+        overhang = OverhangInfo(
+            'AAAA', 4, 995, 1000, 'read1', False, 4, 96, 'test_contig'
+        )
 
         result = extend_contig(sequence, overhang, len(sequence), is_left_end=False)
 
@@ -116,7 +118,7 @@ class TestValidateExtension:
     def test_validate_left_extension_success(self):
         """Test validation of successful left extension."""
         original = 'ATCGATCGATCG'
-        overhang = OverhangInfo('GGGG', 4, 1, 100, 'read1', True, 4, 96)
+        overhang = OverhangInfo('GGGG', 4, 1, 100, 'read1', True, 4, 96, 'test_contig')
         extended = 'GGGGATCGATCGATCG'
 
         result = validate_extension(original, extended, overhang)
@@ -126,7 +128,9 @@ class TestValidateExtension:
     def test_validate_right_extension_success(self):
         """Test validation of successful right extension."""
         original = 'ATCGATCGATCG'
-        overhang = OverhangInfo('AAAA', 4, 995, 1000, 'read1', False, 4, 96)
+        overhang = OverhangInfo(
+            'AAAA', 4, 995, 1000, 'read1', False, 4, 96, 'test_contig'
+        )
         extended = 'ATCGATCGATCGAAAA'
 
         result = validate_extension(original, extended, overhang)
@@ -136,7 +140,7 @@ class TestValidateExtension:
     def test_validate_left_extension_failure(self):
         """Test validation of failed left extension."""
         original = 'ATCGATCGATCG'
-        overhang = OverhangInfo('GGGG', 4, 1, 100, 'read1', True, 4, 96)
+        overhang = OverhangInfo('GGGG', 4, 1, 100, 'read1', True, 4, 96, 'test_contig')
         extended = 'ATCGATCGATCGAAAA'  # Wrong extension
 
         result = validate_extension(original, extended, overhang)
@@ -146,7 +150,9 @@ class TestValidateExtension:
     def test_validate_right_extension_failure(self):
         """Test validation of failed right extension."""
         original = 'ATCGATCGATCG'
-        overhang = OverhangInfo('AAAA', 4, 995, 1000, 'read1', False, 4, 96)
+        overhang = OverhangInfo(
+            'AAAA', 4, 995, 1000, 'read1', False, 4, 96, 'test_contig'
+        )
         extended = 'GGGGATCGATCGATCG'  # Wrong extension
 
         result = validate_extension(original, extended, overhang)
@@ -156,7 +162,9 @@ class TestValidateExtension:
     def test_validate_no_length_increase(self):
         """Test validation when extended sequence is not longer."""
         original = 'ATCGATCGATCG'
-        overhang = OverhangInfo('AAAA', 4, 995, 1000, 'read1', False, 4, 96)
+        overhang = OverhangInfo(
+            'AAAA', 4, 995, 1000, 'read1', False, 4, 96, 'test_contig'
+        )
         extended = 'ATCGATCG'  # Shorter than original
 
         result = validate_extension(original, extended, overhang)
@@ -170,7 +178,7 @@ class TestApplyContigExtension:
     def test_apply_left_extension_no_trim(self):
         """Test applying left extension without trimming."""
         contig_seq = 'ATCGATCGATCG'
-        overhang = OverhangInfo('GGGG', 4, 1, 100, 'read1', True, 4, 96)
+        overhang = OverhangInfo('GGGG', 4, 1, 100, 'read1', True, 4, 96, 'test_contig')
 
         extended_seq, ext_info = apply_contig_extension(
             contig_seq, overhang, len(contig_seq)
@@ -186,7 +194,7 @@ class TestApplyContigExtension:
     def test_apply_right_extension_no_trim(self):
         """Test applying right extension without trimming."""
         contig_seq = 'ATCGATCGATCG'
-        overhang = OverhangInfo('AAAA', 4, 12, 12, 'read1', False, 4, 96)
+        overhang = OverhangInfo('AAAA', 4, 12, 12, 'read1', False, 4, 96, 'test_contig')
 
         extended_seq, ext_info = apply_contig_extension(
             contig_seq, overhang, len(contig_seq)
@@ -200,7 +208,7 @@ class TestApplyContigExtension:
     def test_apply_left_extension_with_trim(self):
         """Test applying left extension with trimming."""
         contig_seq = 'ATCGATCGATCG'
-        overhang = OverhangInfo('GGGG', 4, 3, 100, 'read1', True, 4, 96)
+        overhang = OverhangInfo('GGGG', 4, 3, 100, 'read1', True, 4, 96, 'test_contig')
 
         extended_seq, ext_info = apply_contig_extension(
             contig_seq, overhang, len(contig_seq)
@@ -213,7 +221,9 @@ class TestApplyContigExtension:
     def test_apply_right_extension_with_trim(self):
         """Test applying right extension with trimming."""
         contig_seq = 'ATCGATCGATCG'
-        overhang = OverhangInfo('AAAA', 4, 900, 10, 'read1', False, 4, 96)
+        overhang = OverhangInfo(
+            'AAAA', 4, 900, 10, 'read1', False, 4, 96, 'test_contig'
+        )
 
         extended_seq, ext_info = apply_contig_extension(
             contig_seq, overhang, len(contig_seq)
@@ -228,7 +238,7 @@ class TestApplyContigExtension:
         contig_seq = 'ATCGATCGATCG'
         # Create an overhang that would cause validation to fail
         # This is a bit artificial but tests the error path
-        overhang = OverhangInfo('', 0, 1, 100, 'read1', True, 0, 100)
+        overhang = OverhangInfo('', 0, 1, 100, 'read1', True, 0, 100, 'test_contig')
 
         with pytest.raises(ValueError, match='Extension validation failed'):
             apply_contig_extension(contig_seq, overhang, len(contig_seq))
@@ -236,7 +246,7 @@ class TestApplyContigExtension:
     def test_extension_info_completeness(self):
         """Test that extension info contains all expected fields."""
         contig_seq = 'ATCGATCGATCG'
-        overhang = OverhangInfo('GGGG', 4, 1, 100, 'read1', True, 4, 96)
+        overhang = OverhangInfo('GGGG', 4, 1, 100, 'read1', True, 4, 96, 'test_contig')
 
         extended_seq, ext_info = apply_contig_extension(
             contig_seq, overhang, len(contig_seq)
