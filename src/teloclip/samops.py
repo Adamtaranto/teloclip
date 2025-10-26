@@ -75,9 +75,10 @@ def processSamlines(
     else:
         compiled_motifs = []
 
-    logging.info(
-        f'Compiled motif patterns: {", ".join([str(motif) for motif in compiled_motifs])}'
-    )
+    if compiled_motifs:
+        logging.info(
+            f'Compiled motif patterns: {", ".join([str(motif) for motif in compiled_motifs])}'
+        )
 
     # SAM line index keys
     SAM_QNAME = 0
