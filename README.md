@@ -14,6 +14,8 @@
 <h1>Teloclip</h1>
 <p>
 A tool for the recovery of unassembled telomeres from raw long-reads using soft-clipped read alignments.
+
+🎉🧬 New Release v0.3.2: Teloclip now supports _automatic_ telomere extension!! 🧬🎉
 </p>
 
 ### Table of contents
@@ -36,13 +38,15 @@ A tool for the recovery of unassembled telomeres from raw long-reads using soft-
 
 ## About Teloclip
 
-In most eukaryotic species, chromosomes terminate in repetitive [telomeric](https://en.wikipedia.org/wiki/Telomere) sequences. A complete genome assembly should ideally comprise chromosome-level contigs that possess telomeric repeats at each end. However, genome assemblers frequently fail to recover these repetitive features, instead producing contigs that terminate immediately prior to their location.
+In most eukaryotic species, chromosomes terminate in repetitive [telomeric](https://en.wikipedia.org/wiki/Telomere) sequences. A complete genome assembly should ideally comprise chromosome-level contigs that possess telomeric repeats at each end. However, genome assemblers frequently fail to recover these repetitive features, instead producing contigs that terminate immediately prior to telomeric repeats.
 
-Teloclip is designed to recover long-reads that can be used to extend draft contigs and resolve missing telomeres (short-read alignments may also be processed with teloclip). It does this by searching alignments of raw long-read data (i.e. Pacbio or ONT reads mapped with Minimap2) for 'clipped' alignments that occur at the ends of draft contigs. A 'clipped' alignment is produced where the *end* of a read is not part of its best alignment. This can occur when a read extends past the end of an assembled contig.
+Teloclip is designed to scan raw long-read data for evidence that can be used to restore missing telomeres. It does this by searching alignments of raw long-read data (i.e. Pacbio or ONT reads mapped with Minimap2) for 'clipped' alignments that occur at the ends of draft contigs. A 'clipped' alignment is produced where the *end* of a read is not part of its best alignment. This can occur when a read extends past the end of an assembled contig.
 
 Information about segments of a read that were aligned or clipped are stored in [SAM formatted](https://en.wikipedia.org/wiki/SAM_(file_format)) alignments as a [CIGAR string](https://www.drive5.com/usearch/manual/cigar.html). Teloclip parses these strings to determine if a read has been clipped at one or both ends of a contig.
 
 Optionally, teloclip can screen overhanging reads for telomere-associated motifs (i.e. 'TTAGGG' / 'CCCTAA') and report only those containing a match.
+
+Once candidate telomeric sequences have be detected in alignment overhangs, teloclip can be used to automatically patch the missing sequence onto draft contigs.
 
 Teloclip is based on concepts from Torsten Seemann's excellent tool [samclip](https://github.com/tseemann/samclip). Samclip can be used to remove clipped alignments from a samfile prior to variant calling.
 
@@ -96,7 +100,7 @@ git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip inst
 ```bash
 # Print version number and exit.
 teloclip --version
-# > teloclip 0.3.0
+# > teloclip 0.3.2
 
 # Get usage information
 teloclip --help
