@@ -44,7 +44,36 @@ jobs:
           TAG_VERSION=${TAG_NAME#v}
           echo "tag_version=${TAG_VERSION}" >> $GITHUB_OUTPUT
 
+          # Function to increment patch version
+          increment_patch_version() {
+            local version=$1
+            # Split version into parts (assumes semantic versioning: major.minor.patch)
+            if [[ $version =~ ^([0-9]+)\.([0-9]+)\.([0-9]+)$ ]]; then
+              local major=${BASH_REMATCH[1]}
+              local minor=${BASH_REMATCH[2]}
+              local patch=${BASH_REMATCH[3]}
+              local new_patch=$((patch + 1))
+              echo "${major}.${minor}.${new_patch}"
+            else
+              echo "::error::Invalid version format: ${version}"
+              exit 1
+            fi
+          }
+
+          # Calculate incremented version
+          INCREMENTED_VERSION=$(increment_patch_version "${TAG_VERSION}")
+          echo "incremented_version=${INCREMENTED_VERSION}" >> $GITHUB_OUTPUT
+
+          # Create incremented tag name (preserve 'v' prefix if original had it)
+          if [[ "${TAG_NAME}" =~ ^v ]]; then
+            INCREMENTED_TAG_NAME="v${INCREMENTED_VERSION}"
+          else
+            INCREMENTED_TAG_NAME="${INCREMENTED_VERSION}"
+          fi
+          echo "incremented_tag_name=${INCREMENTED_TAG_NAME}" >> $GITHUB_OUTPUT
+
           echo "::notice::Processing tag: ${TAG_NAME} (version: ${TAG_VERSION}, created on ${TAG_DATE})"
+          echo "::notice::If update needed, will create: ${INCREMENTED_TAG_NAME} (version: ${INCREMENTED_VERSION})"
       - name: Parse current CITATION.cff
         id: parse_citation
         run: |
@@ -75,19 +104,27 @@ jobs:
           CURRENT_DATE="${{ steps.parse_citation.outputs.current_date }}"
           TAG_VERSION="${{ steps.tag_info.outputs.tag_version }}"
           TAG_DATE="${{ steps.tag_info.outputs.tag_date }}"
+          INCREMENTED_TAG_NAME="${{ steps.tag_info.outputs.incremented_tag_name }}"
 
           echo "Comparing values:"
           echo "  Version: '${CURRENT_VERSION}' vs '${TAG_VERSION}'"
           echo "  Date: '${CURRENT_DATE}' vs '${TAG_DATE}'"
 
           if [ "${CURRENT_VERSION}" != "${TAG_VERSION}" ] || [ "${CURRENT_DATE}" != "${TAG_DATE}" ]; then
-            echo "needs_update=true" >> $GITHUB_OUTPUT
-            echo "::notice::CITATION.cff needs updating"
+            # Check if incremented tag already exists
+            if git rev-parse --verify "refs/tags/${INCREMENTED_TAG_NAME}" >/dev/null 2>&1; then
+              echo "::error::Incremented tag ${INCREMENTED_TAG_NAME} already exists!"
+              echo "::error::Cannot create new version. Please resolve tag conflicts manually."
+              exit 1
+            fi
 
-            # Create update summary
+            echo "needs_update=true" >> $GITHUB_OUTPUT
+            echo "::notice::CITATION.cff needs updating - will create new version ${INCREMENTED_TAG_NAME}"
+
+            # Create update summary with incremented version
             UPDATE_SUMMARY=""
             if [ "${CURRENT_VERSION}" != "${TAG_VERSION}" ]; then
-              UPDATE_SUMMARY="${UPDATE_SUMMARY}- Version: ${CURRENT_VERSION} → ${TAG_VERSION}\n"
+              UPDATE_SUMMARY="${UPDATE_SUMMARY}- Version: ${CURRENT_VERSION} → ${{ steps.tag_info.outputs.incremented_version }}\n"
             fi
             if [ "${CURRENT_DATE}" != "${TAG_DATE}" ]; then
               UPDATE_SUMMARY="${UPDATE_SUMMARY}- Date: ${CURRENT_DATE} → ${TAG_DATE}\n"
@@ -102,7 +139,7 @@ jobs:
       - name: Update CITATION.cff
         if: steps.check_update.outputs.needs_update == 'true'
         run: |
-          TAG_VERSION="${{ steps.tag_info.outputs.tag_version }}"
+          INCREMENTED_VERSION="${{ steps.tag_info.outputs.incremented_version }}"
           TAG_DATE="${{ steps.tag_info.outputs.tag_date }}"
 
           # Create a backup
@@ -130,8 +167,8 @@ jobs:
             fi
           }
 
-          # Update fields
-          update_field "version" "${TAG_VERSION}" "CITATION.cff"
+          # Update fields with incremented version
+          update_field "version" "${INCREMENTED_VERSION}" "CITATION.cff"
           update_field "date-released" "${TAG_DATE}" "CITATION.cff"
 
           # Show the diff
@@ -143,9 +180,9 @@ jobs:
           NEW_VERSION=$(grep -E '^version:' CITATION.cff | sed 's/version:[[:space:]]*//' | sed 's/^"//;s/"$//')
           NEW_DATE=$(grep -E '^date-released:' CITATION.cff | sed 's/date-released:[[:space:]]*//' | sed 's/^"//;s/"$//')
 
-          if [ "${NEW_VERSION}" != "${TAG_VERSION}" ] || [ "${NEW_DATE}" != "${TAG_DATE}" ]; then
+          if [ "${NEW_VERSION}" != "${INCREMENTED_VERSION}" ] || [ "${NEW_DATE}" != "${TAG_DATE}" ]; then
             echo "::error::Failed to update CITATION.cff correctly"
-            echo "Expected version: ${TAG_VERSION}, got: ${NEW_VERSION}"
+            echo "Expected version: ${INCREMENTED_VERSION}, got: ${NEW_VERSION}"
             echo "Expected date: ${TAG_DATE}, got: ${NEW_DATE}"
             mv CITATION.cff.bak CITATION.cff
             exit 1
@@ -162,7 +199,7 @@ jobs:
         if: steps.check_update.outputs.needs_update == 'true'
         id: commit
         run: |
-          TAG_NAME="${{ steps.tag_info.outputs.tag_name }}"
+          INCREMENTED_VERSION="${{ steps.tag_info.outputs.incremented_version }}"
 
           # Stage the changes
           git add CITATION.cff
@@ -175,9 +212,9 @@ jobs:
 
           # Construct commit message using printf to handle newlines properly
           if [ -n "${UPDATE_SUMMARY}" ]; then
-            COMMIT_MSG=$(printf "chore: Update CITATION.cff for release %s\n\n%s\n\n[skip ci]" "${TAG_NAME}" "${UPDATE_SUMMARY}")
+            COMMIT_MSG=$(printf "chore: Update CITATION.cff to version %s\n\n%s\n\n[skip ci]" "${INCREMENTED_VERSION}" "${UPDATE_SUMMARY}")
           else
-            COMMIT_MSG=$(printf "chore: Update CITATION.cff for release %s\n\n[skip ci]" "${TAG_NAME}")
+            COMMIT_MSG=$(printf "chore: Update CITATION.cff to version %s\n\n[skip ci]" "${INCREMENTED_VERSION}")
           fi
 
           # Commit the changes
@@ -187,24 +224,18 @@ jobs:
           NEW_COMMIT=$(git rev-parse HEAD)
           echo "new_commit=${NEW_COMMIT}" >> $GITHUB_OUTPUT
           echo "::notice::Created commit ${NEW_COMMIT}"
-      - name: Update tag
+      - name: Create new tag
         if: steps.check_update.outputs.needs_update == 'true'
         env:
           GITHUB_TOKEN: ${{ secrets.CITATION_UPDATE_PAT || secrets.GITHUB_TOKEN }}
         run: |
-          TAG_NAME="${{ steps.tag_info.outputs.tag_name }}"
+          INCREMENTED_VERSION="${{ steps.tag_info.outputs.incremented_version }}"
           NEW_COMMIT="${{ steps.commit.outputs.new_commit }}"
 
-          echo "::group::Moving tag ${TAG_NAME} to ${NEW_COMMIT}"
+          echo "::group::Creating new tag ${INCREMENTED_VERSION} at ${NEW_COMMIT}"
 
-          # Delete the old tag (locally and remotely)
-          git tag -d "${TAG_NAME}"
-          git push origin --delete "refs/tags/${TAG_NAME}" || {
-            echo "::warning::Failed to delete remote tag, it may have already been deleted"
-          }
-
-          # Create the tag at the new commit
-          git tag -a "${TAG_NAME}" "${NEW_COMMIT}" -m "Release ${TAG_NAME}"
+          # Create the new incremented tag at the new commit
+          git tag -a "${INCREMENTED_VERSION}" "${NEW_COMMIT}" -m "Release ${INCREMENTED_VERSION}"
 
           # Push the commit to the main branch
           git push origin HEAD:main || {
@@ -213,13 +244,13 @@ jobs:
           }
 
           # Push the new tag
-          git push origin "${TAG_NAME}" || {
-            echo "::error::Failed to push updated tag"
+          git push origin "${INCREMENTED_VERSION}" || {
+            echo "::error::Failed to push new tag"
             exit 1
           }
 
           echo "::endgroup::"
-          echo "::notice::Successfully moved tag ${TAG_NAME} to commit ${NEW_COMMIT}"
+          echo "::notice::Successfully created new tag ${INCREMENTED_VERSION} at commit ${NEW_COMMIT}"
       - name: Create job summary
         if: always()
         run: |
@@ -233,7 +264,9 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "${{ steps.check_update.outputs.update_summary }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**Tag**: \`${{ steps.tag_info.outputs.tag_name }}\` has been moved to the new commit." >> $GITHUB_STEP_SUMMARY
+            echo "**New Tag**: \`${{ steps.tag_info.outputs.incremented_version }}\` has been created with the updated CITATION.cff." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Original Tag**: \`${{ steps.tag_info.outputs.tag_name }}\` remains unchanged." >> $GITHUB_STEP_SUMMARY
           else
             echo "### ℹ️ No Update Required" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
