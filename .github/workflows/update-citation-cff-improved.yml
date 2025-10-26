@@ -229,13 +229,13 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.CITATION_UPDATE_PAT || secrets.GITHUB_TOKEN }}
         run: |
-          INCREMENTED_VERSION="${{ steps.tag_info.outputs.incremented_version }}"
+          INCREMENTED_TAG_NAME="${{ steps.tag_info.outputs.incremented_tag_name }}"
           NEW_COMMIT="${{ steps.commit.outputs.new_commit }}"
 
-          echo "::group::Creating new tag ${INCREMENTED_VERSION} at ${NEW_COMMIT}"
+          echo "::group::Creating new tag ${INCREMENTED_TAG_NAME} at ${NEW_COMMIT}"
 
           # Create the new incremented tag at the new commit
-          git tag -a "${INCREMENTED_VERSION}" "${NEW_COMMIT}" -m "Release ${INCREMENTED_VERSION}"
+          git tag -a "${INCREMENTED_TAG_NAME}" "${NEW_COMMIT}" -m "Release ${INCREMENTED_TAG_NAME}"
 
           # Push the commit to the main branch
           git push origin HEAD:main || {
@@ -244,13 +244,13 @@ jobs:
           }
 
           # Push the new tag
-          git push origin "${INCREMENTED_VERSION}" || {
+          git push origin "${INCREMENTED_TAG_NAME}" || {
             echo "::error::Failed to push new tag"
             exit 1
           }
 
           echo "::endgroup::"
-          echo "::notice::Successfully created new tag ${INCREMENTED_VERSION} at commit ${NEW_COMMIT}"
+          echo "::notice::Successfully created new tag ${INCREMENTED_TAG_NAME} at commit ${NEW_COMMIT}"
       - name: Create job summary
         if: always()
         run: |
@@ -264,7 +264,7 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "${{ steps.check_update.outputs.update_summary }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "**New Tag**: \`${{ steps.tag_info.outputs.incremented_version }}\` has been created with the updated CITATION.cff." >> $GITHUB_STEP_SUMMARY
+            echo "**New Tag**: \`${{ steps.tag_info.outputs.incremented_tag_name }}\` has been created with the updated CITATION.cff." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "**Original Tag**: \`${{ steps.tag_info.outputs.tag_name }}\` remains unchanged." >> $GITHUB_STEP_SUMMARY
           else
