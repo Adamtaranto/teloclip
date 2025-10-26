@@ -28,6 +28,7 @@ A tool for the recovery of unassembled telomeres from raw long-reads using soft-
   - [Main Command](#main-command)
   - [Filter Sub-command Options](#filter-sub-command-options)
   - [Extract Sub-command Options](#extract-sub-command-options)
+  - [Extend Sub-command Options](#extend-sub-command-options)
 - [Citing Teloclip](#citing-teloclip)
 - [Publications using Teloclip](#publications-using-teloclip)
 - [Issues](#issues)
@@ -116,9 +117,15 @@ First index the reference assembly so teloclip knows where each contig ends.
 samtools faidx ref.fa
 ```
 
+Next align your raw long reads to the reference fasta.
+
+```bash
+minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz > in.sam
+```
+
 **Loading alignments from file**
 
-Next you will need to provide alignment records in SAM format. These can be read directly from a SAM file like this:
+Next you will need to provide alignment records to teloclip in SAM format. These can be read directly from a SAM file like this:
 
 ```bash
 # Option 1: Read alignment input from sam file and write overhang-reads to stdout
@@ -181,8 +188,13 @@ samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --fuzzy --motifs 
 You can inspect these reads and select candidates to manually extend contig ends.
 
 ```bash
-# Find clipped alignments containing motif 'TTAGGG' and write reads to separate fasta files for each reference contig end.
-samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG | teloclip extract --ref-idx ref.fa.fai --extract-dir split_overhangs_by_contig --include-stats --count-motifs TTAGGG --stats-report
+# Find soft-clipped alignments containing motif 'TTAGGG' that overhang contig ends, write to sorted bam.
+samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG | samtools sort > sorted_overhangs.bam
+
+# Extract overhang reads and write to separate fasta files for each reference contig end.
+# Adds overhang stats to fasta header and writes overhang region in lowercase.
+# Note: Use sorted input to make processing more efficient.
+samtools view -h sorted_overhangs.bam | teloclip extract --ref-idx ref.fa.fai --extract-dir split_overhangs_by_contig --include-stats --count-motifs TTAGGG --report-stats
 ```
 
 **Automatically extend missing telomeres**
@@ -399,31 +411,29 @@ If you use Teloclip in your work please cite this git repo directly and note the
 
 ## Publications using Teloclip
 
-Teloclip has been used to recover and extend telomeric sequences in a wide variety of taxa, including Algae, Plants, Insects, and Fungi
+Teloclip has been used to recover and extend telomeric sequences in a wide variety of taxa, including Algae, Plants, Insects, and Fungi.
 
-Deng, Y., Zhou, P., Li, F., Wang, J., Xie, K., Liang, H., Wang, C., Liu, B., Zhu, Z., Zhou, W. and Dun, B., 2024. A complete assembly of the sorghum BTx623 reference genome. Plant Communications, 5(6).
+- Deng, Y., Zhou, P., Li, F., Wang, J., Xie, K., Liang, H., Wang, C., Liu, B., Zhu, Z., Zhou, W. and Dun, B., **2024**. A complete assembly of the sorghum BTx623 reference genome. Plant Communications, 5(6). 🌾
 
-He, W., Hu, D., Guo, M., Nie, B., Zhang, G., Jia, Y., Hou, Z., Shu, S., Shao, Y., Simonsen, H.T. and Twamley, A., 2025. The telomere‐to‐telomere genome of Sanicula chinensis unveils genetic underpinnings of low furanocoumarin diversity and content in one basal lineage of Apiaceae. The Plant Journal, 123(1), p.e70311.
+- He, W., Hu, D., Guo, M., Nie, B., Zhang, G., Jia, Y., Hou, Z., Shu, S., Shao, Y., Simonsen, H.T. and Twamley, A., **2025**. The telomere‐to‐telomere genome of Sanicula chinensis unveils genetic underpinnings of low furanocoumarin diversity and content in one basal lineage of Apiaceae. The Plant Journal, 123(1), p.e70311. 🌱
 
-Jaiswal, R.K., Garibo Domingo, T., Grunchec, H., Singh, K., Pirooznia, M., Elhaik, E. and Cohn, M., 2025. Subtelomeric elements provide stability to short telomeres in telomerase-negative cells of the budding yeast Naumovozyma castellii. Current Genetics, 71(1), p.19.
+- Jaiswal, R.K., Garibo Domingo, T., Grunchec, H., Singh, K., Pirooznia, M., Elhaik, E. and Cohn, M., **2025**. Subtelomeric elements provide stability to short telomeres in telomerase-negative cells of the budding yeast Naumovozyma castellii. Current Genetics, 71(1), p.19. 🍄
 
-Liu, Y., Chen, Y., Ren, Z. et al. Two haplotype-resolved telomere-to-telomere genome assemblies of Xanthoceras sorbifolium. Sci Data 12, 791 (2025).
+- Liu, Y., Chen, Y., Ren, Z. et al. Two haplotype-resolved telomere-to-telomere genome assemblies of Xanthoceras sorbifolium. Sci Data 12, 791 (**2025**). 🌿
 
-Loos, A., Doykova, E., Qian, J., Kümmel, F., Ibrahim, H., Kiss, L., Panstruga, R. and Kusch, S., 2025. Saprotrophic Arachnopeziza Species as New Resources to Study the Obligate Biotrophic Lifestyle of Powdery Mildew Fungi. Molecular Ecology Resources, p.e70045.
+- Loos, A., Doykova, E., Qian, J., Kümmel, F., Ibrahim, H., Kiss, L., Panstruga, R. and Kusch, S., **2025**. Saprotrophic Arachnopeziza Species as New Resources to Study the Obligate Biotrophic Lifestyle of Powdery Mildew Fungi. Molecular Ecology Resources, p.e70045. 🍄
 
-Loos, A., Doykova, E., Qian, J., Kümmel, F., Ibrahim, H., Kiss, L., Panstruga, R. and Kusch, S., 2025. Resources for molecular studies of unculturable obligate biotrophic fungal plant pathogens using their saprotrophic relatives. bioRxiv, pp.2025-05.
+- Oberti, H., Sessa, L., Oliveira‐Rizzo, C., Di Paolo, A., Sanchez‐Vallet, A., Seidl, M.F. and Abreo, E., 2025. Novel genomic features in entomopathogenic fungus Beauveria bassiana ILB308: accessory genomic regions and putative virulence genes involved in the infection process of soybean pest Piezodorus guildinii. Pest Management Science, 81(4), pp.2323-2336. 🍄
 
-Oberti, H., Sessa, L., Oliveira‐Rizzo, C., Di Paolo, A., Sanchez‐Vallet, A., Seidl, M.F. and Abreo, E., 2025. Novel genomic features in entomopathogenic fungus Beauveria bassiana ILB308: accessory genomic regions and putative virulence genes involved in the infection process of soybean pest Piezodorus guildinii. Pest Management Science, 81(4), pp.2323-2336.
+- van Westerhoven, A.C., Mehrabi, R., Talebi, R., Steentjes, M.B., Corcolon, B., Chong, P.A., Kema, G.H. and Seidl, M.F., **2024**. A chromosome-level genome assembly of Zasmidium syzygii isolated from banana leaves. G3: Genes, Genomes, Genetics, 14(3), p.jkad262. 🍄
 
-van Westerhoven, A.C., Mehrabi, R., Talebi, R., Steentjes, M.B., Corcolon, B., Chong, P.A., Kema, G.H. and Seidl, M.F., 2024. A chromosome-level genome assembly of Zasmidium syzygii isolated from banana leaves. G3: Genes, Genomes, Genetics, 14(3), p.jkad262.
+- Wan, L., Deng, C., Liu, B. et al. Telomere-to-telomere genome assemblies of three silkworm strains with long-term pupal characteristics. Sci Data 12, 501 (**2025**). 🐛
 
-Wan, L., Deng, C., Liu, B. et al. Telomere-to-telomere genome assemblies of three silkworm strains with long-term pupal characteristics. Sci Data 12, 501 (2025).
+- Wang, Z.F., Yu, E.P., Fu, L., Deng, H.G., Zhu, W.G., Xu, F.X. and Cao, H.L., **2025**. Chromosome-scale assemblies of three Ormosia species: repetitive sequences distribution and structural rearrangement. GigaScience, 14, p.giaf047. 🌿
 
-Wang, Z.F., Yu, E.P., Fu, L., Deng, H.G., Zhu, W.G., Xu, F.X. and Cao, H.L., 2025. Chromosome-scale assemblies of three Ormosia species: repetitive sequences distribution and structural rearrangement. GigaScience, 14, p.giaf047.
+- Xu, Z., Wang, G., Zhu, X. et al. Genome assembly of two allotetraploid cotton germplasms reveals mechanisms of somatic embryogenesis and enables precise genome editing. Nat Genet 57, 2028–2039 (**2025**). 🌱
 
-Xu, Z., Wang, G., Zhu, X. et al. Genome assembly of two allotetraploid cotton germplasms reveals mechanisms of somatic embryogenesis and enables precise genome editing. Nat Genet 57, 2028–2039 (2025).
-
-Yang, H.P., Wenzel, M., Hauser, D.A., Nelson, J.M., Xu, X., Eliáš, M. and Li, F.W., 2021. Monodopsis and Vischeria genomes shed new light on the biology of eustigmatophyte algae. Genome biology and evolution, 13(11), p.evab233.
+- Yang, H.P., Wenzel, M., Hauser, D.A., Nelson, J.M., Xu, X., Eliáš, M. and Li, F.W., **2021**. Monodopsis and Vischeria genomes shed new light on the biology of eustigmatophyte algae. Genome biology and evolution, 13(11), p.evab233. 🦠
 
 ## Issues
 
