@@ -15,8 +15,9 @@
 <p>
 A tool for the recovery of unassembled telomeres from raw long-reads using soft-clipped read alignments.
 
-🎉🧬 New Release v0.3.2: Teloclip now supports _automatic_ telomere extension!! 🧬🎉
 </p>
+
+<h3>🎉🧬 New Release v0.3.2: Teloclip now supports automatic telomere extension!! 🧬🎉</h3>
 
 ### Table of contents
 
