@@ -98,6 +98,7 @@ process SAM_TO_BAM {
 
     output:
     tuple path("overhangs.bam"), path("overhangs.bam.bai")
+    path sam
 
     script:
     """
@@ -114,7 +115,7 @@ process TELOCLIP_EXTRACT {
     publishDir "${params.outdir}/extracted", mode: 'copy'
 
     input:
-    tuple path(bam), path(bai)
+    path sam
     path fai
 
     output:
@@ -126,7 +127,7 @@ process TELOCLIP_EXTRACT {
     teloclip extract \
         --ref-idx ${fai} \
         --extract-dir overhangs \
-        ${bam}
+        ${sam}
     """
 }
 
@@ -176,10 +177,12 @@ workflow {
     filtered_sam = TELOCLIP_FILTER(sam_ch, fai_ch)
 
     // Convert to sorted and indexed BAM
-    bam_indexed = SAM_TO_BAM(filtered_sam)
+    sam_bam_outputs = SAM_TO_BAM(filtered_sam)
+    bam_indexed = sam_bam_outputs[0]
+    filtered_sam_copy = sam_bam_outputs[1]
 
     // Extract sequences (optional - runs in parallel with extend)
-    TELOCLIP_EXTRACT(bam_indexed, fai_ch)
+    TELOCLIP_EXTRACT(filtered_sam_copy, fai_ch)
 
     // Extend reference genome with telomeric sequences
     TELOCLIP_EXTEND(bam_indexed, ref_ch, fai_ch)
