@@ -5,6 +5,232 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.3]
+
+### 🐳 Docker & Container Infrastructure
+
+#### Docker Support
+
+- **Production-ready Dockerfile**: Multi-stage build using `python:3.12-slim-bookworm` base image
+  - Optimized build process with separate builder and runtime stages
+  - Minimal final image size (~80-100MB) with only production dependencies
+  - Smart layer caching for faster rebuilds
+- **Multi-architecture support**: Images built for both `linux/amd64` and `linux/arm64` platforms
+- **Automated version injection**: PEP 440 compliant versions extracted from git tags and passed as build arguments
+- **Build optimization**: Comprehensive `.dockerignore` excluding tests, docs, and development files
+
+#### Docker Hub Integration
+
+- **Automated publishing**: GitHub Actions workflow for building and publishing Docker images
+- **Smart tagging strategy**:
+  - `latest` - Most recent release from main branch
+  - `v{major}.{minor}.{patch}` - Full semantic version tags
+  - `v{major}.{minor}` - Minor version tags
+  - `v{major}` - Major version tags
+  - `pr-{number}` - Pull request preview builds
+- **CI/CD pipeline**: Automated builds on push to main, tags, and pull requests
+- **PR testing**: Automatic image validation for pull requests with `--version` and `--help` tests
+- **Build caching**: GitHub Actions cache for faster subsequent builds
+
+#### Development Tools
+
+- **Local build script** (`scripts/build-docker.sh`): Helper script for local multi-architecture builds
+  - Automatic version detection from git tags
+  - Configurable platforms and image tags
+  - Support for push to registry or local load
+- **Test automation** (`scripts/test-docker.sh`): Comprehensive Docker image validation
+  - Version and help command tests
+  - Subcommand functionality validation (filter/extract/extend)
+  - Image size verification
+  - Test data processing validation
+
+### 🔄 Nextflow Pipeline Integration
+
+#### Complete Workflow Examples
+
+- **Example pipeline** (`examples/nextflow/teloclip.nf`): End-to-end telomere analysis workflow
+  - Reference indexing with samtools
+  - BAM/SAM conversion and filtering
+  - Teloclip filtering, extraction, and extension steps
+  - Proper container isolation (each tool in its own container)
+  - Comprehensive parameter handling
+
+#### nf-core Style Modules
+
+- **TELOCLIP_FILTER module**: Filter SAM/BAM files for terminal soft-clipped alignments
+  - Configurable motif matching with `ext.args`
+  - Meta map support for sample tracking
+  - Version tracking output
+- **TELOCLIP_EXTRACT module**: Extract overhang sequences to FASTA files
+  - Per-contig organization with prefix support
+  - Optional statistics and motif counting
+  - Buffered output for large datasets
+- **TELOCLIP_EXTEND module**: Automatically extend contigs with telomeric sequences
+  - Takes filtered BAM + reference genome as input
+  - Outputs extended genome FASTA and statistics report
+  - Supports dry-run mode and outlier detection
+
+#### Pipeline Documentation
+
+- **Complete integration guide** (`examples/nextflow/README.md`):
+  - Quick start examples
+  - Module usage patterns
+  - Container strategy explanation
+  - Parameter reference
+  - Output structure documentation
+  - Troubleshooting tips
+  - nf-core integration guidelines
+
+### 📚 Documentation Enhancements
+
+#### Docker Documentation
+
+- **Comprehensive Docker guide** (`DOCKER.md`): 557-line complete reference
+  - Quick start instructions
+  - Installation methods for all tag types
+  - Usage examples for all subcommands (filter/extract/extend)
+  - Volume mounting patterns
+  - Pipeline integration with shell scripts
+  - Nextflow workflow examples
+  - Building from source instructions
+  - Common troubleshooting scenarios
+  - Best practices and security considerations
+  - Performance optimization tips
+
+#### README Updates
+
+- **Docker badges**: Added Docker Hub version and pull count badges
+- **Docker installation section**: New installation method #5 with quick start commands
+- **Cross-references**: Links to DOCKER.md and Nextflow examples
+- **Container-first approach**: Documentation now emphasizes Docker as a primary installation method
+
+### ⚖️ License Change
+
+#### Migration to GPL-3.0-or-later
+
+- **License update**: Changed from MIT to GPL-3.0-or-later
+- **Rationale**: Better alignment with open science principles and academic software sharing
+- **Compatibility**: Maintains compatibility with derivative works and academic use
+- **Documentation**: Updated all references in:
+  - `LICENSE` file
+  - `README.md` badges
+  - `pyproject.toml` metadata
+  - `Dockerfile` OCI labels
+  - Nextflow module metadata
+
+### 🔧 Infrastructure Improvements
+
+#### Build System Enhancements
+
+- **Version management**: PEP 440 compliant version conversion in build scripts
+  - Converts git describe output (`v0.3.2-6-gd5ce6fc-dirty`) to valid Python versions (`0.3.2.post6+gd5ce6fc.dirty`)
+  - Supports release tags, post-releases, and local versions
+- **Environment variables**: `SETUPTOOLS_SCM_PRETEND_VERSION` for builds without .git directory
+- **Build reproducibility**: Version baked into Docker images at build time
+
+#### GitHub Actions
+
+- **Docker build workflow** (`.github/workflows/docker-build.yml`):
+  - QEMU setup for multi-architecture builds
+  - Docker Buildx configuration
+  - Docker Hub authentication with secrets
+  - Metadata extraction with semantic versioning
+  - Conditional push/load based on event type
+  - Job summaries with build information
+  - PR-specific single-platform builds for testing
+
+### 🎯 Container Best Practices
+
+#### Security & Optimization
+
+- **Minimal attack surface**: Runtime image contains only essential Python packages
+- **No development tools**: Build tools (gcc, g++, make) excluded from final image
+- **Reproducible builds**: Locked Python version and base image
+- **OCI labels**: Complete metadata following Open Container Initiative standards
+- **Non-root execution**: Container runs with appropriate user permissions
+
+#### Workflow Integration
+
+- **Single-tool containers**: Each tool (teloclip, samtools) in separate containers
+- **Follows nf-core best practices**: Module structure compatible with nf-core pipelines
+- **Version pinning**: Explicit container versions for reproducibility
+- **Data mounting**: Clear patterns for volume mounting in examples
+
+### 📦 Repository Structure
+
+#### New Files
+
+```
+.dockerignore                              # Docker build optimization
+Dockerfile                                 # Multi-stage production build
+DOCKER.md                                  # Complete Docker documentation
+scripts/
+  ├── build-docker.sh                     # Multi-arch build helper
+  └── test-docker.sh                      # Container validation tests
+.github/workflows/
+  └── docker-build.yml                    # Automated Docker CI/CD
+examples/nextflow/
+  ├── teloclip.nf                         # Complete example workflow
+  ├── README.md                           # Integration documentation
+  └── modules/teloclip/
+      ├── filter/
+      │   ├── main.nf                     # Filter module
+      │   └── meta.yml                    # Module metadata
+      ├── extract/
+      │   ├── main.nf                     # Extract module
+      │   └── meta.yml                    # Module metadata
+      └── extend/
+          ├── main.nf                     # Extend module
+          └── meta.yml                    # Module metadata
+```
+
+### 🚀 Usage Examples
+
+#### Docker Quick Start
+
+```bash
+# Pull latest image
+docker pull adamtaranto/teloclip:latest
+
+# Check version
+docker run --rm adamtaranto/teloclip:latest --version
+
+# Filter alignments with volume mounting
+docker run --rm -v $(pwd):/data adamtaranto/teloclip:latest filter \
+  --ref-idx /data/ref.fa.fai /data/input.sam > filtered.sam
+```
+
+#### Nextflow Integration
+
+```bash
+# Run complete workflow
+nextflow run examples/nextflow/teloclip.nf \
+  --bam input.bam \
+  --ref reference.fa \
+  --motifs TTAGGG \
+  --outdir results
+```
+
+### 🔄 Breaking Changes
+
+None - This release is fully backward compatible with existing CLI usage.
+
+### 📝 Migration Notes
+
+#### For Docker Users
+
+- Docker images are now the recommended installation method for production workflows
+- No changes required for existing users - pip and conda installation still fully supported
+- Docker provides better reproducibility and easier dependency management
+
+#### For Pipeline Developers
+
+- Nextflow modules follow nf-core conventions and can be integrated into existing pipelines
+- Container strategy uses separate containers per tool (best practice)
+- All modules include comprehensive metadata for pipeline integration
+
+---
+
 ## [0.3.2] - 2025-10-26
 
 ### 🚀 Major Features Added
