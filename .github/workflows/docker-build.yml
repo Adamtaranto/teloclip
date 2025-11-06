@@ -45,14 +45,23 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable={{is_default_branch}}
+      - name: Get version from git
+        id: version
+        run: |
+          VERSION=$(git describe --tags --always | sed 's/^v//' | sed 's/-\([0-9]\+\)-g/.post\1+g/' | sed 's/-dirty/.dirty/' | sed 's/-/+/')
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "Building with version: ${VERSION}"
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
         with:
           context: .
-          platforms: linux/amd64,linux/arm64
+          platforms: ${{ github.event_name == 'pull_request' && 'linux/amd64' || 'linux/amd64,linux/arm64' }}
           push: ${{ github.event_name != 'pull_request' }}
+          load: ${{ github.event_name == 'pull_request' }}
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            VERSION=${{ steps.version.outputs.version }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
       - name: Test Docker image
