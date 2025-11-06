@@ -7,8 +7,20 @@
 # Versioning
 src/teloclip/_version.py
 
-# Netflow files
+# Nextflow temporary directories
 .nextflow/
+work/
+trace.txt
+report.html
+timeline.html
+dag.html
+
+# Nextflow logs
+.nextflow.log*
+
+# Nextflow configuration files (if not intended for version control)
+nextflow.config.local
+*.config.local
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
