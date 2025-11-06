@@ -11,7 +11,7 @@ tools:
       homepage: https://github.com/adamtaranto/teloclip
       documentation: https://github.com/adamtaranto/teloclip
       tool_dev_url: https://github.com/adamtaranto/teloclip
-      licence: ["MIT"]
+      licence: ["GPL-3"]
 input:
   - meta:
       type: map

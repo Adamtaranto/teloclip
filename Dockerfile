@@ -40,7 +40,7 @@ LABEL org.opencontainers.image.title="teloclip" \
     org.opencontainers.image.authors="Adam Taranto" \
     org.opencontainers.image.url="https://github.com/adamtaranto/teloclip" \
     org.opencontainers.image.source="https://github.com/adamtaranto/teloclip" \
-    org.opencontainers.image.licenses="MIT"
+    org.opencontainers.image.licenses="GPL-3.0-or-later"
 
 # Copy Python packages from builder stage
 COPY --from=builder /root/.local /root/.local

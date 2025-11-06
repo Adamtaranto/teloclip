@@ -12,7 +12,7 @@ tools:
         The extend subcommand extends draft contigs using overhang analysis from soft-clipped alignments.
       homepage: https://github.com/adamtaranto/teloclip
       documentation: https://github.com/adamtaranto/teloclip
-      licence: ["MIT"]
+      licence: ["GPL-3"]
 input:
   - meta:
       type: map
