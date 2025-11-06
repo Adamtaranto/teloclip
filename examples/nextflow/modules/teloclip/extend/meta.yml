@@ -1,0 +1,57 @@
+name: teloclip_extend
+description: Extend assembled contigs using overhang analysis from soft-clipped read alignments
+keywords:
+  - telomere
+  - genomics
+  - assembly
+  - sequence extension
+tools:
+  - teloclip:
+      description: |
+        A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
+        The extend subcommand extends draft contigs using overhang analysis from soft-clipped alignments.
+      homepage: https://github.com/adamtaranto/teloclip
+      documentation: https://github.com/adamtaranto/teloclip
+      licence: ["GPL-3"]
+input:
+  - meta:
+      type: map
+      description: |
+        Groovy Map containing sample information
+        e.g. [ id:'test', single_end:false ]
+  - bam:
+      type: file
+      description: Sorted and indexed BAM file containing filtered soft-clipped alignments
+      pattern: "*.bam"
+  - bai:
+      type: file
+      description: BAM index file
+      pattern: "*.bai"
+  - fasta:
+      type: file
+      description: Reference genome FASTA file
+      pattern: "*.{fasta,fa,fna}"
+  - fai:
+      type: file
+      description: FASTA index file
+      pattern: "*.fai"
+output:
+  - meta:
+      type: map
+      description: |
+        Groovy Map containing sample information
+        e.g. [ id:'test', single_end:false ]
+  - fasta:
+      type: file
+      description: Extended reference genome FASTA file with telomeres added
+      pattern: "*_extended.fasta"
+  - report:
+      type: file
+      description: Statistics report detailing extension operations
+      pattern: "*_extension_report.txt"
+  - versions:
+      type: file
+      description: File containing software versions
+      pattern: "versions.yml"
+authors:
+  - "@adamtaranto"

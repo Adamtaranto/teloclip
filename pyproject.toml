@@ -7,7 +7,7 @@ name = "teloclip"
 description = "A tool for the recovery of unassembled telomeres from raw long-reads using soft-clipped read alignments."
 readme = "README.md"
 requires-python = ">=3.8"
-license = { text = "MIT" }
+license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "Adam Taranto" }]
 
 classifiers = [

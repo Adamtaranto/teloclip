@@ -1,0 +1,44 @@
+name: teloclip_extract
+description: Extract overhanging reads to separate FASTA files
+keywords:
+  - genomics
+  - telomeres
+  - alignment
+  - extraction
+tools:
+  - teloclip:
+      description: A tool for the recovery of unassembled telomeres from soft-clipped read alignments
+      homepage: https://github.com/adamtaranto/teloclip
+      documentation: https://github.com/adamtaranto/teloclip
+      tool_dev_url: https://github.com/adamtaranto/teloclip
+      licence: ["GPL-3"]
+input:
+  - meta:
+      type: map
+      description: |
+        Groovy Map containing sample information
+        e.g. [ id:'test' ]
+  - bam:
+      type: file
+      description: BAM format alignment file (filtered overhangs)
+      pattern: "*.bam"
+  - fai:
+      type: file
+      description: FAI index file for reference genome
+      pattern: "*.fai"
+output:
+  - meta:
+      type: map
+      description: |
+        Groovy Map containing sample information
+        e.g. [ id:'test' ]
+  - fastas:
+      type: file
+      description: FASTA files containing overhang sequences
+      pattern: "overhangs/*.fa"
+  - versions:
+      type: file
+      description: File containing software versions
+      pattern: "versions.yml"
+authors:
+  - "@adamtaranto"

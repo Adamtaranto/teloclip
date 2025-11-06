@@ -15,12 +15,12 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
       - uses: astral-sh/ruff-action@v3
         with:
-          src: './src/teloclip ./tests'
-          args: 'format'
+          src: "./src/teloclip ./tests"
+          args: "format"
       - uses: astral-sh/ruff-action@v3
         with:
-          src: './src/teloclip ./tests'
-          args: 'check --fix'
+          src: "./src/teloclip ./tests"
+          args: "check --fix"
       - uses: isort/isort-action@v1
         with:
           configuration: "--settings-path=./pyproject.toml"
@@ -28,4 +28,4 @@ jobs:
       - uses: stefanzweifel/git-auto-commit-action@v7
         id: auto-commit-action
         with:
-          commit_message: 'Style fixes by Ruff'
+          commit_message: "Style fixes by Ruff"

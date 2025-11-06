@@ -1,0 +1,44 @@
+name: teloclip_filter
+description: Filter SAM/BAM files to identify terminal soft-clipped alignments
+keywords:
+  - genomics
+  - telomeres
+  - alignment
+  - filtering
+tools:
+  - teloclip:
+      description: A tool for the recovery of unassembled telomeres from soft-clipped read alignments
+      homepage: https://github.com/adamtaranto/teloclip
+      documentation: https://github.com/adamtaranto/teloclip
+      tool_dev_url: https://github.com/adamtaranto/teloclip
+      licence: ["GPL-3"]
+input:
+  - meta:
+      type: map
+      description: |
+        Groovy Map containing sample information
+        e.g. [ id:'test' ]
+  - sam:
+      type: file
+      description: SAM format alignment file
+      pattern: "*.sam"
+  - fai:
+      type: file
+      description: FAI index file for reference genome
+      pattern: "*.fai"
+output:
+  - meta:
+      type: map
+      description: |
+        Groovy Map containing sample information
+        e.g. [ id:'test' ]
+  - sam:
+      type: file
+      description: Filtered SAM file containing overhanging reads
+      pattern: "*_overhangs.sam"
+  - versions:
+      type: file
+      description: File containing software versions
+      pattern: "versions.yml"
+authors:
+  - "@adamtaranto"

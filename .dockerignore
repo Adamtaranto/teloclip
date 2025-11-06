@@ -1,0 +1,59 @@
+# Git
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Python cache and build artifacts
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+*.so
+*.egg-info/
+*.egg
+.eggs/
+dist/
+build/
+*.whl
+
+# Testing and coverage
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+tests/
+
+# Documentation
+docs/
+*.md
+!README.md
+!LICENSE
+
+# Development tools
+.vscode/
+.idea/
+.ideas/
+*.swp
+*.swo
+*~
+
+# Environment and package management
+.conda/
+.env
+.venv
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+environment.yml
+
+# Project specific
+pkg-mgt/
+CODE_OF_CONDUCT.md
+CITATION.cff
+
+# CI/CD (not needed in image)
+.github/

@@ -7,6 +7,9 @@
 # Versioning
 src/teloclip/_version.py
 
+# Netflow files
+.nextflow/
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
