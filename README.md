@@ -3,6 +3,8 @@
 [![codecov](https://codecov.io/gh/adamtaranto/teloclip/graph/badge.svg?token=NBS8YPLZDT)](https://codecov.io/gh/adamtaranto/teloclip)
 [![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/teloclip/README.html)
 [![Downloads](https://pepy.tech/badge/teloclip)](https://pepy.tech/project/teloclip)
+[![Docker Image](https://img.shields.io/docker/v/adamtaranto/teloclip?label=docker&color=blue)](https://hub.docker.com/r/adamtaranto/teloclip)
+[![Docker Pulls](https://img.shields.io/docker/pulls/adamtaranto/teloclip)](https://hub.docker.com/r/adamtaranto/teloclip)
 
 <br clear="right"/>
 <br clear="left"/>
@@ -41,9 +43,9 @@ A tool for the recovery of unassembled telomeres from raw long-reads using soft-
 
 In most eukaryotic species, chromosomes terminate in repetitive [telomeric](https://en.wikipedia.org/wiki/Telomere) sequences. A complete genome assembly should ideally comprise chromosome-level contigs that possess telomeric repeats at each end. However, genome assemblers frequently fail to recover these repetitive features, instead producing contigs that terminate immediately prior to telomeric repeats.
 
-Teloclip is designed to scan raw long-read data for evidence that can be used to restore missing telomeres. It does this by searching alignments of raw long-read data (i.e. Pacbio or ONT reads mapped with Minimap2) for 'clipped' alignments that occur at the ends of draft contigs. A 'clipped' alignment is produced where the *end* of a read is not part of its best alignment. This can occur when a read extends past the end of an assembled contig.
+Teloclip is designed to scan raw long-read data for evidence that can be used to restore missing telomeres. It does this by searching alignments of raw long-read data (i.e. Pacbio or ONT reads mapped with Minimap2) for 'clipped' alignments that occur at the ends of draft contigs. A 'clipped' alignment is produced where the _end_ of a read is not part of its best alignment. This can occur when a read extends past the end of an assembled contig.
 
-Information about segments of a read that were aligned or clipped are stored in [SAM formatted](https://en.wikipedia.org/wiki/SAM_(file_format)) alignments as a [CIGAR string](https://www.drive5.com/usearch/manual/cigar.html). Teloclip parses these strings to determine if a read has been clipped at one or both ends of a contig.
+Information about segments of a read that were aligned or clipped are stored in [SAM formatted](<https://en.wikipedia.org/wiki/SAM_(file_format)>) alignments as a [CIGAR string](https://www.drive5.com/usearch/manual/cigar.html). Teloclip parses these strings to determine if a read has been clipped at one or both ends of a contig.
 
 Optionally, teloclip can screen overhanging reads for telomere-associated motifs (i.e. 'TTAGGG' / 'CCCTAA') and report only those containing a match.
 
@@ -67,20 +69,20 @@ Teloclip requires Python >= 3.8.
 
 There are 4 options available for installing Teloclip locally:
 
-1) Install from PyPi.
-This or Bioconda will get you the latest stable release.
+1. Install from PyPi.
+   This or Bioconda will get you the latest stable release.
 
 ```bash
 pip install teloclip
 ```
 
-2) Install from Bioconda.
+2. Install from Bioconda.
 
 ```bash
 conda install -c bioconda teloclip
 ```
 
-3) Pip install directly from this git repository.
+3. Pip install directly from this git repository.
 
 This is the best way to ensure you have the latest development version.
 
@@ -88,13 +90,27 @@ This is the best way to ensure you have the latest development version.
 pip install git+https://github.com/Adamtaranto/teloclip.git
 ```
 
-4) Clone from this repository and install as a local Python package.
+4. Clone from this repository and install as a local Python package.
 
 Do this if you want to edit the code.
 
 ```bash
 git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e '.[dev]'
 ```
+
+5. Use Docker for reproducible containerized environments.
+
+Ideal for pipelines and reproducible workflows. No local Python installation required.
+
+```bash
+# Pull the latest image
+docker pull adamtaranto/teloclip:latest
+
+# Run teloclip
+docker run --rm -v $(pwd):/data adamtaranto/teloclip:latest --version
+```
+
+See [DOCKER.md](DOCKER.md) for complete Docker usage guide and [examples/nextflow/](examples/nextflow/) for Nextflow integration.
 
 **Verify installation**
 

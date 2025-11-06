@@ -50,35 +50,35 @@ To set up your development environment:
 
 1. Clone your fork of the repository
 
-  ```bash
-  git clone https://github.com/adamtaranto/teloclip.git
-  cd teloclip
-  ```
+```bash
+git clone https://github.com/adamtaranto/teloclip.git
+cd teloclip
+```
 
 3. Create and activate a virtual environment
 
-  ```bash
-  conda env create -f environment.yml
-  conda activate teloclip
-  ```
+```bash
+conda env create -f environment.yml
+conda activate teloclip
+```
 
 3. Install development dependencies
 
-  ```bash
-  pip install -e ".[dev]"
-  ```
+```bash
+pip install -e ".[dev]"
+```
 
 4. Enable git pre-commit checks
 
-  ```bash
-  pre-commit install
-  ```
+```bash
+pre-commit install
+```
 
 5. Create a new feature branch
 
-  ```bash
-  git checkout -b your_new_feature
-  ```
+```bash
+git checkout -b your_new_feature
+```
 
 ## Style Guidelines
 
