@@ -26,7 +26,7 @@ process TELOCLIP_FILTER {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        teloclip: \$(teloclip --version | sed 's/teloclip //')
+        teloclip: \$(teloclip --version | sed 's/teloclip, version //')
     END_VERSIONS
     """
 }
