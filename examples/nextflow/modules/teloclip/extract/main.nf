@@ -5,11 +5,11 @@ process TELOCLIP_EXTRACT {
     container 'adamtaranto/teloclip:latest'
 
     input:
-    tuple val(meta), path(bam)
+    tuple val(meta), path(sam)
     path fai
 
     output:
-    tuple val(meta), path("overhangs/*"), emit: fastas
+    tuple val(meta), path("${prefix}/*"), emit: fastas
     path "versions.yml"                 , emit: versions
 
     when:
@@ -17,20 +17,19 @@ process TELOCLIP_EXTRACT {
 
     script:
     def args = task.ext.args ?: ''
-    def prefix = task.ext.prefix ?: "${meta.id}"
+    prefix = task.ext.prefix ?: "${meta.id}"
     """
-    mkdir -p overhangs
+    mkdir -p ${prefix}
 
     teloclip extract \\
         --ref-idx ${fai} \\
-        --outdir overhangs \\
-        --prefix ${prefix} \\
+        --extract-dir ${prefix} \\
         ${args} \\
-        ${bam}
+        ${sam}
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        teloclip: \$(teloclip --version | sed 's/teloclip //')
+        teloclip: \$(teloclip --version | sed 's/teloclip, version //')
     END_VERSIONS
     """
 }
