@@ -154,6 +154,8 @@ def construct_regex_pattern(motif_tuples: List[Tuple[str, int]]) -> str:
 
     pattern_parts = []
 
+    # Note: This idea was adapted from https://github.com/JanaSperschneider/FindTelomeres/blob/master/FindTelomeres.py
+
     for char, count in motif_tuples:
         if count == 1:
             pattern_parts.append(
