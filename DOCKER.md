@@ -304,7 +304,7 @@ docker build --cache-from teloclip:latest -t teloclip:dev .
 
 **Problem**: Cannot write to output directory
 
-```
+```text
 docker: Error response from daemon: error while creating mount source path '/data/output': permission denied
 ```
 
@@ -323,7 +323,7 @@ docker run --rm -v $(pwd)/output:/output adamtaranto/teloclip:latest ...
 
 **Problem**: Cannot find input files
 
-```
+```text
 FileNotFoundError: [Errno 2] No such file or directory: '/data/input.sam'
 ```
 
@@ -342,7 +342,7 @@ docker run --rm -v $(pwd)/data:/data adamtaranto/teloclip:latest \
 
 **Problem**: Cannot pull or run image
 
-```
+```text
 Unable to find image 'adamtaranto/teloclip:latest' locally
 docker: Error response from daemon: pull access denied
 ```
@@ -364,7 +364,7 @@ docker version
 
 **Problem**: Container killed due to memory
 
-```
+```text
 Killed
 ```
 
@@ -381,7 +381,7 @@ docker run --rm --memory="8g" -v $(pwd):/data \
 
 **Problem**: Running AMD64 image on ARM64 (or vice versa)
 
-```
+```text
 WARNING: The requested image's platform (linux/amd64) does not match the detected host platform
 ```
 
@@ -535,9 +535,9 @@ trivy image adamtaranto/teloclip:latest
 
 ## Additional Resources
 
-- **GitHub Repository**: https://github.com/adamtaranto/teloclip
-- **Docker Hub**: https://hub.docker.com/r/adamtaranto/teloclip
-- **Issues**: https://github.com/adamtaranto/teloclip/issues
+- **GitHub Repository**: <https://github.com/adamtaranto/teloclip>
+- **Docker Hub**: <https://hub.docker.com/r/adamtaranto/teloclip>
+- **Issues**: <https://github.com/adamtaranto/teloclip/issues>
 - **Nextflow Examples**: [examples/nextflow/](../examples/nextflow/)
 
 ---

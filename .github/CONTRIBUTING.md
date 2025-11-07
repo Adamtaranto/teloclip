@@ -55,7 +55,7 @@ git clone https://github.com/adamtaranto/teloclip.git
 cd teloclip
 ```
 
-3. Create and activate a virtual environment
+2. Create and activate a virtual environment
 
 ```bash
 conda env create -f environment.yml

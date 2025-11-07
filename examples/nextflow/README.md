@@ -174,7 +174,7 @@ workflow TELOMERE_ANALYSIS {
 
 ## Output Structure
 
-```
+```text
 results/
 ├── ref/
 │   └── reference.fa.fai

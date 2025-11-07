@@ -76,13 +76,13 @@ There are 4 options available for installing Teloclip locally:
 pip install teloclip
 ```
 
-2. Install from Bioconda.
+1. Install from Bioconda.
 
 ```bash
 conda install -c bioconda teloclip
 ```
 
-3. Pip install directly from this git repository.
+1. Pip install directly from this git repository.
 
 This is the best way to ensure you have the latest development version.
 
@@ -90,7 +90,7 @@ This is the best way to ensure you have the latest development version.
 pip install git+https://github.com/Adamtaranto/teloclip.git
 ```
 
-4. Clone from this repository and install as a local Python package.
+1. Clone from this repository and install as a local Python package.
 
 Do this if you want to edit the code.
 
@@ -98,7 +98,7 @@ Do this if you want to edit the code.
 git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e '.[dev]'
 ```
 
-5. Use Docker for reproducible containerized environments.
+1. Use Docker for reproducible containerized environments.
 
 Ideal for pipelines and reproducible workflows. No local Python installation required.
 
