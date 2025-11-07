@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.3.4] - 2025-11-07
+
+### Added
+
+- **Docker containerization**: Production-ready multi-stage Dockerfile with multi-architecture support (amd64/arm64)
+- **Docker Hub integration**: Automated CI/CD pipeline via GitHub Actions for building and publishing images
+- **Nextflow workflow**: Complete example pipeline (`examples/nextflow/teloclip.nf`) with nf-core style modules for filter, extract, and extend
+- **Docker documentation**: Comprehensive `DOCKER.md` guide with usage examples and best practices
+- **Build scripts**: `scripts/build-docker.sh` and `scripts/test-docker.sh` for local development and testing
+
+### Changed
+
+- **License**: Migrated from MIT to GPL-3.0-or-later for better alignment with open science principles
+- **Docker workflow**: GitHub Actions now triggers only on version tags and pull requests (not on regular commits to main)
+- **Version management**: Implemented PEP 440 compliant version conversion in build scripts
+
+### Fixed
+
+- **Nextflow modules**: Corrected `teloclip extract` to accept SAM input (not BAM)
+- **Nextflow modules**: Fixed version parsing in all modules to match actual CLI output format
+- **Nextflow workflow**: Fixed SAM_TO_BAM process to properly output separate SAM file for extract step
+
+---
+
 ## [0.3.3]
 
 ### 🐳 Docker & Container Infrastructure
@@ -160,7 +184,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 #### New Files
 
-```
+```text
 .dockerignore                              # Docker build optimization
 Dockerfile                                 # Multi-stage production build
 DOCKER.md                                  # Complete Docker documentation
