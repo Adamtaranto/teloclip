@@ -51,9 +51,14 @@ venv.bak/
 environment.yml
 
 # Project specific
-pkg-mgt/
-CODE_OF_CONDUCT.md
+.pre-commit-config.yaml
 CITATION.cff
+node_modules/
+pkg-mgt/
 
-# CI/CD (not needed in image)
-.github/
+# Nextflow
+.nextflow.log
+.nextflow/
+examples/
+results/
+work/
