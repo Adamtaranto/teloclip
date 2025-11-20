@@ -75,6 +75,7 @@ select = [
     "W", # pycodestyle warning rules
     "B", # flake8-bugbear rules
     "I", # isort rules
+    "D", # pydocstyle rules
 ]
 ignore = [
     "C901", # max-complexity-10
