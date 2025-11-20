@@ -258,15 +258,12 @@ def generate_extension_report(
 
     # Per-contig summary
     report_lines.append('## Per-Contig Overhang Summary')
-    report_lines.append(
-        'Contig\tLength\tLeft_Count\tRight_Count\tLeft_Total\tRight_Total'
-    )
+    report_lines.append('Contig\tLength\tLeft_Count\tRight_Count')
 
     for contig_name, contig_stats in stats_dict.items():
         report_lines.append(
             f'{contig_name}\t{contig_stats.contig_length}\t'
-            f'{contig_stats.left_count}\t{contig_stats.right_count}\t'
-            f'{contig_stats.left_total_length}\t{contig_stats.right_total_length}'
+            f'{contig_stats.left_count}\t{contig_stats.right_count}'
         )
 
     return '\n'.join(report_lines)
