@@ -5,9 +5,9 @@ This module provides functionality to analyze soft-clipped alignments and collec
 statistics about overhanging sequences that can be used to extend draft contigs.
 """
 
-from dataclasses import dataclass, field
 import logging
 import statistics
+from dataclasses import dataclass, field
 from typing import Dict, Iterator, List, Optional, Tuple
 
 from .samops import checkClips, splitCIGAR

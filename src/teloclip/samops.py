@@ -1,6 +1,4 @@
-"""
-SAM file operations for Teloclip.
-"""
+"""SAM file operations for Teloclip."""
 
 import logging
 import re
@@ -433,9 +431,7 @@ def validate_min_anchor(cigar_string, min_anchor):
 
 
 def SAMinfo():
-    """
-    Print samfile spec.
-    """
+    """Print samfile spec."""
     print(
         """
     # SAM format
@@ -456,9 +452,7 @@ def SAMinfo():
 
 
 def CIGARinfo():
-    """
-    Print CIGAR file spec.
-    """
+    """Print CIGAR file spec."""
     print(
         """
     CIGAR Operators
@@ -534,8 +528,7 @@ class EnhancedStreamingSamFilter:
         stats: Optional['ExtractionStats'] = None,
         exclude_secondary: bool = True,
     ):
-        """
-        Initialize enhanced streaming filter.
+        """Initialize enhanced streaming filter.
 
         Parameters
         ----------
@@ -557,6 +550,7 @@ class EnhancedStreamingSamFilter:
             Statistics tracker
         exclude_secondary : bool, optional
             If True, exclude secondary alignments. Default is True.
+
         """
         self.samfile = samfile
         self.contigs = contigs
