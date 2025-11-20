@@ -250,7 +250,7 @@ teloclip extend overhangs.sorted.bam ref.fa \
 
 After manually extending contigs the revised assembly should be re-polished using available long and short read data to correct indels present in the raw long-reads.
 
-The final telomere-extended assembly should be re-polished using available long and short read data to correct indels (i.e. with `Medaka` and `Pypolca`) in the raw long-read extensions.
+The final telomere-extended assembly should be re-polished using available long and short read data to correct indels (i.e. with `NextPolish2` and `Pypolca`) in the raw long-read extensions.
 
 ### Optional Quality Control
 
@@ -474,7 +474,7 @@ Submit feedback to the [Issue Tracker](https://github.com/Adamtaranto/teloclip/i
 
 ## License
 
-Software provided under MIT license.
+Software provided under GPL-3 license.
 
 ## Star History
 
