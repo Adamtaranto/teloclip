@@ -1,3 +1,1 @@
-"""
-Commands package for teloclip CLI.
-"""
+"""Commands package for teloclip CLI."""

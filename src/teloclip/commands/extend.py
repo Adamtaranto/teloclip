@@ -9,9 +9,9 @@ to avoid loading entire genomes into memory.
 """
 
 import logging
-from pathlib import Path
 import re
 import sys
+from pathlib import Path
 from typing import Dict, List
 
 import click
@@ -561,7 +561,6 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
     Dict[str, re.Pattern]
         Dictionary mapping motif sequences to compiled regex patterns.
     """
-
     # Initialize motif patterns dictionary
     motif_patterns = {}
     # Parse comma-delimited motifs

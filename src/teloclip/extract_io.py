@@ -5,10 +5,10 @@ This module provides memory-efficient FASTA/FASTQ writing with buffering,
 statistics tracking, and BioPython integration for the extract command.
 """
 
-from collections import defaultdict
 import logging
-from pathlib import Path
 import sys
+from collections import defaultdict
+from pathlib import Path
 from typing import Dict, Optional, Union
 
 from Bio import SeqIO
@@ -36,7 +36,8 @@ class EfficientSequenceWriter:
         output_format: str = 'fasta',
         buffer_size: int = 1000,
     ):
-        """Initialize writer with optional buffering.
+        """
+        Initialize writer with optional buffering.
 
         Parameters
         ----------
@@ -86,9 +87,7 @@ class EfficientSequenceWriter:
         self.close()
 
     def open(self):
-        """
-        Open output file handle.
-        """
+        """Open output file handle."""
         if self.output_path is None:
             self.file_handle = sys.stdout
         else:
@@ -172,9 +171,7 @@ class EfficientSequenceWriter:
             self.buffer.clear()
 
     def close(self):
-        """
-        Close writer and cleanup.
-        """
+        """Close writer and cleanup."""
         # Write any remaining buffered sequences
         if self.buffer:
             self.flush()
@@ -715,13 +712,13 @@ class StreamingGenomeProcessor:
     """
 
     def __init__(self, fasta_path: Union[str, Path]):
-        """
-        Initialize the streaming processor.
+        """Initialize the streaming processor.
 
         Parameters
         ----------
         fasta_path : str or Path
             Path to indexed FASTA file (.fai index required).
+
         """
         try:
             import pysam
