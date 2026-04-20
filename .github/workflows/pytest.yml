@@ -39,7 +39,7 @@ jobs:
       # Upload coverage report to Codecov
       # Only upload coverage for the latest Python version
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v6
         if: matrix.python-version == '3.13'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
