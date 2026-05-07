@@ -31,8 +31,7 @@ def make_motif_regex(motif: str) -> str:
 
 def make_fuzzy_motif_regex(motif: str) -> str:
     """
-    Create a regex pattern to match fuzzy motifs with runs of characters
-    that differ by plus or minus one compared to the original motif.
+    Create a regex pattern to match fuzzy motifs with runs of characters that differ by plus or minus one compared to the original motif.
 
     Parameters
     ----------
@@ -108,7 +107,6 @@ def count_continuous_runs(dna_string: str) -> list:
         A list of tuples where each tuple contains a character and the number
         of times it occurred consecutively in the input DNA string.
     """
-
     # Check if the input string is empty
     if not dna_string:
         return []
@@ -137,8 +135,7 @@ def count_continuous_runs(dna_string: str) -> list:
 
 def construct_regex_pattern(motif_tuples: List[Tuple[str, int]]) -> str:
     """
-    Construct a regex pattern to match sequences with runs of characters
-    that differ by plus or minus one compared to the original input sequence.
+    Construct a regex pattern to match sequences with runs of characters that differ by plus or minus one compared to the original input sequence.
 
     Parameters
     ----------
@@ -151,7 +148,6 @@ def construct_regex_pattern(motif_tuples: List[Tuple[str, int]]) -> str:
     str
         The constructed regex pattern as a raw string.
     """
-
     pattern_parts = []
 
     # Note: This idea was adapted from https://github.com/JanaSperschneider/FindTelomeres/blob/master/FindTelomeres.py

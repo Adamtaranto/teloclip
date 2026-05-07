@@ -1,10 +1,8 @@
-"""
-Extract sub-command for teloclip CLI.
-"""
+"""Extract sub-command for teloclip CLI."""
 
 import logging
-from pathlib import Path
 import sys
+from pathlib import Path
 from typing import Dict
 
 import click
@@ -131,7 +129,7 @@ def extract_cmd(
     no_mask_overhangs,
     log_level,
 ):
-    """
+    r"""
     Extract overhanging reads for each end of each reference contig.
 
     Read SAM alignments and extracts soft-clipped sequences that
@@ -180,7 +178,6 @@ def extract_cmd(
 
     Examples
     --------
-
     # Basic extraction to current directory
     teloclip extract --ref-idx ref.fa.fai input.sam
 
@@ -197,7 +194,6 @@ def extract_cmd(
     samtools view -h input.bam | teloclip extract --ref-idx ref.fa.fai \\
         --count-motifs TTAGGG --fuzzy-count
     """
-
     # Initialize logging for this command
     init_logging(log_level)
 

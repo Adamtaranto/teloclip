@@ -1,6 +1,4 @@
-"""
-Main CLI entry point for teloclip with sub-commands.
-"""
+"""Main CLI entry point for teloclip with sub-commands."""
 
 import click
 
@@ -15,7 +13,7 @@ from teloclip._version import __version__
 @click.pass_context
 def main(ctx):
     """
-    A tool for the recovery of unassembled telomeres from soft-clipped read alignments.
+    Teloclip is a tool for the recovery of unassembled telomeres from soft-clipped read alignments.
 
     Use sub-commands to filter alignments, extract reads, or extend contigs.
 
