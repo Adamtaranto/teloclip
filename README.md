@@ -456,6 +456,8 @@ Teloclip has been used to recover and extend telomeric sequences in a wide varie
 
 - Liu, Y., Chen, Y., Ren, Z. et al. Two haplotype-resolved telomere-to-telomere genome assemblies of _Xanthoceras sorbifolium_. Sci Data 12, 791 (**2025**). 🌿
 
+- Liu, Y., Zhao, L., Zhang, J., Ju, Q., Fan, X., Li, Z., Zhang, X., Liang, X., Ge, F. and Chen, J., **2026**. Gapless genome assembly and evolutionary analysis of Cnidium monnieri (Apiaceae). Genomics Communications, 3(1). 🌱
+
 - Loos, A., Doykova, E., Qian, J., Kümmel, F., Ibrahim, H., Kiss, L., Panstruga, R. and Kusch, S., **2025**. Saprotrophic _Arachnopeziza_ Species as New Resources to Study the Obligate Biotrophic Lifestyle of Powdery Mildew Fungi. Molecular Ecology Resources, p.e70045. 🍄
 
 - Oberti, H., Sessa, L., Oliveira‐Rizzo, C., Di Paolo, A., Sanchez‐Vallet, A., Seidl, M.F. and Abreo, E., 2025. Novel genomic features in entomopathogenic fungus _Beauveria bassiana_ ILB308: accessory genomic regions and putative virulence genes involved in the infection process of soybean pest _Piezodorus guildinii_. Pest Management Science, 81(4), pp.2323-2336. 🍄
