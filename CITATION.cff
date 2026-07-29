@@ -1,18 +1,23 @@
+# This CITATION.cff file was generated with cffinit.
+# Visit https://bit.ly/cffinit to generate yours today!
+
 cff-version: 1.2.0
+title: teloclip
 message: "If you use this software, please cite it as below."
-title: "teloclip"
-version: 0.3.4
-date-released: 2025-11-07
+type: software
 authors:
   - family-names: Taranto
     given-names: Adam
-    orcid: https://orcid.org/0000-0003-4759-3475
-    affiliation: "The University of Melbourne"
+    orcid: "https://orcid.org/0000-0003-4759-3475"
+    affiliation: The University of Melbourne
 repository-code: "https://github.com/Adamtaranto/teloclip"
-license: GPL-3.0-or-later
 abstract: >-
-  A tool for the recovery of unassembled telomeres from raw long-reads using soft-clipped read alignments.
+  A tool for the recovery of unassembled telomeres from raw
+  long-reads using soft-clipped read alignments.
 keywords:
   - genomics
   - telomeres
   - bioinformatics
+license: GPL-3.0-or-later
+version: 0.3.4
+date-released: "2025-11-07"
