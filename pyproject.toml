@@ -33,6 +33,10 @@ dev = [
     "ruff",
 ]
 
+test = [
+        "pytest-cov",
+        "pytest",
+        ]
 
 [project.urls]
 documentation = "https://github.com/adamtaranto/teloclip"

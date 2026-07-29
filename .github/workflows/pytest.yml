@@ -12,22 +12,31 @@ jobs:
         python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
     steps:
       # Checkout the latest commit associated with the PR
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - name: Debug matrix value
         run: echo "Python version is ${{ matrix.python-version }}"
       # Set up Miniconda
       - name: Set up Miniconda
-        uses: conda-incubator/setup-miniconda@v3
+        uses: conda-incubator/setup-miniconda@v4
         with:
           auto-update-conda: true # Optional: update Conda to the latest version
           python-version: ${{ matrix.python-version }}
+          conda-remove-defaults: true
+          channels: conda-forge, bioconda
       # Install any additional dependencies not included in the pyproject.toml file
       - name: Install additional dependencies
         run: |
-          conda install -y -c conda-forge -c bioconda minimap2 samtools
-          python -m pip install --upgrade pip
-          pip install '.[dev]'  # Install all dependencies, including test-specific ones
+          conda install -y -c conda-forge -c bioconda minimap2 samtools pip
+          python -m pip install --upgrade pip setuptools wheel
+          python -m pip install --retries 10 --timeout 180 --prefer-binary --progress-bar off --no-cache-dir '.[test]'
         shell: bash -l {0}
+      # Verify pip installation
+      - name: Verify Python/pip
+        run: |
+          python --version
+          python -m pip --version
+        shell: bash -l {0}
+      # Verify pytest installation
       - name: Verify pytest installation
         run: python -m pytest --version
         shell: bash -l {0}
@@ -39,7 +48,7 @@ jobs:
       # Upload coverage report to Codecov
       # Only upload coverage for the latest Python version
       - name: Upload coverage reports to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         if: matrix.python-version == '3.13'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}

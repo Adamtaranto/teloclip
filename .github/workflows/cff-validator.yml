@@ -12,6 +12,6 @@ jobs:
       GITHUB_PAT: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v7
       - name: Validate CITATION.cff
-        uses: dieghernan/cff-validator@v4
+        uses: dieghernan/cff-validator@v5
