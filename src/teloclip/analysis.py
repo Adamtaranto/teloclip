@@ -28,6 +28,10 @@ class OverhangInfo:
     # lying past the terminus, i.e. clip length minus the gap that gets trimmed.
     # See teloclip.overhang for the full coordinate convention.
     net_gain: int = 0
+    # Aligned read bases immediately adjacent to the clip, retained only when
+    # the HTML report is requested so an overhang can be shown in the context
+    # of the alignment supporting it. Bounded; empty by default.
+    anchor_seq: str = ''
 
 
 @dataclass

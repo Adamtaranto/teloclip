@@ -76,6 +76,7 @@ rejected, and the next best is tried.
 | `--screen-terminal-bases` | 0 | Terminal window scanned for motifs before and after |
 | `--exclude-contigs` | — | Comma-separated names to leave untouched |
 | `--overhang-log` | — | TSV of every accepted overhang |
+| `--html-report` | — | Self-contained HTML report with the alignment view |
 
 `--min-overhangs 3` is a cheap way to require corroboration.
 
@@ -87,6 +88,43 @@ silently leave a contig in.
     It is accepted but does nothing. Contigs with anomalous overhang coverage
     are now reported for review instead of being dropped silently. See
     [Reading the report](../guide/reports.md).
+
+## The HTML report
+
+`--stats-report` tells you what changed. `--html-report` shows you the evidence:
+
+```bash
+teloclip extend overhangs.bam ref.fa \
+  --output-fasta extended.fasta \
+  --html-report extend_report.html \
+  --count-motifs TTAGGG
+```
+
+It is a single self-contained file — no CDN, no separate stylesheet — so it can
+be emailed, copied off a cluster, or archived and still open years later.
+
+It contains:
+
+- The summary and extensions table, as in the Markdown report.
+- **Overhang depth across contigs**, a strip plot with one point per contig end
+  and a median reference line. Hover for the contig name and depth; ends flagged
+  for anomalous coverage are ringed and labelled. A table view carries the same
+  numbers.
+- **Overhang alignments**, one scrollable block per contig end. Every supporting
+  read is laid out against the contig terminus, marked by a vertical rule. Grey
+  is the anchored part of the read, colour is the soft clip, and the read used
+  for the extension is marked. Hover a row for the read name, what it adds and
+  what it trims. With `--count-motifs`, motif matches are highlighted.
+
+That last view is the one worth spending time on. It answers the questions
+[Extracting reads](extract.md) asks you to check by eye — do the clips agree
+with each other, does the anchor match the contig, is the repeat where it
+should be — without leaving the report.
+
+Blocks open scrolled to the terminus, since that is the informative part. Use
+`--html-max-reads` (default 25) to control how many reads render per end; the
+reads contributing the most sequence are shown first, and the rest are counted
+in a note.
 
 ## The per-overhang log
 

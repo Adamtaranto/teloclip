@@ -21,6 +21,7 @@ def collect_contig_overhangs_streaming(
     max_break: int = 10,
     min_clip: int = 1,
     min_anchor: int = 500,
+    anchor_context: int = 0,
 ) -> ContigStats:
     """
     Collect overhang statistics for a single contig using streaming access.
@@ -41,6 +42,9 @@ def collect_contig_overhangs_streaming(
         (default: 1).
     min_anchor : int, optional
         Minimum number of anchoring (M/=/X) bases required (default: 500).
+    anchor_context : int, optional
+        Aligned bases adjacent to each clip to retain for display
+        (default: 0). Only the HTML report needs these.
 
     Returns
     -------
@@ -83,11 +87,13 @@ def collect_contig_overhangs_streaming(
         )
 
         if left_call.accepted:
-            contig_stats.left_overhangs.append(overhang_info_from_call(ends, left_call))
+            contig_stats.left_overhangs.append(
+                overhang_info_from_call(ends, left_call, anchor_context)
+            )
 
         if right_call.accepted:
             contig_stats.right_overhangs.append(
-                overhang_info_from_call(ends, right_call)
+                overhang_info_from_call(ends, right_call, anchor_context)
             )
 
     return contig_stats
@@ -100,6 +106,7 @@ def stream_contigs_for_extension(
     max_break: int = 10,
     min_clip: int = 1,
     min_anchor: int = 500,
+    anchor_context: int = 0,
 ) -> Iterator[tuple]:
     """
     Stream contigs that meet criteria for extension.
@@ -122,6 +129,8 @@ def stream_contigs_for_extension(
         Minimum number of clipped bases required past the terminus (default: 1).
     min_anchor : int, optional
         Minimum number of anchoring (M/=/X) bases required (default: 500).
+    anchor_context : int, optional
+        Aligned bases adjacent to each clip to retain for display (default: 0).
 
     Yields
     ------
@@ -130,7 +139,13 @@ def stream_contigs_for_extension(
     """
     for contig_name, contig_length in contig_dict.items():
         stats = collect_contig_overhangs_streaming(
-            bam_file, contig_name, contig_length, max_break, min_clip, min_anchor
+            bam_file,
+            contig_name,
+            contig_length,
+            max_break,
+            min_clip,
+            min_anchor,
+            anchor_context,
         )
 
         # Check if this contig has sufficient overhangs for extension

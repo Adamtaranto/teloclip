@@ -1,10 +1,17 @@
 # Reading the report
 
-`teloclip extend --stats-report` writes a Markdown report. It renders as a web
-page but is also aligned plain text, so it reads fine in a terminal.
+`teloclip extend` can emit two reports, and they answer different questions.
 
-Pass a path to write a file, `-` for stdout, or omit the option and it goes to
-stderr interleaved with the log.
+| Option | Format | Answers |
+|---|---|---|
+| `--stats-report` | Markdown | *What changed?* |
+| `--html-report` | Self-contained HTML | *Should I believe it?* |
+
+The Markdown report is described first; the [HTML report](#the-html-report) is
+covered at the end.
+
+Pass `--stats-report` a path to write a file, `-` for stdout, or omit the option
+and it goes to stderr interleaved with the log.
 
 ## Summary
 
@@ -107,3 +114,64 @@ still appear in the output FASTA, unmodified and in their original position.
 Per-contig problems: extensions rejected for insufficient net gain, overhangs
 rejected for homopolymer content, contigs in the index but missing from the
 FASTA. Worth reading even when the run succeeds.
+
+---
+
+## The HTML report
+
+`--html-report PATH` writes a single self-contained file: no CDN, no separate
+stylesheet, nothing fetched at open time. It can be emailed, copied off a
+cluster, or archived and still render years later.
+
+It repeats the summary and extensions table, then adds two things the Markdown
+report cannot express.
+
+### Overhang depth across contigs
+
+A strip plot with one point per contig end, blue for left and orange for right,
+against a median reference line. Hover any point for the contig name and depth.
+
+The shape is the message: a healthy assembly is a flat band near the median.
+Points far above it are ringed, labelled with the contig name, and listed in the
+anomalous-coverage section. A table view below carries the same numbers, so
+nothing is reachable only by hovering.
+
+### Overhang alignments
+
+One scrollable block per contig end, showing every supporting read laid out
+against the terminus:
+
+```
+                              │ terminus
+contig                        │GGACCCTAACCCTAACCCTGCTAGATT…
+▸ read_1  CCCTAACCCTAACCCTAACC│TAACCCTAACCCTAACCCTGCTAGATT…
+  read_2  CCCTAACCCTAACCCTAACC│TAACCCTAACCCTAACCCTGCTAGATT…
+  read_3        CCCTAACCCTAACC│TAACCCTAACCCTAACCCTGCTAGATT…
+```
+
+- **Grey** is the anchored portion of the read — the part that aligned.
+- **Colour** is the soft clip, in that end's series colour.
+- The **vertical rule** is the contig/overhang boundary.
+- **`▸`** marks the read the extension actually used.
+- Highlighted bases are motif matches, when `--count-motifs` was given.
+
+Hover a row for the read name, how many bases it adds and how many it trims.
+
+This view answers, in one place, the questions that otherwise require exporting
+reads and opening an alignment viewer:
+
+- **Do the clips agree?** Reads telling the same story is the evidence that the
+  overhang is real. Reads disagreeing past the rule suggests non-specific
+  alignment.
+- **Does the anchor match the contig?** Compare the grey region against the
+  `contig` row directly above it. Disagreement there means the read is not
+  placed where it claims.
+- **Is the repeat in the right place?** Motif highlighting should accumulate
+  *past* the rule, not inside the contig.
+- **Was the right read chosen?** The marked read is shown among the candidates
+  it beat, with its trim cost visible.
+
+Blocks open scrolled to the terminus. `--html-max-reads` (default 25) caps the
+rows per end; the reads contributing the most sequence come first and the
+remainder are counted in a note beneath. Clips are drawn to 300 bases, which is
+well past the point of reading them base by base.

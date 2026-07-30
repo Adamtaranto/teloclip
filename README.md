@@ -458,6 +458,14 @@ Options:
                                   Logging level (default: INFO).
   --logfile PATH                  Also write log messages to this file (parent
                                   directories are created).
+  --html-report PATH              Write a self-contained HTML report showing
+                                  every overhang read aligned against the
+                                  contig terminus it supports, plus overhang
+                                  depth across the assembly.
+  --html-max-reads INTEGER        Maximum overhang reads rendered per contig
+                                  end in the HTML report (default: 25). Reads
+                                  contributing the most sequence are shown
+                                  first.
   --overhang-log PATH             Write a TSV describing every accepted
                                   overhang read: contig, end, gap from the
                                   contig terminus, clip length and overhang

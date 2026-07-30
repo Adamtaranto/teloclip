@@ -344,6 +344,41 @@ class OverhangCall:
             return ends.sequence[: self.clip_len]
         return ends.sequence[-self.clip_len :]
 
+    def anchor_sequence(self, ends: AlignmentEnds, limit: int) -> str:
+        """
+        Extract the aligned read sequence immediately adjacent to the clip.
+
+        Used to render an overhang in the context of the alignment that
+        supports it: the anchor is the part of the read that agrees with the
+        contig, so showing it alongside the clip is what makes an overhang
+        look credible or suspect.
+
+        Only the portion abutting the clip is returned, bounded by ``limit``,
+        so retaining it for every overhang in an assembly stays cheap.
+
+        Parameters
+        ----------
+        ends : AlignmentEnds
+            The alignment this call was derived from.
+        limit : int
+            Maximum number of aligned bases to return. Zero or less returns an
+            empty string, which is the default for runs that do not need it.
+
+        Returns
+        -------
+        str
+            Up to ``limit`` aligned bases, ordered as they appear in the read,
+            or ``''`` if unavailable or not requested.
+        """
+        if limit <= 0 or not ends.sequence:
+            return ''
+        if self.is_left:
+            # Read is [clip][aligned...]; take the start of the aligned part.
+            return ends.sequence[self.clip_len : self.clip_len + limit]
+        # Read is [...aligned][clip]; take the end of the aligned part.
+        stop = len(ends.sequence) - self.clip_len
+        return ends.sequence[max(0, stop - limit) : stop]
+
 
 # SAM field indices, per the SAM specification.
 _SAM_QNAME = 0
@@ -561,7 +596,9 @@ def classify(
     )
 
 
-def overhang_info_from_call(ends: AlignmentEnds, call: OverhangCall) -> 'OverhangInfo':  # noqa: F821
+def overhang_info_from_call(
+    ends: AlignmentEnds, call: OverhangCall, anchor_context: int = 0
+) -> 'OverhangInfo':  # noqa: F821
     """
     Adapt an accepted call to the :class:`teloclip.analysis.OverhangInfo` record.
 
@@ -571,6 +608,9 @@ def overhang_info_from_call(ends: AlignmentEnds, call: OverhangCall) -> 'Overhan
         Canonical geometry for the alignment.
     call : OverhangCall
         An accepted call for one end of that alignment.
+    anchor_context : int, optional
+        Aligned bases adjacent to the clip to retain for later display
+        (default: 0, i.e. none). Only the HTML report needs these.
 
     Returns
     -------
@@ -592,4 +632,5 @@ def overhang_info_from_call(ends: AlignmentEnds, call: OverhangCall) -> 'Overhan
         anchor_length=ends.anchor,
         contig_name=ends.contig_name,
         net_gain=call.net_gain,
+        anchor_seq=call.anchor_sequence(ends, anchor_context),
     )

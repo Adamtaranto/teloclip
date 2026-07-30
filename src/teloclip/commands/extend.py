@@ -70,6 +70,17 @@ def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
                     ) from e
 
 
+# Aligned read bases retained either side of a clip for the HTML alignment view,
+# and the matching window of original contig sequence shown as the reference row.
+# Both are bounded so the report stays a sane size on a whole assembly.
+HTML_ANCHOR_CONTEXT = 120
+HTML_CONTIG_CONTEXT = 120
+
+# Clipped bases rendered per read in the HTML alignment view. Long telomeric
+# overhangs run to kilobases, which no one reads base by base.
+HTML_MAX_OVERHANG = 300
+
+
 # Column order for the --overhang-log TSV.
 OVERHANG_LOG_HEADER = (
     'contig',
@@ -1093,6 +1104,20 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
     help='Also write log messages to this file (parent directories are created).',
 )
 @click.option(
+    '--html-report',
+    type=click.Path(path_type=Path),
+    help='Write a self-contained HTML report showing every overhang read '
+    'aligned against the contig terminus it supports, plus overhang depth '
+    'across the assembly.',
+)
+@click.option(
+    '--html-max-reads',
+    type=int,
+    default=25,
+    help='Maximum overhang reads rendered per contig end in the HTML report '
+    '(default: 25). Reads contributing the most sequence are shown first.',
+)
+@click.option(
     '--overhang-log',
     type=click.Path(path_type=Path),
     help='Write a TSV describing every accepted overhang read: contig, end, '
@@ -1122,6 +1147,8 @@ def extend(
     exclude_contigs_file,
     log_level,
     logfile,
+    html_report,
+    html_max_reads,
     overhang_log,
 ):
     """
@@ -1179,6 +1206,10 @@ def extend(
         Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
     logfile : Path or None
         Optional path to also write log messages to.
+    html_report : Path or None
+        Optional path for a self-contained HTML report.
+    html_max_reads : int
+        Maximum overhang reads rendered per contig end in the HTML report.
     overhang_log : Path or None
         Optional path for a per-overhang TSV describing every accepted read.
     """
@@ -1281,6 +1312,9 @@ def extend(
             motif_stats = {}
             post_motif_counts = {}
             all_stats = {}
+            # Only populated when --html-report is requested.
+            terminal_sequences = {}
+            selected_reads = {}
 
             # Collect statistics for contigs that meet extension criteria
             extension_results = {}  # Store ExtensionResult objects for writing phase
@@ -1291,6 +1325,7 @@ def extend(
                 max_break=max_break,
                 min_clip=min_clip,
                 min_anchor=min_anchor,
+                anchor_context=HTML_ANCHOR_CONTEXT if html_report else 0,
             ):
                 all_stats[contig_name] = contig_stats
                 logging.info(
@@ -1320,6 +1355,15 @@ def extend(
                     )
                     continue
 
+                if html_report:
+                    # Keep only the terminal windows; the full sequence is far
+                    # too large to hold for every contig in an assembly.
+                    window = min(HTML_CONTIG_CONTEXT, len(original_sequence))
+                    terminal_sequences[contig_name] = (
+                        original_sequence[:window].upper(),
+                        original_sequence[-window:].upper(),
+                    )
+
                 # Process extension for this contig
                 extension_result = process_single_contig_extension(
                     contig_name=contig_name,
@@ -1336,6 +1380,19 @@ def extend(
                     # Store the complete ExtensionResult for later use
                     extension_results[contig_name] = extension_result
                     extensions_applied[contig_name] = extension_result.extension_info
+
+                    if html_report:
+                        # Record which read won at each end, so the alignment
+                        # view can mark it among the candidates it beat.
+                        info = extension_result.extension_info
+                        selected_reads[contig_name] = {
+                            'left': info.get('left_read_name')
+                            if info.get('has_left_extension')
+                            else None,
+                            'right': info.get('right_read_name')
+                            if info.get('has_right_extension')
+                            else None,
+                        }
                     warnings.extend(extension_result.warnings)
                     if extension_result.motif_counts:
                         motif_stats[contig_name] = extension_result.motif_counts
@@ -1493,6 +1550,33 @@ def extend(
             # Default: write report to stderr if no file specified
             logging.info('Writing statistics report to stderr')
             print(report_content, file=sys.stderr)
+
+        if html_report:
+            from .._version import __version__
+            from ..html_report import render_html_report
+
+            logging.info(f'Writing HTML report to {html_report}...')
+            html_report.parent.mkdir(parents=True, exist_ok=True)
+            html_report.write_text(
+                render_html_report(
+                    stats_dict=all_stats,
+                    extensions_applied=extensions_applied,
+                    anomalous=anomalous,
+                    excluded_contigs=excluded_contigs,
+                    warnings=warnings,
+                    terminal_sequences=terminal_sequences,
+                    selected_reads=selected_reads,
+                    total_contigs=len(contig_dict),
+                    dry_run=dry_run,
+                    motifs=sorted(motif_patterns) if motif_patterns else (),
+                    max_reads=max(1, html_max_reads),
+                    max_overhang=HTML_MAX_OVERHANG,
+                    version=__version__,
+                    command=' '.join(sys.argv),
+                ),
+                encoding='utf-8',
+            )
+            logging.info(f'HTML report written to {html_report}')
 
         # Summary
         if dry_run:

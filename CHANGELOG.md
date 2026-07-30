@@ -81,6 +81,12 @@ accepted:
 - **`teloclip extend --overhang-log`**, a TSV of every accepted overhang: contig, end,
   alignment span, gap from the terminus, clip length, overhang length and anchor length.
 - **Per-contig overhang counts and a distribution histogram** logged by `filter` and `extend`.
+- **`teloclip extend --html-report`**, a self-contained HTML report showing the evidence
+  behind each extension: every supporting read laid out against the contig terminus it
+  supports, with anchor and soft clip distinguished, motif matches highlighted, the selected
+  read marked, and read details on hover. Plus a strip plot of overhang depth across contigs
+  with a median reference line and flagged ends ringed and labelled, backed by a table view.
+  `--html-max-reads` (default 25) caps the rows rendered per contig end.
 
 ### Removed
 
