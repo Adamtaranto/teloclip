@@ -176,9 +176,12 @@ def test_summary_counts_both_ends(stats_dict, both_ends_extension, empty_outlier
     )
     assert 'Contig ends extended' in report
     assert '2 of 2' in report
-    assert '| Total bases added' in report
-    assert '140' in report  # 60 + 80
-    assert '| Total bases trimmed back' in report
+    assert '| Net bases gained' in report
+    # 60 grafted less 5 trimmed on the left, plus 80 on the right.
+    assert '135' in report
+    assert '| Bases trimmed back' in report
+    assert '| Raw overhang bases grafted' in report
+    assert '140' in report  # 60 + 80 before trimming
 
 
 def test_extensions_table_reports_both_ends(
@@ -196,12 +199,53 @@ def test_extensions_table_reports_both_ends(
     row = find_row(report, 'contig01')
     assert row[1] == '1,000'
     assert row[2] == '1,135'
-    assert row[3] == '+60'
+    # Net of the 5 bases trimmed at the left end, so the row reconciles:
+    # 1,000 + 135 = 1,135.
+    assert row[3] == '+55'
     assert row[4] == '+80'
-    assert row[5] == '+140'
+    assert row[5] == '+135'
     assert row[6] == 'readL2'
     assert row[7] == 'readR1'
     assert row[8] == '5'
+
+
+def test_extension_row_arithmetic_reconciles(
+    stats_dict, both_ends_extension, empty_outliers
+):
+    """Original bp plus the net columns equals Final bp.
+
+    Reporting raw clip lengths instead of net gain made this identity false
+    wherever an end needed trimming, so the report could not be checked
+    against the sequences it described.
+    """
+    report = generate_extension_report(
+        stats_dict,
+        both_ends_extension,
+        empty_outliers,
+        {},
+        [],
+        [],
+    )
+    row = find_row(report, 'contig01')
+
+    def as_int(cell):
+        """
+        Parse a formatted report cell into an integer.
+
+        Parameters
+        ----------
+        cell : str
+            Cell text, possibly carrying thousands separators and a sign.
+
+        Returns
+        -------
+        int
+            The numeric value.
+        """
+        return int(cell.replace(',', '').replace('+', ''))
+
+    assert as_int(row[1]) + as_int(row[5]) == as_int(row[2])
+    assert as_int(row[3]) + as_int(row[4]) == as_int(row[5])
 
 
 def test_motif_gain_is_attributed_per_end(
@@ -236,8 +280,9 @@ def test_motif_gain_is_attributed_per_end(
     ]
     left_row = next(r for r in motif_rows if r[1] == 'left')
     right_row = next(r for r in motif_rows if r[1] == 'right')
-    # Windows are the screening window plus that end's extension.
-    assert left_row[3] == '1,060'
+    # Windows are the screening window plus that end's net extension, which is
+    # how much longer the sequence actually is there.
+    assert left_row[3] == '1,055'
     assert left_row[4:] == ['1', '6', '+5']
     assert right_row[3] == '1,080'
     assert right_row[4:] == ['2', '12', '+10']

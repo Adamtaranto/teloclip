@@ -407,9 +407,10 @@ def process_single_contig_extension(
         # Count motifs in an explicit window at each end of the extended
         # sequence: the original terminal screening window plus whatever was
         # added at that end. This makes the counts directly comparable with the
-        # pre-extension terminal counts.
-        left_added = final_extension_info.get('left_overhang_length', 0)
-        right_added = final_extension_info.get('right_overhang_length', 0)
+        # pre-extension terminal counts. The window uses the net gain, since
+        # that is how much longer the sequence actually is at that end.
+        left_added = final_extension_info.get('left_net_gain', 0)
+        right_added = final_extension_info.get('right_net_gain', 0)
         left_window = min(terminal_length + left_added, len(target_seq))
         right_window = min(terminal_length + right_added, len(target_seq))
 

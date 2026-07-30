@@ -68,7 +68,13 @@ def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
 
 def _extension_lengths(ext_info: Dict) -> Tuple[int, int]:
     """
-    Extract the left and right extension lengths from an extension record.
+    Extract the net bases gained at each end from an extension record.
+
+    Extending an end trims the contig bases the supporting read did not cover
+    before grafting on its whole soft clip, so the bases the contig actually
+    gains are the clip length minus the trim. Reporting the raw clip length
+    instead overstates the extension and leaves the arithmetic in the report
+    unable to reconcile with the final contig length.
 
     Parameters
     ----------
@@ -78,19 +84,34 @@ def _extension_lengths(ext_info: Dict) -> Tuple[int, int]:
     Returns
     -------
     Tuple[int, int]
-        Bases added at the left end and at the right end.
+        Net bases gained at the left end and at the right end.
     """
-    left = (
-        ext_info.get('left_overhang_length', 0)
-        if ext_info.get('has_left_extension', False)
-        else 0
-    )
-    right = (
-        ext_info.get('right_overhang_length', 0)
-        if ext_info.get('has_right_extension', False)
-        else 0
-    )
-    return left, right
+
+    def net(side: str) -> int:
+        """
+        Net gain at one end, zero if that end was not extended.
+
+        Parameters
+        ----------
+        side : str
+            Either ``'left'`` or ``'right'``.
+
+        Returns
+        -------
+        int
+            Bases gained at that end.
+        """
+        if not ext_info.get(f'has_{side}_extension', False):
+            return 0
+        # apply_contig_extension records net_gain directly; fall back to the
+        # clip-minus-trim arithmetic for dry runs and older records.
+        if f'{side}_net_gain' in ext_info:
+            return ext_info[f'{side}_net_gain']
+        return ext_info.get(f'{side}_overhang_length', 0) - ext_info.get(
+            f'{side}_trim_length', 0
+        )
+
+    return net('left'), net('right')
 
 
 def _motif_gain_rows(
@@ -130,8 +151,13 @@ def _motif_gain_rows(
             extensions_applied.get(contig_name, {})
         )
 
+        # The screening window is halved for contigs shorter than twice the
+        # requested length, so report the window actually used rather than the
+        # one asked for.
+        effective_terminal = pre_counts.get('window', screen_terminal_bases)
+
         for end, added in (('left', left_added), ('right', right_added)):
-            window = screen_terminal_bases + added
+            window = effective_terminal + added
             for motif_name in sorted(end_counts.get(end, {})):
                 post = end_counts[end][motif_name]
                 pre = pre_counts.get(end, {}).get(motif_name, 0)
@@ -288,8 +314,9 @@ def generate_extension_report(
             'Contig ends extended',
             f'{fmt_int(ends_extended)} of {fmt_int(n_contigs * 2)}',
         ),
-        ('Total bases added', fmt_int(total_gained)),
-        ('Total bases trimmed back', fmt_int(total_trimmed)),
+        ('Net bases gained', fmt_int(total_gained)),
+        ('Bases trimmed back', fmt_int(total_trimmed)),
+        ('Raw overhang bases grafted', fmt_int(total_gained + total_trimmed)),
     ]
     if motif_names:
         summary_pairs.append(('Motifs counted', ', '.join(motif_names)))
@@ -325,9 +352,18 @@ def generate_extension_report(
             ]
         )
 
+    ext_note = (
+        'The `+bp` columns are net: the overhang grafted on at that end, less '
+        'the contig bases trimmed to make room for it. So '
+        '`Original bp + Total +bp = Final bp` for every row.\n\n'
+        if ext_rows
+        else ''
+    )
+
     section(
         'Extensions That Would Be Applied' if dry_run else 'Extensions Applied',
-        md_table(
+        ext_note
+        + md_table(
             [
                 'Contig',
                 'Original bp',
@@ -554,10 +590,13 @@ def count_terminal_motifs(
                 left_seq = str(fasta[contig_name][:actual_length]).upper()
                 right_seq = str(fasta[contig_name][-actual_length:]).upper()
 
-                # Initialize counts for this contig
+                # Initialize counts for this contig. 'window' records the
+                # window actually used, which is halved for short contigs and
+                # so may be smaller than the requested terminal_length.
                 terminal_counts[contig_name] = {
                     'left': {},
                     'right': {},
+                    'window': actual_length,
                 }
 
                 # Count motifs in each terminal region
