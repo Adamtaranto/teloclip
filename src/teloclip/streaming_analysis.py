@@ -219,6 +219,7 @@ class ExtensionResult:
     extension_info: dict
     warnings: List[str] = field(default_factory=list)
     motif_counts: Dict[str, int] = field(default_factory=dict)
+    end_motif_counts: Dict[str, Dict[str, int]] = field(default_factory=dict)
 
 
 def process_single_contig_extension(
@@ -229,6 +230,7 @@ def process_single_contig_extension(
     max_homopolymer: int = 50,
     motif_patterns: Optional[Dict[str, str]] = None,
     dry_run: bool = False,
+    terminal_length: int = 0,
 ) -> Optional[ExtensionResult]:
     """
     Process extension for a single contig, handling both ends if valid.
@@ -249,6 +251,10 @@ def process_single_contig_extension(
         Motif patterns to search for.
     dry_run : bool, optional
         Whether this is a dry run (default: False).
+    terminal_length : int, optional
+        Number of original terminal bases to include in the per-end motif
+        counting window, alongside the length of the extension at that end
+        (default: 0).
 
     Returns
     -------
@@ -401,6 +407,7 @@ def process_single_contig_extension(
 
     # Count motifs if patterns provided
     motif_counts = {}
+    end_motif_counts: Dict[str, Dict[str, int]] = {}
     if motif_patterns:
         target_seq = working_sequence if not dry_run else original_sequence
 
@@ -415,6 +422,26 @@ def process_single_contig_extension(
             matches = re.findall(pattern_str, target_seq)
             motif_counts[pattern_name] = len(matches)
 
+        # Count motifs in an explicit window at each end of the extended
+        # sequence: the original terminal screening window plus whatever was
+        # added at that end. This makes the counts directly comparable with the
+        # pre-extension terminal counts.
+        left_added = final_extension_info.get('left_overhang_length', 0)
+        right_added = final_extension_info.get('right_overhang_length', 0)
+        left_window = min(terminal_length + left_added, len(target_seq))
+        right_window = min(terminal_length + right_added, len(target_seq))
+
+        end_motif_counts = {'left': {}, 'right': {}}
+        for pattern_name, pattern_str in motif_patterns.items():
+            left_seq = target_seq[:left_window] if left_window > 0 else ''
+            right_seq = target_seq[-right_window:] if right_window > 0 else ''
+            end_motif_counts['left'][pattern_name] = len(
+                re.findall(pattern_str, left_seq)
+            )
+            end_motif_counts['right'][pattern_name] = len(
+                re.findall(pattern_str, right_seq)
+            )
+
     return ExtensionResult(
         contig_name=contig_name,
         original_length=contig_stats.contig_length,
@@ -422,4 +449,5 @@ def process_single_contig_extension(
         extension_info=final_extension_info,
         warnings=warnings,
         motif_counts=motif_counts,
+        end_motif_counts=end_motif_counts,
     )

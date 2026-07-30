@@ -51,7 +51,8 @@ def test_files(test_data_dir, temp_dir):
             corrupt_files: Create corrupted versions of files
             empty_files: Create empty versions of files
 
-        Returns:
+        Returns
+        -------
             Dict with file paths
         """
         if copy_to_temp or corrupt_files or empty_files:
@@ -179,6 +180,12 @@ class TestExtendCLIBasicFunctionality:
 
         assert_exit_code(exit_code, 0, stdout, stderr)
         assert_file_exists(stats_file)
+
+        report = stats_file.read_text()
+        assert report.startswith('# Teloclip Extend Report')
+        assert '## Summary' in report
+        # Summary is rendered as a Markdown table.
+        assert '| Contigs in assembly' in report
 
 
 class TestExtendCLIParameterValidation:
