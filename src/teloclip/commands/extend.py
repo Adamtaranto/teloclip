@@ -891,13 +891,19 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
     '--min-extension',
     type=int,
     default=1,
-    help='Minimum overhang length for extension (default: 1)',
+    help='Minimum novel bases an overhang must contribute to be used (default: 1)',
+)
+@click.option(
+    '--min-clip',
+    type=int,
+    default=1,
+    help='Require clip to extend past the contig end by at least N bases (default: 1)',
 )
 @click.option(
     '--max-break',
     type=int,
-    default=10,
-    help='Maximum gap allowed between alignment and contig end (default: 10)',
+    default=50,
+    help='Maximum gap allowed between alignment and contig end (default: 50)',
 )
 @click.option(
     '--min-anchor',
@@ -958,6 +964,7 @@ def extend(
     min_overhangs,
     max_homopolymer,
     min_extension,
+    min_clip,
     max_break,
     min_anchor,
     dry_run,
@@ -997,11 +1004,13 @@ def extend(
     max_homopolymer : int
         Maximum homopolymer length allowed in extensions.
     min_extension : int
-        Minimum extension length to report.
+        Minimum number of novel bases an overhang must contribute to be used.
+    min_clip : int
+        Minimum number of clipped bases required past the contig terminus.
     max_break : int
-        Maximum distance from contig end to search for overhangs.
+        Maximum tolerated gap between a contig terminus and the alignment.
     min_anchor : int
-        Minimum anchor length in aligned portion.
+        Minimum number of anchoring (M/=/X) bases required.
     dry_run : bool
         Perform analysis without writing output files.
     count_motifs : bool
@@ -1025,6 +1034,16 @@ def extend(
     init_logging(log_level)
 
     ctx.ensure_object(dict)
+
+    # A clip that does not reach past the contig terminus contributes no novel
+    # sequence, and applying it would trim more bases than it adds. Clamping
+    # here is what makes "every accepted overhang lengthens the contig" hold.
+    if min_clip < 1:
+        logging.warning(
+            f'--min-clip must be at least 1 (got {min_clip}); using 1. '
+            'A clip that stops short of the contig end would shorten it.'
+        )
+        min_clip = 1
 
     try:
         # Validate indexed files
@@ -1098,7 +1117,7 @@ def extend(
                 contig_dict,
                 min_overhangs=min_overhangs,
                 max_break=max_break,
-                min_clip=1,  # Use default minimum clip
+                min_clip=min_clip,
                 min_anchor=min_anchor,
                 exclude_outliers=exclude_outliers,
                 outlier_threshold=outlier_threshold,

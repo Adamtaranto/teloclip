@@ -8,9 +8,7 @@ statistics about overhanging sequences that can be used to extend draft contigs.
 from dataclasses import dataclass, field
 import logging
 import statistics
-from typing import Dict, Iterator, List, Optional, Tuple
-
-from .samops import checkClips, splitCIGAR
+from typing import Dict, List, Optional, Tuple
 
 
 @dataclass
@@ -102,111 +100,6 @@ class ContigStats:
         modify the underlying collection.
         """
         return sum(oh.length for oh in self.right_overhangs)
-
-
-def collect_overhang_stats(
-    sam_lines: Iterator[str], contig_dict: Dict[str, int]
-) -> Dict[str, ContigStats]:
-    """
-    Collect overhang statistics from SAM file lines.
-
-    Parameters
-    ----------
-    sam_lines : Iterator[str]
-        Iterator of SAM file lines.
-    contig_dict : Dict[str, int]
-        Dictionary mapping contig names to their lengths.
-
-    Returns
-    -------
-    Dict[str, ContigStats]
-        Dictionary mapping contig names to their overhang statistics.
-    """
-    stats = {}
-
-    # Initialize stats for all contigs
-    for contig_name, contig_length in contig_dict.items():
-        stats[contig_name] = ContigStats(contig_name, contig_length)
-
-    for line in sam_lines:
-        line = line.strip()
-        if not line or line.startswith('@'):
-            continue
-
-        fields = line.split('\t')
-        if len(fields) < 11:
-            continue
-
-        read_name = fields[0]
-        flag = int(fields[1])
-        ref_name = fields[2]
-        pos = int(fields[3])
-        cigar = fields[5]
-        seq = fields[9]
-
-        # Skip unmapped reads
-        if flag & 4 or ref_name == '*' or ref_name not in contig_dict:
-            continue
-
-        # Skip secondary/supplementary alignments
-        if flag & 0x900:
-            continue
-
-        # Analyze CIGAR for clips
-        cigar_ops = splitCIGAR(cigar)
-        left_clip, right_clip = checkClips(cigar)
-
-        # Convert None to 0 for easier handling
-        left_clip = left_clip or 0
-        right_clip = right_clip or 0
-
-        if left_clip == 0 and right_clip == 0:
-            continue
-
-        contig_length = contig_dict[ref_name]
-        alignment_end = (
-            pos + sum(length for length, op in cigar_ops if op in 'MDN=X') - 1
-        )
-
-        # Check for left clip at contig start
-        if left_clip > 0 and pos <= 10:  # Allow some tolerance
-            overhang_seq = seq[:left_clip]
-            anchor_length = len(seq) - left_clip
-
-            overhang = OverhangInfo(
-                sequence=overhang_seq,
-                length=left_clip,
-                alignment_pos=pos,
-                alignment_end=alignment_end,
-                read_name=read_name,
-                is_left=True,
-                clip_length=left_clip,
-                anchor_length=anchor_length,
-                contig_name=ref_name,
-            )
-            stats[ref_name].left_overhangs.append(overhang)
-
-        # Check for right clip at contig end
-        if (
-            right_clip > 0 and alignment_end >= contig_length - 10
-        ):  # Allow some tolerance
-            overhang_seq = seq[-right_clip:]
-            anchor_length = len(seq) - right_clip
-
-            overhang = OverhangInfo(
-                sequence=overhang_seq,
-                length=right_clip,
-                alignment_pos=pos,
-                alignment_end=alignment_end,
-                read_name=read_name,
-                is_left=False,
-                clip_length=right_clip,
-                anchor_length=anchor_length,
-                contig_name=ref_name,
-            )
-            stats[ref_name].right_overhangs.append(overhang)
-
-    return stats
 
 
 def calculate_overhang_statistics(
@@ -388,9 +281,15 @@ def identify_outlier_contigs(
     return {'left_outliers': left_outliers, 'right_outliers': right_outliers}
 
 
-def rank_overhangs_by_length(overhangs_list: List[OverhangInfo]) -> List[OverhangInfo]:
+def rank_overhangs_by_gain(overhangs_list: List[OverhangInfo]) -> List[OverhangInfo]:
     """
-    Sort overhangs by length in descending order.
+    Sort overhangs by the sequence they would actually add, descending.
+
+    Ranking is on ``net_gain`` rather than raw clip length. Applying an overhang
+    trims the contig bases the read did not cover before grafting on the clip,
+    so a long clip anchored well inside the contig can contribute less novel
+    sequence than a shorter clip flush with the terminus. Raw clip length is
+    used only to break ties.
 
     Parameters
     ----------
@@ -400,9 +299,9 @@ def rank_overhangs_by_length(overhangs_list: List[OverhangInfo]) -> List[Overhan
     Returns
     -------
     List[OverhangInfo]
-        Sorted list of overhangs (longest first).
+        Sorted list of overhangs, largest net gain first.
     """
-    return sorted(overhangs_list, key=lambda oh: oh.length, reverse=True)
+    return sorted(overhangs_list, key=lambda oh: (oh.net_gain, oh.length), reverse=True)
 
 
 def detect_homopolymer_runs(
@@ -465,7 +364,7 @@ def select_best_overhang(
     overhangs : List[OverhangInfo]
         List of available overhangs.
     min_extension : int, optional
-        Minimum overhang length required (default: 1).
+        Minimum number of novel bases the overhang must contribute (default: 1).
     max_homopolymer : int, optional
         Maximum allowed homopolymer run length (default: 50).
 
@@ -477,14 +376,14 @@ def select_best_overhang(
     if not overhangs:
         return None
 
-    # Filter by minimum length
-    candidates = [oh for oh in overhangs if oh.length >= min_extension]
+    # Filter on the sequence actually contributed, not the raw clip length.
+    candidates = [oh for oh in overhangs if oh.net_gain >= min_extension]
 
     if not candidates:
         return None
 
-    # Sort by length (longest first)
-    candidates = rank_overhangs_by_length(candidates)
+    # Sort by net gain (most novel sequence first)
+    candidates = rank_overhangs_by_gain(candidates)
 
     # Check for homopolymer runs in order of preference
     excluded_count = 0

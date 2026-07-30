@@ -11,10 +11,9 @@ from teloclip.analysis import (
     ContigStats,
     OverhangInfo,
     calculate_overhang_statistics,
-    collect_overhang_stats,
     detect_homopolymer_runs,
     identify_outlier_contigs,
-    rank_overhangs_by_length,
+    rank_overhangs_by_gain,
     select_best_overhang,
 )
 
@@ -71,54 +70,6 @@ class TestContigStats:
         assert stats.right_count == 1
         assert stats.left_total_length == 8
         assert stats.right_total_length == 4
-
-
-class TestCollectOverhangStats:
-    """Test the collect_overhang_stats function."""
-
-    def test_collect_basic_stats(self):
-        """Test basic overhang statistics collection."""
-        sam_lines = [
-            '@HD\tVN:1.0\tSO:coordinate',
-            'read1\t0\tcontig1\t1\t60\t20S80M\t*\t0\t0\tAAAAAAAAAAAAAAAAAATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG\t*',
-            'read2\t0\tcontig1\t990\t60\t80M20S\t*\t0\t0\tTCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGGGGGGGGGGGGGGGGGGGGG\t*',
-        ]
-
-        contig_dict = {'contig1': 1000}
-
-        stats = collect_overhang_stats(iter(sam_lines), contig_dict)
-
-        assert 'contig1' in stats
-        assert stats['contig1'].left_count == 1
-        assert stats['contig1'].right_count == 1
-        assert stats['contig1'].left_overhangs[0].sequence == 'AAAAAAAAAAAAAAAAAATC'
-        assert stats['contig1'].right_overhangs[0].sequence == 'GGGGGGGGGGGGGGGGGGGG'
-
-    def test_collect_stats_skip_unmapped(self):
-        """Test that unmapped reads are skipped."""
-        sam_lines = [
-            'read1\t4\t*\t0\t0\t*\t*\t0\t0\tATCGATCGATCGATCG\t*',  # unmapped
-            'read2\t0\tcontig1\t1\t60\t20S80M\t*\t0\t0\tAAAAAAAAAAAAAAAAAATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG\t*',
-        ]
-
-        contig_dict = {'contig1': 1000}
-
-        stats = collect_overhang_stats(iter(sam_lines), contig_dict)
-
-        assert stats['contig1'].left_count == 1
-
-    def test_collect_stats_skip_secondary(self):
-        """Test that secondary alignments are skipped."""
-        sam_lines = [
-            'read1\t256\tcontig1\t1\t60\t20S80M\t*\t0\t0\tAAAAAAAAAAAAAAAAAATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG\t*',  # secondary
-            'read2\t0\tcontig1\t1\t60\t20S80M\t*\t0\t0\tAAAAAAAAAAAAAAAAAATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCGATCG\t*',
-        ]
-
-        contig_dict = {'contig1': 1000}
-
-        stats = collect_overhang_stats(iter(sam_lines), contig_dict)
-
-        assert stats['contig1'].left_count == 1
 
 
 class TestCalculateOverhangStatistics:
@@ -213,26 +164,56 @@ class TestIdentifyOutlierContigs:
         assert 'outlier' in outliers['left_outliers']
 
 
-class TestRankOverhangsByLength:
-    """Test the rank_overhangs_by_length function."""
+class TestRankOverhangsByGain:
+    """Test the rank_overhangs_by_gain function."""
 
     def test_rank_overhangs(self):
-        """Test ranking overhangs by length."""
+        """Test ranking overhangs by the sequence they contribute."""
+        # All flush with the terminus, so net gain tracks clip length.
         overhangs = [
-            OverhangInfo('AT', 2, 1, 100, 'read1', True, 2, 98, 'test_contig'),
-            OverhangInfo('ATCGATCG', 8, 1, 100, 'read2', True, 8, 92, 'test_contig'),
-            OverhangInfo('ATCG', 4, 1, 100, 'read3', True, 4, 96, 'test_contig'),
+            OverhangInfo('AT', 2, 1, 100, 'read1', True, 2, 98, 'test_contig', 2),
+            OverhangInfo('ATCGATCG', 8, 1, 100, 'read2', True, 8, 92, 'test_contig', 8),
+            OverhangInfo('ATCG', 4, 1, 100, 'read3', True, 4, 96, 'test_contig', 4),
         ]
 
-        ranked = rank_overhangs_by_length(overhangs)
+        ranked = rank_overhangs_by_gain(overhangs)
 
         assert ranked[0].length == 8
         assert ranked[1].length == 4
         assert ranked[2].length == 2
 
+    def test_longest_clip_does_not_win_when_gain_is_smaller(self):
+        """Test that a long clip anchored inside the contig loses.
+
+        A 200 bp clip starting 190 bases into the contig contributes only 10
+        novel bases, because 190 bases get trimmed before it is grafted on. A
+        150 bp clip flush with the terminus contributes all 150. Ranking on raw
+        clip length would pick the wrong read.
+        """
+        buried = OverhangInfo(
+            'A' * 200, 200, 191, 1000, 'buried', True, 200, 800, 'test_contig', 10
+        )
+        flush = OverhangInfo(
+            'C' * 150, 150, 1, 1000, 'flush', True, 150, 850, 'test_contig', 150
+        )
+
+        ranked = rank_overhangs_by_gain([buried, flush])
+
+        assert ranked[0].read_name == 'flush'
+        assert ranked[1].read_name == 'buried'
+
+    def test_length_breaks_ties_on_equal_gain(self):
+        """Test that raw clip length is the tiebreak when net gain is equal."""
+        short = OverhangInfo('AAAA', 4, 1, 100, 'short', True, 4, 96, 'c', 4)
+        long_ = OverhangInfo('C' * 10, 10, 7, 100, 'long', True, 10, 90, 'c', 4)
+
+        ranked = rank_overhangs_by_gain([short, long_])
+
+        assert ranked[0].read_name == 'long'
+
     def test_rank_empty_list(self):
         """Test ranking empty list."""
-        ranked = rank_overhangs_by_length([])
+        ranked = rank_overhangs_by_gain([])
         assert len(ranked) == 0
 
 
@@ -279,11 +260,11 @@ class TestSelectBestOverhang:
     """Test the select_best_overhang function."""
 
     def test_select_longest_overhang(self):
-        """Test selection of longest overhang."""
+        """Test selection of the overhang contributing the most sequence."""
         overhangs = [
-            OverhangInfo('AT', 2, 1, 100, 'read1', True, 2, 98, 'test_contig'),
-            OverhangInfo('ATCGATCG', 8, 1, 100, 'read2', True, 8, 92, 'test_contig'),
-            OverhangInfo('ATCG', 4, 1, 100, 'read3', True, 4, 96, 'test_contig'),
+            OverhangInfo('AT', 2, 1, 100, 'read1', True, 2, 98, 'test_contig', 2),
+            OverhangInfo('ATCGATCG', 8, 1, 100, 'read2', True, 8, 92, 'test_contig', 8),
+            OverhangInfo('ATCG', 4, 1, 100, 'read3', True, 4, 96, 'test_contig', 4),
         ]
 
         best = select_best_overhang(overhangs, min_extension=1, max_homopolymer=50)
@@ -294,9 +275,9 @@ class TestSelectBestOverhang:
     def test_select_with_min_extension_filter(self):
         """Test selection with minimum extension requirement."""
         overhangs = [
-            OverhangInfo('AT', 2, 1, 100, 'read1', True, 2, 98, 'test_contig'),
-            OverhangInfo('ATCGATCG', 8, 1, 100, 'read2', True, 8, 92, 'test_contig'),
-            OverhangInfo('ATCG', 4, 1, 100, 'read3', True, 4, 96, 'test_contig'),
+            OverhangInfo('AT', 2, 1, 100, 'read1', True, 2, 98, 'test_contig', 2),
+            OverhangInfo('ATCGATCG', 8, 1, 100, 'read2', True, 8, 92, 'test_contig', 8),
+            OverhangInfo('ATCG', 4, 1, 100, 'read3', True, 4, 96, 'test_contig', 4),
         ]
 
         best = select_best_overhang(overhangs, min_extension=5, max_homopolymer=50)
@@ -304,17 +285,32 @@ class TestSelectBestOverhang:
         assert best.length == 8
         assert best.read_name == 'read2'
 
+    def test_min_extension_applies_to_net_gain_not_clip_length(self):
+        """Test that min_extension gates on novel sequence contributed.
+
+        A 100 bp clip that only reaches 3 bases past the terminus adds 3 bases,
+        so it must not satisfy --min-extension 10 despite its clip length.
+        """
+        overhangs = [
+            OverhangInfo(
+                'ATCG' * 25, 100, 98, 1000, 'buried', True, 100, 900, 'test_contig', 3
+            ),
+        ]
+
+        assert select_best_overhang(overhangs, min_extension=10) is None
+        assert select_best_overhang(overhangs, min_extension=3) is not None
+
     def test_select_with_homopolymer_filtering(self):
         """Test selection avoiding homopolymer runs."""
         overhangs = [
             OverhangInfo(
-                'A' * 60, 60, 1, 100, 'read1', True, 60, 40, 'test_contig'
+                'A' * 60, 60, 1, 100, 'read1', True, 60, 40, 'test_contig', 60
             ),  # Has homopolymer
             OverhangInfo(
-                'ATCGATCG', 8, 1, 100, 'read2', True, 8, 92, 'test_contig'
+                'ATCGATCG', 8, 1, 100, 'read2', True, 8, 92, 'test_contig', 8
             ),  # Clean
             OverhangInfo(
-                'ATCG', 4, 1, 100, 'read3', True, 4, 96, 'test_contig'
+                'ATCG', 4, 1, 100, 'read3', True, 4, 96, 'test_contig', 4
             ),  # Clean but shorter
         ]
 
@@ -332,8 +328,8 @@ class TestSelectBestOverhang:
     def test_select_no_candidates_meet_criteria(self):
         """Test when no overhangs meet the criteria."""
         overhangs = [
-            OverhangInfo('AT', 2, 1, 100, 'read1', True, 2, 98, 'test_contig'),
-            OverhangInfo('A', 1, 1, 100, 'read2', True, 1, 99, 'test_contig'),
+            OverhangInfo('AT', 2, 1, 100, 'read1', True, 2, 98, 'test_contig', 2),
+            OverhangInfo('A', 1, 1, 100, 'read2', True, 1, 99, 'test_contig', 1),
         ]
 
         best = select_best_overhang(overhangs, min_extension=5, max_homopolymer=50)
@@ -365,6 +361,7 @@ class TestDualEndOverhang:
             clip_length=18,
             anchor_length=450,  # 450bp anchored in contig
             contig_name='short_contig',
+            net_gain=18,
         )
 
         # Right overhang: same read continues past contig end
@@ -378,6 +375,7 @@ class TestDualEndOverhang:
             clip_length=18,
             anchor_length=450,  # 450bp anchored in contig
             contig_name='short_contig',
+            net_gain=18,
         )
 
         contig_stats.left_overhangs = [left_overhang]
@@ -493,6 +491,7 @@ class TestDualEndOverhang:
             clip_length=4,
             anchor_length=199,
             contig_name='test_contig',
+            net_gain=4,
         )
 
         short_right = OverhangInfo(
@@ -505,6 +504,7 @@ class TestDualEndOverhang:
             clip_length=4,
             anchor_length=199,
             contig_name='test_contig',
+            net_gain=4,
         )
 
         contig_stats.left_overhangs.append(short_left)
@@ -583,6 +583,7 @@ class TestDualEndOverhang:
             clip_length=60,
             anchor_length=399,
             contig_name='test_contig',
+            net_gain=60,
         )
 
         right_with_homopolymer = OverhangInfo(
@@ -595,6 +596,7 @@ class TestDualEndOverhang:
             clip_length=60,
             anchor_length=399,
             contig_name='test_contig',
+            net_gain=60,
         )
 
         contig_stats.left_overhangs = [left_with_homopolymer]
@@ -632,6 +634,7 @@ class TestDualEndOverhang:
             clip_length=2,
             anchor_length=399,
             contig_name='test_contig',
+            net_gain=2,
         )
 
         short_right = OverhangInfo(
@@ -644,6 +647,7 @@ class TestDualEndOverhang:
             clip_length=2,
             anchor_length=399,
             contig_name='test_contig',
+            net_gain=2,
         )
 
         contig_stats.left_overhangs = [short_left]
@@ -681,6 +685,7 @@ class TestDualEndOverhang:
             clip_length=12,
             anchor_length=399,
             contig_name='test_contig',
+            net_gain=12,
         )
 
         # Bad right overhang (homopolymer)
@@ -694,6 +699,7 @@ class TestDualEndOverhang:
             clip_length=60,
             anchor_length=399,
             contig_name='test_contig',
+            net_gain=60,
         )
 
         contig_stats.left_overhangs = [good_left]
@@ -740,6 +746,7 @@ class TestDualEndOverhang:
             clip_length=24,
             anchor_length=249,  # High anchor quality
             contig_name='short_contig',
+            net_gain=24,
         )
 
         right_overhang = OverhangInfo(
@@ -752,6 +759,7 @@ class TestDualEndOverhang:
             clip_length=24,
             anchor_length=249,  # High anchor quality
             contig_name='short_contig',
+            net_gain=24,
         )
 
         contig_stats.left_overhangs = [left_overhang]
@@ -818,6 +826,7 @@ class TestDualEndOverhang:
             clip_length=24,
             anchor_length=599,
             contig_name='left_only_contig',
+            net_gain=24,
         )
 
         contig_stats.left_overhangs = [best_left]
@@ -873,6 +882,7 @@ class TestDualEndOverhang:
             clip_length=24,
             anchor_length=599,
             contig_name='right_only_contig',
+            net_gain=24,
         )
 
         contig_stats.left_overhangs = []  # No left overhangs
@@ -928,6 +938,7 @@ class TestDualEndOverhang:
             clip_length=36,
             anchor_length=349,
             contig_name='spanning_contig',
+            net_gain=36,
         )
 
         spanning_right = OverhangInfo(
@@ -940,6 +951,7 @@ class TestDualEndOverhang:
             clip_length=36,
             anchor_length=349,
             contig_name='spanning_contig',
+            net_gain=36,
         )
 
         # Add multiple competing shorter overhangs to test selection
@@ -956,6 +968,7 @@ class TestDualEndOverhang:
                 clip_length=8 + 4 * i,
                 anchor_length=199 + i * 10,
                 contig_name='spanning_contig',
+                net_gain=8 + 4 * i,
             )
 
             # Shorter right competitors
@@ -969,6 +982,7 @@ class TestDualEndOverhang:
                 clip_length=8 + 4 * i,
                 anchor_length=199 + i * 10,
                 contig_name='spanning_contig',
+                net_gain=8 + 4 * i,
             )
 
             competitors.extend([left_competitor, right_competitor])
