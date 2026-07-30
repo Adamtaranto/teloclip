@@ -24,7 +24,7 @@ from ..analysis import (
     flag_anomalous_overhang_coverage,
 )
 from ..motifs import make_fuzzy_motif_regex, make_motif_regex
-from ..reporting import fmt_delta, fmt_float, fmt_int, kv_table, md_table
+from ..reporting import fmt_delta, fmt_float, fmt_int, histogram, kv_table, md_table
 from ..seqops import read_fai, revComp
 from ..streaming_analysis import (
     process_single_contig_extension,
@@ -68,6 +68,63 @@ def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
                     raise click.ClickException(
                         f'Cannot create output directory {output_dir}: {e}'
                     ) from e
+
+
+# Column order for the --overhang-log TSV.
+OVERHANG_LOG_HEADER = (
+    'contig',
+    'contig_length',
+    'end',
+    'read',
+    'aln_start',
+    'aln_end',
+    'gap_from_end',
+    'clip_length',
+    'overhang_length',
+    'anchor_length',
+)
+
+
+def _write_overhang_log_rows(handle, contig_stats: ContigStats) -> None:
+    """
+    Append one TSV row per accepted overhang for a contig.
+
+    Written as the contig is processed rather than collected first, so the log
+    costs no additional memory on large assemblies.
+
+    Parameters
+    ----------
+    handle : file-like
+        Open text handle positioned after the header row.
+    contig_stats : ContigStats
+        Overhang statistics for one contig.
+    """
+    for overhangs, end in (
+        (contig_stats.left_overhangs, 'L'),
+        (contig_stats.right_overhangs, 'R'),
+    ):
+        for oh in overhangs:
+            # The gap is whatever part of the clip did not clear the terminus,
+            # and is exactly the number of contig bases trimmed if used.
+            gap = oh.length - oh.net_gain
+            handle.write(
+                '\t'.join(
+                    str(field)
+                    for field in (
+                        contig_stats.contig_name,
+                        contig_stats.contig_length,
+                        end,
+                        oh.read_name,
+                        oh.alignment_pos,
+                        oh.alignment_end,
+                        gap,
+                        oh.clip_length,
+                        oh.net_gain,
+                        oh.anchor_length,
+                    )
+                )
+                + '\n'
+            )
 
 
 def _extension_lengths(ext_info: Dict) -> Tuple[int, int]:
@@ -778,7 +835,12 @@ def combine_excluded_contigs(
     Returns
     -------
     set
-        Combined set of valid contig names to exclude.
+        Combined set of contig names to exclude.
+
+    Raises
+    ------
+    click.ClickException
+        If any listed name is absent from the reference index.
     """
     all_excluded_names = []
 
@@ -818,21 +880,22 @@ def combine_excluded_contigs(
     if duplicates_removed > 0:
         logging.info(f'Removed {duplicates_removed} duplicate contig names')
 
-    # Validate each contig name
-    excluded_set = set()
-    for contig_name in unique_names:
-        if contig_name in contig_dict:
-            excluded_set.add(contig_name)
-            logging.info(f'Contig "{contig_name}" will be excluded from extension')
-        else:
-            logging.warning(
-                f'Excluded contig "{contig_name}" not found in reference FASTA index'
-            )
+    # Validate every name against the reference index. A misspelled name
+    # excludes nothing while looking like it worked, so this is an error rather
+    # than a warning: the run would otherwise extend a contig the user believed
+    # they had held back.
+    unknown = sorted(name for name in unique_names if name not in contig_dict)
+    if unknown:
+        raise click.ClickException(
+            'These contigs were listed for exclusion but are not in the '
+            f'reference index: {", ".join(unknown)}. '
+            'Check the spelling against the .fai file.'
+        )
 
-    if excluded_set:
-        logging.info(f'Total unique contigs excluded: {len(excluded_set)}')
-    else:
-        logging.warning('No valid contigs found in exclusion sources')
+    excluded_set = set(unique_names)
+    for contig_name in sorted(excluded_set):
+        logging.info(f'Contig "{contig_name}" will be excluded from extension')
+    logging.info(f'Total unique contigs excluded: {len(excluded_set)}')
 
     return excluded_set
 
@@ -1024,6 +1087,17 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
     type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR'], case_sensitive=False),
     help='Logging level (default: INFO).',
 )
+@click.option(
+    '--logfile',
+    type=click.Path(path_type=Path),
+    help='Also write log messages to this file (parent directories are created).',
+)
+@click.option(
+    '--overhang-log',
+    type=click.Path(path_type=Path),
+    help='Write a TSV describing every accepted overhang read: contig, end, '
+    'gap from the contig terminus, clip length and overhang length.',
+)
 @click.pass_context
 def extend(
     ctx,
@@ -1047,6 +1121,8 @@ def extend(
     exclude_contigs,
     exclude_contigs_file,
     log_level,
+    logfile,
+    overhang_log,
 ):
     """
     Extend contigs based on alignment overhangs.
@@ -1101,11 +1177,15 @@ def extend(
         Path to file containing contig names to exclude (one per line).
     log_level : str
         Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    logfile : Path or None
+        Optional path to also write log messages to.
+    overhang_log : Path or None
+        Optional path for a per-overhang TSV describing every accepted read.
     """
     from ..logs import init_logging
 
     # Initialize logging for this command
-    init_logging(log_level)
+    init_logging(log_level, logfile)
 
     ctx.ensure_object(dict)
 
@@ -1126,6 +1206,9 @@ def extend(
             'stats report; exclude them with --exclude-contigs if you agree '
             'with the assessment.'
         )
+
+    # Bound before the try so the finally clause can always close it.
+    overhang_log_handle = None
 
     try:
         # Validate indexed files
@@ -1178,6 +1261,13 @@ def extend(
                 f'Completed terminal motif screening for {total_screened} contigs'
             )
 
+        # Open the per-overhang log, if requested, before streaming begins.
+        if overhang_log:
+            overhang_log.parent.mkdir(parents=True, exist_ok=True)
+            overhang_log_handle = overhang_log.open('w', encoding='utf-8')
+            overhang_log_handle.write('\t'.join(OVERHANG_LOG_HEADER) + '\n')
+            logging.info(f'Writing per-overhang log to {overhang_log}')
+
         # Open indexed files
         logging.info('Opening indexed BAM and FASTA files...')
         with StreamingGenomeProcessor(reference_fasta, bam_file) as processor:
@@ -1203,7 +1293,13 @@ def extend(
                 min_anchor=min_anchor,
             ):
                 all_stats[contig_name] = contig_stats
-                logging.debug(f'Processing contig {contig_name} for extension...')
+                logging.info(
+                    f'{contig_name}: {contig_stats.left_count} left, '
+                    f'{contig_stats.right_count} right overhang reads'
+                )
+
+                if overhang_log_handle is not None:
+                    _write_overhang_log_rows(overhang_log_handle, contig_stats)
 
                 # Check if this contig is explicitly excluded
                 if contig_name in excluded_contig_set:
@@ -1284,10 +1380,26 @@ def extend(
                                 f'+{right_length}bp from read {right_read}'
                             )
 
+            if overhang_log_handle is not None:
+                overhang_log_handle.close()
+                overhang_log_handle = None
+
             # Calculate overall statistics if we have data
             if all_stats:
                 overall_stats = calculate_overhang_statistics(all_stats)
                 logging.info(f'Processed {len(all_stats)} contigs with overhangs')
+
+                # Show the shape of the per-contig-end distribution. A long
+                # right tail is the signature of a collapsed repeat or an
+                # organellar contig attracting reads from across the assembly.
+                end_counts = [s.left_count for s in all_stats.values()]
+                end_counts += [s.right_count for s in all_stats.values()]
+                chart = histogram(end_counts, label='overhang reads')
+                if chart:
+                    logging.info(
+                        'Overhang reads per contig end '
+                        f'({len(end_counts)} ends):\n{chart}'
+                    )
             else:
                 overall_stats = {'left': {}, 'right': {}}
 
@@ -1422,6 +1534,14 @@ def extend(
         if warnings:
             logging.info(f'Generated {len(warnings)} warnings')
 
+    except click.ClickException:
+        # Already carries a user-facing message; do not wrap it again.
+        raise
     except Exception as e:
         logging.error(f'Error during extend operation: {e}')
         raise click.ClickException(str(e)) from e
+    finally:
+        # Close the overhang log even if the run failed partway through, so
+        # whatever was written is readable.
+        if overhang_log_handle is not None:
+            overhang_log_handle.close()

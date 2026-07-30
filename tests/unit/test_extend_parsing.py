@@ -255,19 +255,39 @@ class TestCombineExcludedContigs:
         assert result == set()
 
     def test_combine_excluded_contigs_invalid_names(self):
-        """Test combining with invalid contig names."""
+        """Test that unknown contig names are a hard error.
+
+        A misspelled name excludes nothing while appearing to work, so the run
+        would extend a contig the user believed they had held back. The error
+        names every offender so a typo can be corrected in one go.
+        """
         with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
             f.write('invalid_contig\ncontig2\n')
             temp_path = Path(f.name)
 
         try:
-            exclude_str = 'contig1,another_invalid'
-            with patch('logging.warning') as mock_warning:
-                result = combine_excluded_contigs(
-                    exclude_str, temp_path, self.contig_dict
+            with pytest.raises(click.ClickException) as excinfo:
+                combine_excluded_contigs(
+                    'contig1,another_invalid', temp_path, self.contig_dict
                 )
-                assert result == {'contig1', 'contig2'}
-                mock_warning.assert_called()
+
+            message = str(excinfo.value)
+            assert 'another_invalid' in message
+            assert 'invalid_contig' in message
+            # Valid names must not be reported as problems.
+            assert 'contig1,' not in message
+        finally:
+            temp_path.unlink()
+
+    def test_combine_excluded_contigs_all_valid(self):
+        """Test that a fully valid exclusion list is returned intact."""
+        with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.txt') as f:
+            f.write('contig2\n')
+            temp_path = Path(f.name)
+
+        try:
+            result = combine_excluded_contigs('contig1', temp_path, self.contig_dict)
+            assert result == {'contig1', 'contig2'}
         finally:
             temp_path.unlink()
 

@@ -1,5 +1,6 @@
 """SAM file operations for Teloclip."""
 
+from collections import defaultdict
 import logging
 import re
 import sys
@@ -16,6 +17,7 @@ from teloclip.overhang import (
     ends_from_sam_fields,
     reference_span,
 )
+from teloclip.reporting import histogram
 from teloclip.seqops import isMotifInClip
 
 if TYPE_CHECKING:
@@ -113,6 +115,11 @@ def processSamlines(
     excluded_max_break = 0
     excluded_min_anchor = 0
     excluded_motifs = 0
+    excluded_no_clip = 0
+
+    # Per-contig-end tallies of kept overhangs, for the closing summary.
+    left_by_contig: Dict[str, int] = defaultdict(int)
+    right_by_contig: Dict[str, int] = defaultdict(int)
 
     # Read SAM from stdin
     for line in samfile:
@@ -171,10 +178,12 @@ def processSamlines(
                 keepLine = True
                 leftClip = True
                 keepCount += 1
+                left_by_contig[samline[SAM_RNAME]] += 1
 
             # Check for right overhang
             if right_call.accepted:
                 rightClip = True
+                right_by_contig[samline[SAM_RNAME]] += 1
                 # Check if already found left OH
                 if not keepLine:
                     keepLine = True
@@ -188,19 +197,26 @@ def processSamlines(
                     )
                     bothCount += 1
 
-            # Track exclusion reasons for reads that weren't kept
-            if not keepLine and (leftClipLen or rightClipLen):
+            # Track exclusion reasons for reads that weren't kept. Every
+            # discarded read lands in exactly one bucket, so the buckets sum to
+            # the discard total.
+            if not keepLine:
                 reasons = {left_call.reason, right_call.reason}
                 if REASON_MAX_BREAK in reasons:
                     excluded_max_break += 1
                 elif REASON_MIN_CLIP in reasons:
                     excluded_min_clip += 1
+                else:
+                    # Both ends reported no clip: the CIGAR contains an 'S' but
+                    # not at either end, so there is no terminal overhang.
+                    excluded_no_clip += 1
 
             # Optional check for Telomeric repeat motifs
             if motif_list and keepLine and match_anywhere:
-                if check_sequence_for_patterns(
-                    samline[SAM_SEQ], motif_list, min_repeats
-                ):
+                # min_repeats is already baked into motif_list as a regex
+                # quantifier above, so passing it again here would demand the
+                # repeat count twice over.
+                if check_sequence_for_patterns(samline[SAM_SEQ], motif_list, 1):
                     sys.stdout.write(line)
                     motifCount += 1
                 else:
@@ -225,34 +241,62 @@ def processSamlines(
                 sys.stdout.write(line)
             else:
                 removeCount += 1
+        else:
+            # No soft clip, or a hard clip whose bases are absent from the
+            # record. Previously this fell through with no bucket at all, so
+            # the exclusion reasons never summed to the discard total.
+            excluded_no_clip += 1
+            removeCount += 1
+
+    # One summary, whether or not motifs were requested. The buckets are
+    # mutually exclusive and sum to the discard total, so the figures can be
+    # checked against each other.
+    summary = [
+        f'Processed {samlineCount} SAM records.',
+        f'Found {keepCount} alignments soft-clipped at contig ends.',
+        f'Found {bothCount} alignments spanning entire contigs.',
+    ]
     if motif_list:
-        logging.info(
-            f'Processed {samlineCount} SAM records.\n'
-            f'Found {keepCount} alignments soft-clipped at contig ends.\n'
-            f'Found {bothCount} alignments spanning entire contigs.\n'
-            f'Output {motifCount} alignments containing motif matches.\n'
-            f'Exclusion summary:\n'
-            f'  - Unmapped reads: {excluded_unmapped}\n'
-            f'  - Secondary alignments: {excluded_secondary}\n'
-            f'  - Below min_anchor threshold ({min_anchor}bp): {excluded_min_anchor}\n'
-            f'  - Beyond max_break threshold ({max_break}bp): {excluded_max_break}\n'
-            f'  - Below min_clip threshold: {excluded_min_clip}\n'
-            f'  - No telomeric motifs: {excluded_motifs}\n'
-            f'Total discarded: {removeCount} alignments after all filtering.'
-        )
-    else:
-        logging.info(
-            f'Processed {samlineCount} SAM records.\n'
-            f'Found {keepCount} alignments soft-clipped at contig ends.\n'
-            f'Found {bothCount} alignments spanning entire contigs.\n'
-            f'Exclusion summary:\n'
-            f'  - Unmapped reads: {excluded_unmapped}\n'
-            f'  - Secondary alignments: {excluded_secondary}\n'
-            f'  - Below min_anchor threshold ({min_anchor}bp): {excluded_min_anchor}\n'
-            f'  - Beyond max_break threshold ({max_break}bp): {excluded_max_break}\n'
-            f'  - Below min_clip threshold: {excluded_min_clip}\n'
-            f'Total discarded: {removeCount} alignments after all filtering.'
-        )
+        summary.append(f'Output {motifCount} alignments containing motif matches.')
+
+    summary.append('Exclusion summary:')
+    summary.append(f'  - Unmapped reads: {excluded_unmapped}')
+    summary.append(f'  - Secondary alignments: {excluded_secondary}')
+    summary.append(f'  - No usable soft clip: {excluded_no_clip}')
+    summary.append(
+        f'  - Below min_anchor threshold ({min_anchor}bp): {excluded_min_anchor}'
+    )
+    summary.append(
+        f'  - Beyond max_break threshold ({max_break}bp): {excluded_max_break}'
+    )
+    summary.append(
+        f'  - Clip does not reach {min_clip}bp past contig end: {excluded_min_clip}'
+    )
+    if motif_list:
+        summary.append(f'  - No telomeric motifs: {excluded_motifs}')
+    summary.append(f'Total discarded: {removeCount} alignments after all filtering.')
+
+    logging.info('\n'.join(summary))
+
+    # Report the per-contig-end distribution of what survived. A long right
+    # tail here is the signature of a collapsed repeat or an organellar contig
+    # attracting reads from across the assembly.
+    if left_by_contig or right_by_contig:
+        per_end_counts = [
+            count
+            for contig in sorted(set(left_by_contig) | set(right_by_contig))
+            for count in (left_by_contig[contig], right_by_contig[contig])
+        ]
+        for contig in sorted(set(left_by_contig) | set(right_by_contig)):
+            logging.info(
+                f'{contig}: {left_by_contig[contig]} left, '
+                f'{right_by_contig[contig]} right overhang reads'
+            )
+        chart = histogram(per_end_counts, label='overhang reads')
+        if chart:
+            logging.info(
+                f'Overhang reads per contig end ({len(per_end_counts)} ends):\n{chart}'
+            )
 
     # Return counts if requested for testing purposes
     if return_counts:
@@ -269,6 +313,9 @@ def processSamlines(
             'excluded_max_break': excluded_max_break,
             'excluded_min_clip': excluded_min_clip,
             'excluded_motifs': excluded_motifs,
+            'excluded_no_clip': excluded_no_clip,
+            'left_by_contig': dict(left_by_contig),
+            'right_by_contig': dict(right_by_contig),
         }
 
 

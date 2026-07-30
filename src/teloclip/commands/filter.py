@@ -5,6 +5,7 @@ Filters SAM files for clipped alignments containing unassembled telomeric repeat
 """
 
 import logging
+from pathlib import Path
 import sys
 
 import click
@@ -84,6 +85,11 @@ from teloclip.seqops import addRevComplement, read_fai
     type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR'], case_sensitive=False),
     help='Logging level (default: INFO).',
 )
+@click.option(
+    '--logfile',
+    type=click.Path(path_type=Path),
+    help='Also write log messages to this file (parent directories are created).',
+)
 @click.pass_context
 def filter_cmd(
     ctx,
@@ -99,6 +105,7 @@ def filter_cmd(
     min_anchor,
     match_anywhere,
     log_level,
+    logfile,
 ):
     """
     Filter SAM file for clipped alignments containing unassembled telomeric repeats.
@@ -134,6 +141,8 @@ def filter_cmd(
         If True, allow motif matches anywhere in read, not just clipped regions.
     log_level : str
         Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    logfile : Path or None
+        Optional path to also write log messages to.
 
     Examples
     --------
@@ -156,7 +165,7 @@ def filter_cmd(
         samtools view -h input.bam | teloclip filter --ref-idx ref.fa.fai
     """
     # Initialize logging
-    init_logging(log_level)
+    init_logging(log_level, logfile)
 
     # Fetch contig lengths
     contig_dict = read_fai(ref_idx)

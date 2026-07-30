@@ -290,7 +290,7 @@ class TestExtendCLIFlagCombinations:
             [
                 'extend',
                 '--exclude-contigs',
-                'chr1',
+                'contig01',
                 str(files['bam']),
                 str(files['fasta']),
             ]
@@ -307,7 +307,7 @@ class TestExtendCLIFlagCombinations:
             [
                 'extend',
                 '--exclude-contigs',
-                'chr1,chr2',
+                'contig01,contig02',
                 str(files['bam']),
                 str(files['fasta']),
             ]
@@ -322,7 +322,7 @@ class TestExtendCLIFlagCombinations:
 
         # Create exclusion file
         exclude_file = temp_dir / 'exclude.txt'
-        exclude_file.write_text('chr1\nchr2\n')
+        exclude_file.write_text('contig01\ncontig02\n')
 
         exit_code, stdout, stderr = cli_runner.run_teloclip(
             [
@@ -336,6 +336,27 @@ class TestExtendCLIFlagCombinations:
 
         # Should accept file-based exclusion
         assert_exit_code(exit_code, 0, stdout, stderr)
+
+    def test_exclude_contigs_unknown_name_is_an_error(self, cli_runner, test_files):
+        """Test that a misspelled exclusion name fails loudly.
+
+        Unknown names were previously warned about and ignored, so a typo left
+        the contig to be extended while the user believed it was held back.
+        """
+        files = test_files()
+
+        exit_code, stdout, stderr = cli_runner.run_teloclip(
+            [
+                'extend',
+                '--exclude-contigs',
+                'contig01,contigOOPS',
+                str(files['bam']),
+                str(files['fasta']),
+            ]
+        )
+
+        assert exit_code != 0
+        assert 'contigOOPS' in stderr
 
     def test_fuzzy_count_requires_count_motifs(self, cli_runner, test_files):
         """Test --fuzzy-count requires --count-motifs."""

@@ -195,3 +195,70 @@ def kv_table(pairs: Sequence[Tuple[str, str]], key_header: str = 'Metric') -> st
         [[label, value] for label, value in pairs],
         align=['l', 'r'],
     )
+
+
+def histogram(
+    counts: Sequence[int],
+    bins: int = 10,
+    width: int = 24,
+    label: str = 'count',
+) -> str:
+    """
+    Render a horizontal ASCII histogram of a distribution.
+
+    Intended for terminal logs, where a per-contig distribution is far easier to
+    read as a shape than as a list of numbers. Returns plain text with no colour
+    codes so it survives redirection to a log file.
+
+    Parameters
+    ----------
+    counts : Sequence[int]
+        Observed values to bin.
+    bins : int, optional
+        Number of bins (default: 10). Reduced automatically when the observed
+        range spans fewer distinct integers.
+    width : int, optional
+        Maximum bar width in characters (default: 24, chosen so the result
+        still fits an 80-column terminal alongside a rich log prefix).
+    label : str, optional
+        Noun describing what is being counted, used in the header
+        (default: ``'count'``).
+
+    Returns
+    -------
+    str
+        The rendered histogram, or an empty string when ``counts`` is empty.
+    """
+    values = list(counts)
+    if not values:
+        return ''
+
+    low, high = min(values), max(values)
+
+    # A distribution with no spread is a single bar; binning it would produce
+    # a row of empty ranges.
+    if low == high:
+        return f'{label} {low}: {"#" * min(width, len(values))} ({len(values)})'
+
+    # Never use more bins than there are distinct integer values to put in them.
+    bins = max(1, min(bins, high - low + 1))
+    span = (high - low + 1) / bins
+
+    binned = [0] * bins
+    for value in values:
+        index = min(bins - 1, int((value - low) / span))
+        binned[index] += 1
+
+    peak = max(binned)
+    edges = [(low + int(i * span), low + int((i + 1) * span) - 1) for i in range(bins)]
+    edge_width = max(len(f'{lo}-{hi}') for lo, hi in edges)
+    count_width = len(str(peak))
+
+    lines = []
+    for (lo, hi), n in zip(edges, binned):
+        bar = '#' * int(round(width * n / peak)) if peak else ''
+        lines.append(
+            f'  {f"{lo}-{hi}":>{edge_width}} | {bar:<{width}} {n:>{count_width}}'
+        )
+
+    return '\n'.join(lines)
