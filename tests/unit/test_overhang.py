@@ -339,21 +339,37 @@ class TestSymmetry:
 class TestNetGainInvariant:
     """Every accepted call must represent a real increase in contig length."""
 
-    @pytest.mark.parametrize('min_clip', [1, 2, 5, 50])
-    @pytest.mark.parametrize('gap', range(0, 12))
-    @pytest.mark.parametrize('clip', range(0, 60, 7))
     @pytest.mark.parametrize('is_left', [True, False])
-    def test_accepted_implies_positive_net_gain(self, min_clip, gap, clip, is_left):
-        """Accepted => net_gain >= min_clip >= 1, so the contig never shrinks."""
-        if is_left:
-            ends = make_ends(aln_start=gap + 1, ref_span=100, left_clip=clip)
-        else:
-            ends = make_ends(
-                aln_start=CONTIG_LEN - gap - 100 + 1, ref_span=100, right_clip=clip
-            )
-        call = classify_end(ends, is_left, max_break=10, min_clip=min_clip)
-        if call.accepted:
-            assert call.net_gain >= min_clip >= 1
+    def test_accepted_implies_positive_net_gain(self, is_left):
+        """Accepted => net_gain >= min_clip >= 1, so the contig never shrinks.
+
+        Swept across the full grid of gaps, clip lengths and min_clip settings
+        rather than parametrised, to keep one property to one test.
+        """
+        checked_accepted = 0
+
+        for min_clip in (1, 2, 5, 50):
+            for gap in range(0, 12):
+                for clip in range(0, 60, 7):
+                    if is_left:
+                        ends = make_ends(
+                            aln_start=gap + 1, ref_span=100, left_clip=clip
+                        )
+                    else:
+                        ends = make_ends(
+                            aln_start=CONTIG_LEN - gap - 100 + 1,
+                            ref_span=100,
+                            right_clip=clip,
+                        )
+                    call = classify_end(ends, is_left, max_break=10, min_clip=min_clip)
+                    if call.accepted:
+                        checked_accepted += 1
+                        assert call.net_gain >= min_clip >= 1, (
+                            f'min_clip={min_clip} gap={gap} clip={clip}'
+                        )
+
+        # Guard against the sweep silently accepting nothing and passing vacuously.
+        assert checked_accepted > 0
 
     def test_trim_len_never_negative(self):
         """An alignment overhanging the contig end reports no trim."""

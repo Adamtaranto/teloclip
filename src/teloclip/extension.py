@@ -104,48 +104,80 @@ def extend_contig(
         return sequence + overhang.sequence
 
 
-def validate_extension(original: str, extended: str, overhang: OverhangInfo) -> bool:
+def validate_extension(
+    original: str, extended: str, overhang: OverhangInfo, trim_length: int = 0
+) -> bool:
     """
     Validate that a contig extension was performed correctly.
+
+    The length comparison is made against the *untrimmed* original sequence,
+    which is what makes a net-shortening extension detectable. The containment
+    check is necessarily made against the trimmed remainder, since the trimmed
+    bases are no longer present in the extended sequence.
 
     Parameters
     ----------
     original : str
-        Original contig sequence.
+        Original, untrimmed contig sequence.
     extended : str
         Extended contig sequence.
     overhang : OverhangInfo
         Overhang that was added.
+    trim_length : int, optional
+        Number of bases trimmed from the extended end before the overhang was
+        grafted on (default: 0).
 
     Returns
     -------
     bool
         True if extension is valid, False otherwise.
     """
+    # The part of the original sequence that survives trimming, and so must
+    # still be present in the extended sequence.
+    if trim_length > 0:
+        retained = (
+            original[trim_length:] if overhang.is_left else original[:-trim_length]
+        )
+    else:
+        retained = original
+
     if overhang.is_left:
         # Check that overhang was added to the beginning
         if not extended.startswith(overhang.sequence):
             return False
-        # Check that original sequence is still present (possibly trimmed)
-        if overhang.sequence + original not in extended and original not in extended:
+        # Check that the retained portion of the contig survived
+        if retained not in extended:
             return False
     else:
         # Check that overhang was added to the end
         if not extended.endswith(overhang.sequence):
             return False
-        # Check that original sequence is still present (possibly trimmed)
-        if original + overhang.sequence not in extended and original not in extended:
+        # Check that the retained portion of the contig survived
+        if retained not in extended:
             return False
 
-    # Extended sequence should be longer than original
+    # The extension must leave the contig longer than it started. Comparing
+    # against the untrimmed original is essential: comparing against the
+    # trimmed remainder makes this check trivially true and lets an extension
+    # that removes more bases than it adds pass silently.
     return len(extended) > len(original)
 
 
 def apply_contig_extension(
-    contig_seq: str, overhang: OverhangInfo, contig_length: int
+    contig_seq: str,
+    overhang: OverhangInfo,
+    contig_length: int,
+    min_net_gain: int = 1,
 ) -> Tuple[str, dict]:
     """
     Apply a complete contig extension including position calculation and trimming.
+
+    Extending a contig end trims the bases the supporting read did not cover and
+    grafts the read's whole soft clip on in their place, so the net change in
+    length is the number of clipped bases lying past the contig terminus. This
+    function refuses to apply an extension whose net change falls below
+    ``min_net_gain``, which is what stops a short clip anchored well inside the
+    contig from silently truncating it.
 
     Parameters
     ----------
@@ -155,17 +187,26 @@ def apply_contig_extension(
         Overhang to use for extension.
     contig_length : int
         Length of the original contig.
+    min_net_gain : int, optional
+        Minimum acceptable increase in contig length, in bases (default: 1).
 
     Returns
     -------
     Tuple[str, dict]
         (extended_sequence, extension_info) where extension_info contains:
         - 'overhang_length': length of added overhang
+        - 'net_gain': net change in contig length (overhang minus trim)
         - 'trim_length': number of bases trimmed
         - 'extension_position': where extension was applied
         - 'original_length': original contig length
         - 'final_length': final contig length
         - 'read_name': source read name
+
+    Raises
+    ------
+    ValueError
+        If the extension would grow the contig by fewer than ``min_net_gain``
+        bases, or if the resulting sequence fails validation.
     """
     # Calculate extension position and trimming
     position, trim_length = calculate_extension_position(
@@ -178,13 +219,27 @@ def apply_contig_extension(
     # Apply extension
     extended_seq = extend_contig(working_seq, overhang, position, overhang.is_left)
 
-    # Validate extension
-    if not validate_extension(working_seq, extended_seq, overhang):
+    # Reject any extension that does not grow the contig. Every byte of
+    # sequence mutation flows through this function, so this is the one place
+    # the guarantee can be enforced for both ends and both call paths.
+    net_gain = len(extended_seq) - len(contig_seq)
+    if net_gain < min_net_gain:
+        side = 'left' if overhang.is_left else 'right'
+        raise ValueError(
+            f'Extension from read {overhang.read_name} on the {side} end of '
+            f'contig {overhang.contig_name} would change its length by '
+            f'{net_gain:+d} bp (trim {trim_length}, add {overhang.length}); '
+            f'a net gain of at least {min_net_gain} bp is required'
+        )
+
+    # Validate extension against the untrimmed original
+    if not validate_extension(contig_seq, extended_seq, overhang, trim_length):
         raise ValueError(f'Extension validation failed for read {overhang.read_name}')
 
     # Prepare extension information
     extension_info = {
         'overhang_length': overhang.length,
+        'net_gain': net_gain,
         'trim_length': trim_length,
         'extension_position': position,
         'original_length': len(contig_seq),
