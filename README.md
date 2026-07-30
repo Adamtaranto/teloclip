@@ -19,7 +19,10 @@ A tool for the recovery of unassembled telomeres from raw long-reads using soft-
 
 </p>
 
-<h3>🎉🧬 New Release v0.3.2: Teloclip now supports automatic telomere extension!! 🧬🎉</h3>
+<h3>🎉🧬 Teloclip supports automatic telomere extension with <code>teloclip extend</code>!! 🧬🎉</h3>
+
+📖 **[Full documentation](https://adamtaranto.github.io/teloclip/)** — tutorial,
+guidance on interpreting results, and CLI reference.
 
 ### Table of contents
 
@@ -109,7 +112,7 @@ See [DOCKER.md](DOCKER.md) for complete Docker usage guide and [examples/nextflo
 ```bash
 # Print version number and exit.
 teloclip --version
-# > teloclip 0.3.2
+# > teloclip, version 0.3.5
 
 # Get usage information
 teloclip --help
@@ -218,7 +221,11 @@ Before using overhangs identified by Teloclip to extend contigs you should inspe
 
 Check for conflicting soft-clipped sequences. These indicate non-specific read alignments. You may need to tighten your alignment criteria or manually remove low-confidence alignments.
 
-Note: Circular genomes (i.e. mitochondria, chloroplasts, and nitroplasts) will always yield soft-clipped overhangs and should not be extended. We attempt to exclude these with `--exclude-outliers` which will skip contigs with unusually high overhang depths. You can explicitly exclude known circular contigs by providing names to `--exclude-contigs`.
+Note: Circular genomes (i.e. mitochondria, chloroplasts, and nitroplasts) will always yield soft-clipped overhangs and should not be extended. Exclude them by name with `--exclude-contigs` (or list them one per line and pass `--exclude-contigs-file`).
+
+Teloclip also reports contigs whose overhang coverage is far above the rest of the assembly, which is the usual signature of a collapsed repeat, an rDNA array, or an organellar contig attracting reads from elsewhere. These appear in the stats report under **Contigs With Anomalous Overhang Coverage**. They are *not* excluded automatically: whether extension is appropriate is a judgement about your assembly. Review them and re-run with `--exclude-contigs` if you agree.
+
+> `--exclude-outliers` is deprecated and now does nothing. It previously dropped such contigs silently, and the exclusions were never reported anywhere.
 
 ```bash
 # Create required indices (one-time setup)
@@ -230,15 +237,30 @@ samtools view -bS overhangs.sam | samtools sort -o overhangs.sorted.bam
 # Index the sorted BAM for fast access
 samtools index overhangs.sorted.bam
 
-# Use `--dry-run` option to report proposed changes without applying them.
+# Use `--dry-run` to report proposed changes without applying them.
 teloclip extend overhangs.sorted.bam ref.fa \
   --output-fasta extended.fasta \
-  --stats-report extension_report.txt \
+  --stats-report extension_report.md \
   --count-motifs TTAGGG \
   --screen-terminal-bases 1000 \
-  --exclude-contigs ctg_007_mitochondrial
+  --exclude-contigs ctg_007_mitochondrial \
   --dry-run
+
+# Record every overhang read that was considered, and keep a run log.
+teloclip extend overhangs.sorted.bam ref.fa \
+  --output-fasta extended.fasta \
+  --stats-report extension_report.md \
+  --overhang-log overhangs.tsv \
+  --logfile teloclip_extend.log
 ```
+
+`--stats-report` accepts a path, or `-` to write the report to stdout. If
+omitted it goes to stderr, interleaved with the log.
+
+Extension amounts in the report are **net**: the overhang grafted onto an end,
+less any contig bases trimmed to make room for it. So
+`Original bp + Total +bp = Final bp` for every row, and you can check the report
+against the sequences it describes.
 
 After manually extending contigs the revised assembly should be re-polished using available long and short read data to correct indels present in the raw long-reads.
 
@@ -272,18 +294,14 @@ The main `teloclip` command provides global options and sub-commands for specifi
 Run `teloclip --help` to view the main command options:
 
 ```code
-Usage: teloclip [OPTIONS] COMMAND [ARGS]...
+Usage: teloclip [OPTIONS] [COMMAND] [ARGS]...
 
   A tool for the recovery of unassembled telomeres from soft-clipped read
   alignments.
 
 Options:
-  -v, --verbose                   Enable verbose logging
-  -q, --quiet                     Suppress all but error messages
-  --log-level [DEBUG|INFO|WARNING|ERROR]
-                                  Set specific log level
-  --version                       Show the version and exit.
-  --help                          Show this message and exit.
+  --version  Show the version and exit.
+  --help     Show this message and exit.
 
 Commands:
   extend   Extend contigs using overhang analysis from soft-clipped...
@@ -330,8 +348,10 @@ Options:
                                   read. Default: 100
   --match-anywhere                If set, motif match may occur in unclipped
                                   region of reads.
-  --log-level [DEBUG|INFO|WARNING|ERROR]
+  --log-level [debug|info|warning|error]
                                   Logging level (default: INFO).
+  --logfile PATH                  Also write log messages to this file (parent
+                                  directories are created).
   --help                          Show this message and exit.
 ```
 
@@ -380,6 +400,8 @@ Options:
                                   lowercase.
   --log-level [DEBUG|INFO|WARNING|ERROR]
                                   Logging level (default: INFO).
+  --logfile PATH                  Also write log messages to this file (parent
+                                  directories are created).
   --help                          Show this message and exit.
 ```
 
@@ -395,17 +417,24 @@ Usage: teloclip extend [OPTIONS] BAM_FILE REFERENCE_FASTA
 Options:
   --output-fasta PATH             Extended FASTA output file
   --stats-report PATH             Statistics report output file
-  --exclude-outliers              Exclude outlier contigs from extension
-  --outlier-threshold FLOAT       Z-score threshold for outlier detection
-                                  (default: 2.0)
+  --exclude-outliers              DEPRECATED and ignored. Contigs with
+                                  anomalous overhang coverage are now reported
+                                  for review rather than silently dropped;
+                                  exclude them with --exclude-contigs if you
+                                  agree with the assessment.
+  --outlier-threshold FLOAT       Modified z-score above which a contig end is
+                                  reported as having anomalous overhang
+                                  coverage (default: 3.5)
   --min-overhangs INTEGER         Minimum supporting overhangs required
                                   (default: 1)
   --max-homopolymer INTEGER       Maximum homopolymer run length allowed
                                   (default: 500)
-  --min-extension INTEGER         Minimum overhang length for extension
-                                  (default: 1)
+  --min-extension INTEGER         Minimum novel bases an overhang must
+                                  contribute to be used (default: 1)
+  --min-clip INTEGER              Require clip to extend past the contig end
+                                  by at least N bases (default: 1)
   --max-break INTEGER             Maximum gap allowed between alignment and
-                                  contig end (default: 10)
+                                  contig end (default: 50)
   --min-anchor INTEGER            Minimum anchor length required for alignment
                                   (default: 100)
   --dry-run                       Report extensions without modifying
@@ -425,8 +454,14 @@ Options:
                                   "chrM,chrC,scaffold_123")
   --exclude-contigs-file PATH     Text file containing contig names to exclude
                                   (one per line)
-  --log-level [DEBUG|INFO|WARNING|ERROR]
+  --log-level [debug|info|warning|error]
                                   Logging level (default: INFO).
+  --logfile PATH                  Also write log messages to this file (parent
+                                  directories are created).
+  --overhang-log PATH             Write a TSV describing every accepted
+                                  overhang read: contig, end, gap from the
+                                  contig terminus, clip length and overhang
+                                  length.
   --help                          Show this message and exit.
 ```
 
