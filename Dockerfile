@@ -24,7 +24,8 @@ COPY src/ ./src/
 COPY README.md .
 COPY LICENSE .
 
-# Set version for setuptools-scm without requiring .git directory
+# Set the version without requiring a .git directory. hatch-vcs wraps
+# setuptools-scm, so it honours this variable.
 ENV SETUPTOOLS_SCM_PRETEND_VERSION=${VERSION}
 
 # Install teloclip and dependencies
@@ -41,6 +42,15 @@ LABEL org.opencontainers.image.title="teloclip" \
     org.opencontainers.image.url="https://github.com/adamtaranto/teloclip" \
     org.opencontainers.image.source="https://github.com/adamtaranto/teloclip" \
     org.opencontainers.image.licenses="GPL-3.0-or-later"
+
+# Install samtools (1.16.1 in bookworm). Every documented teloclip workflow
+# pipes through `samtools view/sort/index`, and `teloclip extend` requires a BAM
+# index it cannot create itself, so an image without samtools cannot run the
+# pipeline it documents. Override the entrypoint to reach it directly:
+#   docker run --entrypoint samtools adamtaranto/teloclip ...
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    samtools \
+    && rm -rf /var/lib/apt/lists/*
 
 # Copy Python packages from builder stage
 COPY --from=builder /root/.local /root/.local

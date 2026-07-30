@@ -67,6 +67,9 @@ jobs:
         run: |
           docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }} --version
           docker run --rm ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }} --help
+          # samtools is required by every documented workflow, and extend needs
+          # a BAM index it cannot create itself.
+          docker run --rm --entrypoint samtools ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:pr-${{ github.event.pull_request.number }} --version
       - name: Create job summary
         if: github.event_name != 'pull_request'
         run: |

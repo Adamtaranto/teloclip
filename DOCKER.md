@@ -142,6 +142,45 @@ docker run --rm -v $(pwd)/data:/data adamtaranto/teloclip:latest \
 
 ## Pipeline Integration
 
+### Bundled samtools
+
+The image ships with `samtools`, because every teloclip workflow depends on it:
+`filter` and `extract` read SAM on stdin, and `extend` requires a `.bai` index
+that teloclip cannot create itself.
+
+The entrypoint is `teloclip`, so override it to reach samtools directly:
+
+```bash
+# Index a reference
+docker run --rm -v $(pwd):/data --entrypoint samtools \
+  adamtaranto/teloclip:latest faidx /data/ref.fa
+
+# Sort and index filtered alignments
+docker run --rm -v $(pwd):/data --entrypoint samtools \
+  adamtaranto/teloclip:latest sort -o /data/overhangs.bam /data/overhangs.sam
+
+docker run --rm -v $(pwd):/data --entrypoint samtools \
+  adamtaranto/teloclip:latest index /data/overhangs.bam
+
+# Then extend, using the same image
+docker run --rm -v $(pwd):/data adamtaranto/teloclip:latest \
+  extend /data/overhangs.bam /data/ref.fa --output-fasta /data/extended.fa
+```
+
+To run several steps in one container, override the entrypoint to a shell:
+
+```bash
+docker run --rm -v $(pwd):/data --entrypoint bash adamtaranto/teloclip:latest -c '
+  samtools view -h /data/raw.bam \
+    | teloclip filter --ref-idx /data/ref.fa.fai --motifs TTAGGG \
+    | samtools sort -o /data/overhangs.bam
+  samtools index /data/overhangs.bam
+'
+```
+
+The examples below instead use a separate samtools container, which also works
+if you prefer to pin its version independently.
+
 ### With Piping and Other Containers
 
 Combine teloclip with other bioinformatics containers:

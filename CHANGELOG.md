@@ -51,15 +51,42 @@ accepted:
 - **Dry runs now account for trimming.** They hard-coded the trim to zero, so a dry run
   predicted a longer contig than the real run produced wherever trimming occurred.
 
+- **Output contig order now matches input order.** `extend` wrote extended contigs first and
+  appended everything else, so excluded, unsupported and failed contigs were all shunted to the
+  end of the FASTA.
+- **Extension amounts are now reported net of trimming.** `Original bp + Total +bp = Final bp`
+  is now an identity you can check; previously the report showed raw clip lengths and did not
+  reconcile with the sequences it described.
+- **Contigs with anomalous overhang coverage are reported, not excluded.** `--exclude-outliers`
+  silently dropped contigs and the report was passed empty outlier lists regardless, so the
+  exclusion was invisible. Detection also used mean and standard deviation (both inflated by
+  the outliers being sought), flagged both tails, and could not fire at all on small
+  assemblies. It now uses median/MAD on the high tail with a minimum-contig floor, and only
+  advises. `--exclude-outliers` is accepted but ignored, with a warning; `--outlier-threshold`
+  now sets flagging sensitivity and defaults to 3.5.
+- **Unknown `--exclude-contigs` names are now an error.** A misspelled name previously matched
+  nothing and the run continued, extending a contig the user believed was held back.
+- **`filter` exclusion counts now reconcile.** Reads with no usable soft clip fell through every
+  bucket while still counting toward the discard total. The two near-identical summary blocks
+  are merged into one.
+- **`--match-anywhere` no longer applies `--min-repeats` twice**, which demanded the repeat
+  count squared.
+
 ### Added
 
 - **`teloclip extend --min-clip`** (default 1, clamped to at least 1), so the
   `(max_break, min_clip, min_anchor)` triple is uniform across all three sub-commands.
+- **`--logfile`** on all three sub-commands. Writing logs to a file was fully implemented but
+  no CLI exposed it.
+- **`teloclip extend --overhang-log`**, a TSV of every accepted overhang: contig, end,
+  alignment span, gap from the terminus, clip length, overhang length and anchor length.
+- **Per-contig overhang counts and a distribution histogram** logged by `filter` and `extend`.
 
 ### Removed
 
 - **`analysis.collect_overhang_stats`**, an unused fourth copy of the overhang test carrying
   its own hard-coded thresholds.
+- **`streaming_io.copy_unmodified_contigs`**, replaced by a single ordered write pass.
 
 ---
 
