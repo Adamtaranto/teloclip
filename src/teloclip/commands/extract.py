@@ -2,7 +2,6 @@
 
 import logging
 from pathlib import Path
-import sys
 from typing import Dict
 
 import click
@@ -21,7 +20,7 @@ from ..seqops import read_fai, revComp
     'extract',
     help='Extract overhanging reads for each end of each reference contig. Reads are always written to output files.',
 )
-@click.argument('samfile', type=click.File('r'), default=sys.stdin)
+@click.argument('samfile', type=click.File('r'), default='-')
 @click.option(
     '--ref-idx',
     required=True,

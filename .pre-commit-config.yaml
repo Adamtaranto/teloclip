@@ -28,7 +28,9 @@ repos:
     rev: v1.11.0rc0
     hooks:
       - id: numpydoc-validation
-        exclude: (tests/|docs/).*
+        # scripts/ holds test-data generators and build helpers, not library
+        # API, so they are exempt from the docstring contract like tests are.
+        exclude: (tests/|docs/|scripts/).*
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
     hooks:

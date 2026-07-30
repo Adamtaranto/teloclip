@@ -6,7 +6,6 @@ Filters SAM files for clipped alignments containing unassembled telomeric repeat
 
 import logging
 from pathlib import Path
-import sys
 
 import click
 
@@ -20,7 +19,7 @@ from teloclip.seqops import addRevComplement, read_fai
     'filter',
     help='Filter SAM file for clipped alignments containing unassembled telomeric repeats.',
 )
-@click.argument('samfile', type=click.File('r'), default=sys.stdin)
+@click.argument('samfile', type=click.File('r'), default='-')
 @click.option(
     '--ref-idx',
     required=True,

@@ -7,7 +7,7 @@ properly by running the actual tests and verifying the synthetic data generation
 pipeline produces expected results.
 
 Usage:
-    python test_validate_integration.py [--quick] [--verbose]
+    python scripts/testdata/validate_integration.py [--quick] [--verbose]
 
 Options:
     --quick: Run only basic validation tests
@@ -86,14 +86,16 @@ def regenerate_test_data(verbose: bool = False) -> bool:
 
     # Generate contigs
     success = run_command(
-        ['python', 'test_generate_data.py'], 'Generate synthetic contigs', verbose
+        ['python', 'scripts/testdata/generate_data.py'],
+        'Generate synthetic contigs',
+        verbose,
     )
     if not success:
         return False
 
     # Generate alignments
     success = run_command(
-        ['python', 'test_generate_alignments.py'],
+        ['python', 'scripts/testdata/generate_alignments.py'],
         'Generate synthetic alignments',
         verbose,
     )

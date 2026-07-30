@@ -193,11 +193,13 @@ def test_data_available():
         pytest.skip('Test data directory not found')
 
     if not SYNTHETIC_FASTA.exists():
-        pytest.skip('Synthetic FASTA file not found - run test_generate_data.py first')
+        pytest.skip(
+            'Synthetic FASTA file not found - run scripts/testdata/generate_data.py first'
+        )
 
     if not SYNTHETIC_BAM.exists():
         pytest.skip(
-            'Synthetic BAM file not found - run test_generate_alignments.py first'
+            'Synthetic BAM file not found - run scripts/testdata/generate_alignments.py first'
         )
 
     return True
