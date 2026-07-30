@@ -6,6 +6,7 @@ anchor validation, soft clip detection, and terminal position analysis.
 
 from teloclip.samops import (
     CIGARinfo,
+    EnhancedStreamingSamFilter,
     SAMinfo,
     calculate_aligned_bases,
     checkClips,
@@ -489,6 +490,100 @@ class TestProcessSamlinesMaxBreakFilter:
         assert result['keepCount'] == 1  # Only read1 should be kept
         assert result['bothCount'] == 1  # read1 spans entire contig
         assert result['excluded_max_break'] == 1  # read2 excluded
+
+
+class TestEnhancedStreamingSamFilterSecondary:
+    """Test secondary-alignment handling in the extract streaming filter."""
+
+    CONTIGS = {'contig1': 1000}
+
+    @staticmethod
+    def _sam_line(flag: int, name: str = 'read1') -> str:
+        """
+        Build a SAM line clipped at the start of contig1.
+
+        Parameters
+        ----------
+        flag : int
+            SAM FLAG value.
+        name : str, optional
+            Read name (default: 'read1').
+
+        Returns
+        -------
+        str
+            A tab-delimited SAM record terminated by a newline.
+        """
+        seq = 'A' * 150
+        return (
+            '\t'.join(
+                [
+                    name,
+                    str(flag),
+                    'contig1',
+                    '1',
+                    '60',
+                    '50S100M',
+                    '*',
+                    '0',
+                    '0',
+                    seq,
+                    'I' * 150,
+                ]
+            )
+            + '\n'
+        )
+
+    def test_secondary_alignment_is_skipped_not_crashed(self):
+        """Test that a secondary alignment is filtered rather than raising.
+
+        Regression test: ``__init__`` accepted ``exclude_secondary`` but never
+        stored it, while ``__iter__`` read ``self.exclude_secondary`` for every
+        record carrying FLAG 256. The resulting AttributeError was not caught by
+        the surrounding handler, so ``teloclip extract`` aborted on the first
+        secondary alignment in the input.
+        """
+        lines = [self._sam_line(256, 'secondary_read')]
+
+        results = list(
+            EnhancedStreamingSamFilter(
+                lines, self.CONTIGS, max_break=50, min_clip=1, min_anchor=50
+            )
+        )
+
+        assert results == []
+
+    def test_secondary_alignment_kept_when_not_excluded(self):
+        """Test that secondary alignments pass through when explicitly kept."""
+        lines = [self._sam_line(256, 'secondary_read')]
+
+        results = list(
+            EnhancedStreamingSamFilter(
+                lines,
+                self.CONTIGS,
+                max_break=50,
+                min_clip=1,
+                min_anchor=50,
+                exclude_secondary=False,
+            )
+        )
+
+        assert len(results) == 1
+        assert results[0]['read_name'] == 'secondary_read'
+        assert results[0]['end'] == 'L'
+
+    def test_primary_alignment_unaffected(self):
+        """Test that a primary alignment is yielded regardless of the setting."""
+        lines = [self._sam_line(0, 'primary_read')]
+
+        results = list(
+            EnhancedStreamingSamFilter(
+                lines, self.CONTIGS, max_break=50, min_clip=1, min_anchor=50
+            )
+        )
+
+        assert len(results) == 1
+        assert results[0]['read_name'] == 'primary_read'
 
 
 class TestSAMinfo:

@@ -560,6 +560,7 @@ class EnhancedStreamingSamFilter:
         self.min_mapq = min_mapq
         self.motif_patterns = motif_patterns or {}
         self.stats = stats or None
+        self.exclude_secondary = exclude_secondary
 
         # SAM field indices
         self.SAM_QNAME = 0
