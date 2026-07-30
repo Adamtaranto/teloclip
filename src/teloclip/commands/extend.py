@@ -18,7 +18,11 @@ import click
 import pyfaidx
 import pysam
 
-from ..analysis import ContigStats, calculate_overhang_statistics
+from ..analysis import (
+    ContigStats,
+    calculate_overhang_statistics,
+    flag_anomalous_overhang_coverage,
+)
 from ..motifs import make_fuzzy_motif_regex, make_motif_regex
 from ..reporting import fmt_delta, fmt_float, fmt_int, kv_table, md_table
 from ..seqops import read_fai, revComp
@@ -206,8 +210,9 @@ def generate_extension_report(
     extensions_applied : Dict[str, dict]
         Extension records keyed by contig name.
     outliers : Dict[str, List[str]]
-        Outlier contig names under the keys ``left_outliers`` and
-        ``right_outliers``.
+        Contigs flagged as having anomalous overhang coverage, under the keys
+        ``left_outliers`` and ``right_outliers``. These are reported for review,
+        not excluded.
     overall_stats : Dict[str, Dict[str, float]]
         Aggregate overhang statistics keyed by ``left``, ``right`` and
         ``combined``.
@@ -496,18 +501,42 @@ def generate_extension_report(
         lines.append('')
 
     # ------------------------------------------------------------------
-    # Excluded contigs and outliers
+    # Excluded contigs
     # ------------------------------------------------------------------
-    exclusion_rows = [[contig, 'user exclusion list'] for contig in excluded_contigs]
-    for contig in outliers.get('left_outliers', []):
-        exclusion_rows.append([contig, 'left overhang outlier'])
-    for contig in outliers.get('right_outliers', []):
-        exclusion_rows.append([contig, 'right overhang outlier'])
-
     section(
         'Excluded Contigs',
-        md_table(['Contig', 'Reason'], exclusion_rows, align=['l', 'l']),
+        md_table(
+            ['Contig', 'Reason'],
+            [[contig, 'user exclusion list'] for contig in excluded_contigs],
+            align=['l', 'l'],
+        ),
     )
+
+    # ------------------------------------------------------------------
+    # Anomalous overhang coverage
+    # ------------------------------------------------------------------
+    anomaly_rows: List[List[str]] = []
+    for end in ('left', 'right'):
+        for contig in outliers.get(f'{end}_outliers', []):
+            counts = stats_dict.get(contig)
+            observed = getattr(counts, f'{end}_count', 0) if counts is not None else 0
+            anomaly_rows.append([contig, end, fmt_int(observed)])
+
+    if anomaly_rows:
+        section(
+            'Contigs With Anomalous Overhang Coverage',
+            'These contig ends carry far more clipped reads than the rest of '
+            'the assembly. That often marks a collapsed repeat, an rDNA array '
+            'or an organellar contig attracting reads from elsewhere, in which '
+            'case extending from a single read is not meaningful.\n\n'
+            'They have **not** been excluded. Review them and, if you agree, '
+            're-run with `--exclude-contigs`.\n\n'
+            + md_table(
+                ['Contig', 'End', 'Overhang reads'],
+                anomaly_rows,
+                align=['l', 'l', 'r'],
+            ),
+        )
 
     # ------------------------------------------------------------------
     # Warnings
@@ -905,13 +934,18 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
     help='Statistics report output file',
 )
 @click.option(
-    '--exclude-outliers', is_flag=True, help='Exclude outlier contigs from extension'
+    '--exclude-outliers',
+    is_flag=True,
+    help='DEPRECATED and ignored. Contigs with anomalous overhang coverage are '
+    'now reported for review rather than silently dropped; exclude them with '
+    '--exclude-contigs if you agree with the assessment.',
 )
 @click.option(
     '--outlier-threshold',
     type=float,
-    default=2.0,
-    help='Z-score threshold for outlier detection (default: 2.0)',
+    default=3.5,
+    help='Modified z-score above which a contig end is reported as having '
+    'anomalous overhang coverage (default: 3.5)',
 )
 @click.option(
     '--min-overhangs',
@@ -1034,9 +1068,11 @@ def extend(
     stats_report : str
         Path for output statistics report.
     exclude_outliers : bool
-        Exclude outlier overhangs from analysis.
+        Deprecated and ignored. Retained so existing command lines keep working;
+        emits a warning pointing at --exclude-contigs.
     outlier_threshold : float
-        Z-score threshold for outlier detection.
+        Modified z-score above which a contig end is reported as having
+        anomalous overhang coverage.
     min_overhangs : int
         Minimum number of overhangs required for extension.
     max_homopolymer : int
@@ -1082,6 +1118,14 @@ def extend(
             'A clip that stops short of the contig end would shorten it.'
         )
         min_clip = 1
+
+    if exclude_outliers:
+        logging.warning(
+            '--exclude-outliers is deprecated and no longer excludes anything. '
+            'Contigs with anomalous overhang coverage are reported in the '
+            'stats report; exclude them with --exclude-contigs if you agree '
+            'with the assessment.'
+        )
 
     try:
         # Validate indexed files
@@ -1157,8 +1201,6 @@ def extend(
                 max_break=max_break,
                 min_clip=min_clip,
                 min_anchor=min_anchor,
-                exclude_outliers=exclude_outliers,
-                outlier_threshold=outlier_threshold,
             ):
                 all_stats[contig_name] = contig_stats
                 logging.debug(f'Processing contig {contig_name} for extension...')
@@ -1249,6 +1291,22 @@ def extend(
             else:
                 overall_stats = {'left': {}, 'right': {}}
 
+            # Flag contigs whose overhang coverage stands out from their peers.
+            # These are reported for review, never excluded automatically.
+            anomalous = flag_anomalous_overhang_coverage(all_stats, outlier_threshold)
+            flagged = sorted(
+                set(anomalous['left_outliers']) | set(anomalous['right_outliers'])
+            )
+            if flagged:
+                logging.warning(
+                    f'{len(flagged)} contig end(s) have anomalous overhang '
+                    'coverage, which can indicate a collapsed repeat, an rDNA '
+                    'array or an organellar contig attracting reads from '
+                    'elsewhere. Review the stats report and re-run with '
+                    '--exclude-contigs if extension is not appropriate: '
+                    + ', '.join(flagged)
+                )
+
             # Write extended sequences
             if not dry_run:
                 if output_fasta:
@@ -1297,10 +1355,7 @@ def extend(
         report_content = generate_extension_report(
             all_stats,
             extensions_applied,
-            {
-                'left_outliers': [],
-                'right_outliers': [],
-            },  # Outlier detection handled in streaming
+            anomalous,
             overall_stats,
             excluded_contigs,
             warnings,

@@ -181,104 +181,116 @@ def calculate_overhang_statistics(
     }
 
 
-def identify_outlier_contigs(
-    stats_dict: Dict[str, ContigStats], threshold: float = 2.0
+# Below this many contigs, the spread of overhang counts carries too little
+# information to call anything anomalous, so flagging declines to judge.
+MIN_CONTIGS_FOR_ANOMALY_FLAGGING = 8
+
+# Scale factors making each absolute-deviation statistic a consistent estimator
+# of the standard deviation for normally distributed data.
+_MAD_TO_SIGMA = 1.4826
+_MEAN_AD_TO_SIGMA = 1.253314
+
+
+def _modified_z_scores(values: List[float]) -> List[float]:
+    """
+    Score values by their deviation from the median, in robust sigma units.
+
+    Uses the median and the median absolute deviation rather than the mean and
+    standard deviation. The mean and standard deviation are themselves dragged
+    upward by the very outliers being looked for, which masks them; the median
+    and MAD are not.
+
+    The MAD collapses to zero whenever more than half the values are identical,
+    which is common here: most assemblies have a large majority of contigs
+    carrying the same small number of terminal overhangs. In that case the mean
+    absolute deviation is used as the scale instead, which is less robust but
+    still resistant enough, and which is what lets a genuinely extreme contig be
+    seen against a flat background.
+
+    Parameters
+    ----------
+    values : List[float]
+        Values to score. Order is preserved in the output.
+
+    Returns
+    -------
+    List[float]
+        One score per input value. All zeros when there are fewer than two
+        values, or when every value is identical and no spread exists at all.
+    """
+    if len(values) <= 1:
+        return [0.0] * len(values)
+
+    median = statistics.median(values)
+    deviations = [abs(v - median) for v in values]
+
+    scale = statistics.median(deviations) * _MAD_TO_SIGMA
+    if scale == 0:
+        scale = statistics.fmean(deviations) * _MEAN_AD_TO_SIGMA
+    if scale == 0:
+        # Every value is identical: no spread, nothing to flag.
+        return [0.0] * len(values)
+
+    return [(v - median) / scale for v in values]
+
+
+def flag_anomalous_overhang_coverage(
+    stats_dict: Dict[str, ContigStats],
+    threshold: float = 3.5,
+    min_contigs: int = MIN_CONTIGS_FOR_ANOMALY_FLAGGING,
 ) -> Dict[str, List[str]]:
     """
-    Identify contigs with outlier overhang patterns using Z-score analysis.
+    Flag contigs whose overhang counts are unusually high.
+
+    A contig accumulating far more clipped reads at an end than its peers is
+    worth a look: it often marks a collapsed repeat, a rDNA array, or an
+    organellar contig pulling in reads from across the assembly. Extending such
+    a contig from a single read is rarely meaningful.
+
+    Only the high tail is flagged. A contig with unusually *few* overhangs is
+    simply one with little evidence, which is not an anomaly and never a reason
+    to withhold it from extension.
+
+    This reports; it does not exclude. Whether a flagged contig should be left
+    out is a judgement about the assembly that belongs to the user, who can act
+    on it with ``--exclude-contigs``.
 
     Parameters
     ----------
     stats_dict : Dict[str, ContigStats]
-        Dictionary of contig statistics.
+        Overhang statistics per contig.
     threshold : float, optional
-        Z-score threshold for outlier detection (default: 2.0).
+        Modified z-score above which a contig is flagged (default: 3.5, the
+        conventional cutoff for this statistic).
+    min_contigs : int, optional
+        Minimum number of contigs required before flagging is attempted
+        (default: 8).
 
     Returns
     -------
     Dict[str, List[str]]
-        Dictionary with 'left_outliers' and 'right_outliers' keys containing contig names.
+        Contig names under the keys ``left_outliers`` and ``right_outliers``.
+        Both are empty when there are too few contigs to judge.
     """
+    contig_names = list(stats_dict)
 
-    def calculate_z_scores(values: List[float]) -> List[float]:
-        """
-        Calculate z-scores for a sequence of numeric values.
+    if len(contig_names) < min_contigs:
+        return {'left_outliers': [], 'right_outliers': []}
 
-        Parameters
-        ----------
-        values : List[float]
-            Sequence of numeric values for which to compute z-scores. The length and
-            order of the input are preserved in the output.
+    left_counts = [stats_dict[name].left_count for name in contig_names]
+    right_counts = [stats_dict[name].right_count for name in contig_names]
 
-        Returns
-        -------
-        List[float]
-            A list of z-scores computed as (value - mean(values)) / std(values),
-            where std(values) is the sample standard deviation (statistics.stdev,
-            i.e., normalization by N-1). If the input length is 0 or 1, if the sample
-            standard deviation is zero, or if computing the standard deviation raises
-            statistics.StatisticsError, a list of zeros with the same length as
-            `values` is returned.
+    left_scores = _modified_z_scores(left_counts)
+    right_scores = _modified_z_scores(right_counts)
 
-        Notes
-        -----
-        - This implementation uses the Python standard library's statistics.mean and
-          statistics.stdev. statistics.stdev computes the sample standard deviation
-          (ddof=1). If population standard deviation (ddof=0) is desired, use a
-          different routine (for example numpy.std with ddof=0).
-        - The function is defensive: it handles degenerate cases (insufficient
-          data, zero variance, or statistical errors) by returning zeros rather than
-          raising exceptions.
-
-        Examples
-        --------
-        >>> calculate_z_scores([1.0, 2.0, 3.0])
-        [-1.0, 0.0, 1.0]
-        >>> calculate_z_scores([42.0])
-        [0.0]
-        >>> calculate_z_scores([2.0, 2.0, 2.0])
-        [0.0, 0.0, 0.0]
-        """
-        if len(values) <= 1:
-            return [0.0] * len(values)
-
-        mean_val = statistics.mean(values)
-
-        try:
-            std_val = statistics.stdev(values)
-        except statistics.StatisticsError:
-            return [0.0] * len(values)
-
-        if std_val == 0:
-            return [0.0] * len(values)
-
-        return [(val - mean_val) / std_val for val in values]
-
-    # Collect overhang counts per contig
-    left_counts = []
-    right_counts = []
-    contig_names = []
-
-    for contig_name, contig_stats in stats_dict.items():
-        contig_names.append(contig_name)
-        left_counts.append(contig_stats.left_count)
-        right_counts.append(contig_stats.right_count)
-
-    # Calculate Z-scores
-    left_z_scores = calculate_z_scores(left_counts)
-    right_z_scores = calculate_z_scores(right_counts)
-
-    # Identify outliers
-    left_outliers = []
-    right_outliers = []
-
-    for i, contig_name in enumerate(contig_names):
-        if abs(left_z_scores[i]) > threshold:
-            left_outliers.append(contig_name)
-        if abs(right_z_scores[i]) > threshold:
-            right_outliers.append(contig_name)
-
-    return {'left_outliers': left_outliers, 'right_outliers': right_outliers}
+    return {
+        'left_outliers': [
+            name for name, score in zip(contig_names, left_scores) if score > threshold
+        ],
+        'right_outliers': [
+            name for name, score in zip(contig_names, right_scores) if score > threshold
+        ],
+    }
 
 
 # Candidates whose net gain falls within this margin of the best available are

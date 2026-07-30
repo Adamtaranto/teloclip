@@ -100,11 +100,12 @@ def stream_contigs_for_extension(
     max_break: int = 10,
     min_clip: int = 1,
     min_anchor: int = 500,
-    exclude_outliers: bool = False,
-    outlier_threshold: float = 2.0,
 ) -> Iterator[tuple]:
     """
     Stream contigs that meet criteria for extension.
+
+    Contigs are processed one at a time and never held collectively, so peak
+    memory is set by the largest contig rather than by the assembly.
 
     Parameters
     ----------
@@ -115,57 +116,29 @@ def stream_contigs_for_extension(
     min_overhangs : int, optional
         Minimum number of overhangs required (default: 1).
     max_break : int, optional
-        Maximum gap allowed between alignment and contig end (default: 10).
+        Maximum tolerated gap between a contig terminus and the alignment
+        (default: 10).
     min_clip : int, optional
-        Minimum clip length required (default: 1).
+        Minimum number of clipped bases required past the terminus (default: 1).
     min_anchor : int, optional
-        Minimum anchor length required (default: 500).
-    exclude_outliers : bool, optional
-        Whether to exclude outlier contigs (default: False).
-    outlier_threshold : float, optional
-        Z-score threshold for outlier detection (default: 2.0).
+        Minimum number of anchoring (M/=/X) bases required (default: 500).
 
     Yields
     ------
     tuple
         (contig_name, contig_stats) for contigs that meet extension criteria.
     """
-    # First pass: collect all stats if outlier detection is needed
-    all_stats = {}
-    if exclude_outliers:
-        for contig_name, contig_length in contig_dict.items():
-            stats = collect_contig_overhangs_streaming(
-                bam_file, contig_name, contig_length, max_break, min_clip, min_anchor
-            )
-            all_stats[contig_name] = stats
+    for contig_name, contig_length in contig_dict.items():
+        stats = collect_contig_overhangs_streaming(
+            bam_file, contig_name, contig_length, max_break, min_clip, min_anchor
+        )
 
-        # Import here to avoid circular imports
-        from .analysis import identify_outlier_contigs
-
-        outliers = identify_outlier_contigs(all_stats, outlier_threshold)
-        outlier_set = set(outliers['left_outliers'] + outliers['right_outliers'])
-
-        # Yield non-outlier contigs with sufficient overhangs
-        for contig_name, contig_stats in all_stats.items():
-            if contig_name not in outlier_set:
-                if (
-                    len(contig_stats.left_overhangs) >= min_overhangs
-                    or len(contig_stats.right_overhangs) >= min_overhangs
-                ):
-                    yield contig_name, contig_stats
-    else:
-        # Stream contigs individually without outlier detection
-        for contig_name, contig_length in contig_dict.items():
-            stats = collect_contig_overhangs_streaming(
-                bam_file, contig_name, contig_length, max_break, min_clip, min_anchor
-            )
-
-            # Check if this contig has sufficient overhangs for extension
-            if (
-                len(stats.left_overhangs) >= min_overhangs
-                or len(stats.right_overhangs) >= min_overhangs
-            ):
-                yield contig_name, stats
+        # Check if this contig has sufficient overhangs for extension
+        if (
+            len(stats.left_overhangs) >= min_overhangs
+            or len(stats.right_overhangs) >= min_overhangs
+        ):
+            yield contig_name, stats
 
 
 @dataclass

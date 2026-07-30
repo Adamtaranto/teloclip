@@ -349,10 +349,48 @@ def test_excluded_and_warnings_rendered(stats_dict, empty_outliers):
     assert '## Excluded Contigs' in report
     assert '| chrM' in report
     assert 'user exclusion list' in report
-    assert 'contig09' in report
-    assert 'left overhang outlier' in report
     assert '## Warnings' in report
-    assert '- terminal screening window exceeds contig length' in report
+    assert 'terminal screening window exceeds contig length' in report
+
+
+def test_anomalous_coverage_reported_separately_from_exclusions(stats_dict):
+    """Flagged contigs are reported for review, not listed as excluded.
+
+    Anomalous overhang coverage used to remove a contig from extension
+    silently, and the report was passed empty outlier lists regardless, so the
+    exclusion was never visible anywhere.
+    """
+    report = generate_extension_report(
+        stats_dict,
+        {},
+        {'left_outliers': ['contig09'], 'right_outliers': []},
+        {},
+        ['chrM'],
+        [],
+    )
+
+    assert '## Contigs With Anomalous Overhang Coverage' in report
+    assert 'contig09' in report
+    assert 'have **not** been excluded' in report
+
+    # The flagged contig must not appear in the exclusion table.
+    excluded_section = report.split('## Excluded Contigs')[1].split('##')[0]
+    assert 'chrM' in excluded_section
+    assert 'contig09' not in excluded_section
+
+
+def test_anomaly_section_omitted_when_nothing_flagged(stats_dict, empty_outliers):
+    """No anomaly section is emitted for an assembly with even coverage."""
+    report = generate_extension_report(
+        stats_dict,
+        {},
+        empty_outliers,
+        {},
+        [],
+        [],
+    )
+
+    assert '## Contigs With Anomalous Overhang Coverage' not in report
 
 
 def test_overhang_statistics_table(stats_dict, empty_outliers):

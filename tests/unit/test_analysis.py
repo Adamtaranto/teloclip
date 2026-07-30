@@ -12,7 +12,7 @@ from teloclip.analysis import (
     OverhangInfo,
     calculate_overhang_statistics,
     detect_homopolymer_runs,
-    identify_outlier_contigs,
+    flag_anomalous_overhang_coverage,
     rank_overhangs_by_gain,
     select_best_overhang,
 )
@@ -106,62 +106,132 @@ class TestCalculateOverhangStatistics:
         )  # (4 + 6 + 4) / 3
 
 
-class TestIdentifyOutlierContigs:
-    """Test the identify_outlier_contigs function."""
+def make_stats(counts):
+    """
+    Build a stats mapping from per-contig (left, right) overhang counts.
 
-    def test_identify_outliers_no_outliers(self):
-        """Test outlier detection with no outliers."""
-        # Create similar overhang counts
-        stats_dict = {}
-        for i in range(5):
-            stats = ContigStats(f'contig{i}', 1000)
-            # Add 3 overhangs to each side for each contig
-            for j in range(3):
-                left_oh = OverhangInfo(
-                    'ATCG', 4, 1, 100, f'read{j}', True, 4, 96, f'contig{i}'
-                )
-                right_oh = OverhangInfo(
-                    'TTAA', 4, 995, 1000, f'read{j + 3}', False, 4, 96, f'contig{i}'
-                )
-                stats.left_overhangs.append(left_oh)
-                stats.right_overhangs.append(right_oh)
-            stats_dict[f'contig{i}'] = stats
+    Parameters
+    ----------
+    counts : dict
+        Mapping of contig name to a ``(left_count, right_count)`` tuple.
 
-        outliers = identify_outlier_contigs(stats_dict, threshold=2.0)
+    Returns
+    -------
+    dict
+        Mapping of contig name to a populated ContigStats.
+    """
+    stats_dict = {}
+    for name, (left, right) in counts.items():
+        stats = ContigStats(name, 1000)
+        stats.left_overhangs = [
+            OverhangInfo('ATCG', 4, 1, 100, f'l{i}', True, 4, 96, name, 4)
+            for i in range(left)
+        ]
+        stats.right_overhangs = [
+            OverhangInfo('TTAA', 4, 995, 1000, f'r{i}', False, 4, 96, name, 4)
+            for i in range(right)
+        ]
+        stats_dict[name] = stats
+    return stats_dict
 
-        assert len(outliers['left_outliers']) == 0
-        assert len(outliers['right_outliers']) == 0
 
-    def test_identify_outliers_with_outliers(self):
-        """Test outlier detection with actual outliers."""
-        stats_dict = {}
+class TestFlagAnomalousOverhangCoverage:
+    """Test flagging of contigs with unusual overhang coverage."""
 
-        # Create normal contigs with 3 overhangs each
-        for i in range(4):
-            stats = ContigStats(f'contig{i}', 1000)
-            for j in range(3):
-                left_oh = OverhangInfo(
-                    'ATCG', 4, 1, 100, f'read{j}', True, 4, 96, f'contig{i}'
-                )
-                right_oh = OverhangInfo(
-                    'TTAA', 4, 995, 1000, f'read{j + 3}', False, 4, 96, f'contig{i}'
-                )
-                stats.left_overhangs.append(left_oh)
-                stats.right_overhangs.append(right_oh)
-            stats_dict[f'contig{i}'] = stats
+    def test_uniform_coverage_flags_nothing(self):
+        """Test that an assembly with even coverage produces no flags."""
+        stats = make_stats({f'contig{i}': (3, 3) for i in range(10)})
 
-        # Create outlier contig with many overhangs
-        outlier_stats = ContigStats('outlier', 1000)
-        for j in range(30):  # Much higher than others - increased from 20 to 30
-            left_oh = OverhangInfo(
-                'ATCG', 4, 1, 100, f'read{j}', True, 4, 96, 'outlier'
-            )
-            outlier_stats.left_overhangs.append(left_oh)
-        stats_dict['outlier'] = outlier_stats
+        result = flag_anomalous_overhang_coverage(stats)
 
-        outliers = identify_outlier_contigs(stats_dict, threshold=1.5)
+        assert result['left_outliers'] == []
+        assert result['right_outliers'] == []
 
-        assert 'outlier' in outliers['left_outliers']
+    def test_high_tail_is_flagged(self):
+        """Test that a contig hoarding clipped reads is flagged."""
+        counts = {f'contig{i}': (3, 3) for i in range(10)}
+        counts['rdna_array'] = (400, 3)
+        stats = make_stats(counts)
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert result['left_outliers'] == ['rdna_array']
+        assert result['right_outliers'] == []
+
+    def test_low_tail_is_not_flagged(self):
+        """Test that a contig with unusually few overhangs is not flagged.
+
+        Sparse evidence is not an anomaly. The previous two-tailed z-score
+        excluded these contigs from extension identically to the high tail,
+        which is the opposite of useful.
+        """
+        counts = {f'contig{i}': (40, 40) for i in range(10)}
+        counts['quiet_contig'] = (1, 1)
+        stats = make_stats(counts)
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert 'quiet_contig' not in result['left_outliers']
+        assert 'quiet_contig' not in result['right_outliers']
+
+    def test_declines_to_judge_a_small_assembly(self):
+        """Test that too few contigs produces no flags at all.
+
+        With a handful of contigs the spread carries too little information.
+        The previous mean/stdev implementation could not exceed a z-score of 2
+        with four contigs regardless of how extreme one of them was, so the
+        feature silently did nothing on small assemblies.
+        """
+        counts = {f'contig{i}': (3, 3) for i in range(4)}
+        counts['extreme'] = (10_000, 3)
+        stats = make_stats(counts)
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert result['left_outliers'] == []
+        assert result['right_outliers'] == []
+
+    def test_min_contigs_is_configurable(self):
+        """Test that the small-assembly floor can be lowered deliberately."""
+        counts = {f'contig{i}': (3, 3) for i in range(4)}
+        counts['extreme'] = (10_000, 3)
+        stats = make_stats(counts)
+
+        result = flag_anomalous_overhang_coverage(stats, min_contigs=5)
+
+        assert result['left_outliers'] == ['extreme']
+
+    def test_outlier_does_not_mask_itself(self):
+        """Test that several extreme contigs are all still flagged.
+
+        Mean and standard deviation are both inflated by the outliers being
+        looked for, so a cluster of them can hide each other. The median and
+        MAD are not affected this way.
+        """
+        counts = {f'contig{i}': (3, 3) for i in range(12)}
+        counts['repeat_a'] = (500, 3)
+        counts['repeat_b'] = (480, 3)
+        stats = make_stats(counts)
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert set(result['left_outliers']) == {'repeat_a', 'repeat_b'}
+
+    def test_identical_counts_produce_no_flags(self):
+        """Test that a zero spread does not divide by zero."""
+        stats = make_stats({f'contig{i}': (0, 0) for i in range(10)})
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert result['left_outliers'] == []
+        assert result['right_outliers'] == []
+
+    def test_empty_input(self):
+        """Test that an empty assembly is handled."""
+        result = flag_anomalous_overhang_coverage({})
+
+        assert result['left_outliers'] == []
+        assert result['right_outliers'] == []
 
 
 class TestRankOverhangsByGain:
