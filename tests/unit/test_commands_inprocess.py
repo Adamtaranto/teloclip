@@ -112,6 +112,58 @@ class TestMainGroup:
 
         assert result.exit_code != 0
 
+    def test_one_unimportable_command_does_not_hide_the_others(self, monkeypatch):
+        """Test that sub-commands register independently of one another.
+
+        All three used to be imported inside a single try block, so an
+        environment without pysam registered *no* commands at all, including
+        filter, which needs nothing beyond the standard library, click and rich.
+        """
+        import importlib
+
+        import click as click_module
+
+        real_import_module = importlib.import_module
+
+        def fail_extend(name, *args, **kwargs):
+            """
+            Import normally, except for the extend command module.
+
+            Parameters
+            ----------
+            name : str
+                Module path being imported.
+            *args
+                Passed through to importlib.import_module.
+            **kwargs
+                Passed through to importlib.import_module.
+
+            Returns
+            -------
+            module
+                The imported module.
+
+            Raises
+            ------
+            ImportError
+                Always, for the extend command module.
+            """
+            if name == 'teloclip.commands.extend':
+                raise ImportError("No module named 'pysam'")
+            return real_import_module(name, *args, **kwargs)
+
+        group = click_module.Group('teloclip')
+        monkeypatch.setattr('teloclip.cli.main', group)
+        monkeypatch.setattr(importlib, 'import_module', fail_extend)
+
+        from teloclip.cli import register_commands
+
+        register_commands()
+
+        assert 'filter' in group.commands
+        assert 'extract' in group.commands
+        assert 'extend' not in group.commands
+
 
 class TestFilterCommand:
     """The filter sub-command."""

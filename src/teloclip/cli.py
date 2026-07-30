@@ -1,5 +1,7 @@
 """Main CLI entry point for teloclip with sub-commands."""
 
+import importlib
+
 import click
 
 from teloclip._version import __version__
@@ -32,18 +34,37 @@ def main(ctx):
 
 
 def register_commands():
-    """Register sub-commands. Import here to avoid circular imports."""
-    try:
-        from teloclip.commands.extend import extend
-        from teloclip.commands.extract import extract_cmd
-        from teloclip.commands.filter import filter_cmd
+    """
+    Register sub-commands.
 
-        main.add_command(filter_cmd)
-        main.add_command(extract_cmd)
-        main.add_command(extend)
-    except ImportError as e:
-        # Handle gracefully during development
-        click.echo(f'Warning: Could not import commands: {e}', err=True)
+    Each is imported independently so that one unavailable dependency does not
+    take the others down with it. ``filter`` needs nothing beyond the standard
+    library, click and rich, whereas ``extract`` and ``extend`` require pysam,
+    pyfaidx and biopython. Importing all three together meant that in an
+    environment without pysam no commands registered at all, including the one
+    that would have worked.
+
+    Imports are deferred to call time to avoid a circular import back to this
+    module.
+    """
+    # (import path, attribute) for each sub-command.
+    specs = [
+        ('teloclip.commands.filter', 'filter_cmd'),
+        ('teloclip.commands.extract', 'extract_cmd'),
+        ('teloclip.commands.extend', 'extend'),
+    ]
+
+    for module_path, attribute in specs:
+        try:
+            module = importlib.import_module(module_path)
+        except ImportError as e:
+            click.echo(
+                f'Warning: sub-command from {module_path} is unavailable: {e}',
+                err=True,
+            )
+            continue
+
+        main.add_command(getattr(module, attribute))
 
 
 if __name__ == '__main__':
