@@ -5,10 +5,10 @@ This module provides memory-efficient FASTA/FASTQ writing with buffering,
 statistics tracking, and BioPython integration for the extract command.
 """
 
-import logging
-import sys
 from collections import defaultdict
+import logging
 from pathlib import Path
+import sys
 from typing import Dict, Optional, Union
 
 from Bio import SeqIO

@@ -230,7 +230,7 @@ def write_fasta_file(contigs: Dict[str, str], output_path: Path) -> None:
 
 
 def main():
-    """Main function to generate test contigs."""
+    """Generate test contigs."""
     parser = argparse.ArgumentParser(
         description='Generate synthetic contigs for teloclip testing'
     )

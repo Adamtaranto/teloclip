@@ -5,13 +5,13 @@ This module provides streaming functions for processing large genomes without
 loading entire files into memory, using pysam for indexed access.
 """
 
-import sys
 from pathlib import Path
+import sys
 from typing import Dict, Iterator, Optional, Tuple, Union
 
-import pysam
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
+import pysam
 
 
 class StreamingGenomeProcessor:

@@ -1,8 +1,8 @@
 """Extract sub-command for teloclip CLI."""
 
 import logging
-import sys
 from pathlib import Path
+import sys
 from typing import Dict
 
 import click

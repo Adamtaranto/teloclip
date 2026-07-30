@@ -33,10 +33,17 @@ dev = [
     "ruff",
 ]
 
-test = [
-        "pytest-cov",
-        "pytest",
-        ]
+docs = [
+    "zensical>=0.0.51",
+    "mkdocstrings-python",
+    "mkdocstrings",
+    "notebook",
+    "nbconvert",
+    "pymdown-extensions>=10.21.2,<11",
+    "seaborn",
+]
+
+test = ["pytest", "pytest-codspeed", "pytest-cov"]
 
 [project.urls]
 documentation = "https://github.com/adamtaranto/teloclip"
@@ -97,6 +104,13 @@ ignore = [
 
 [tool.ruff.lint.pydocstyle]
 convention = "numpy"
+
+# Mirror [tool.isort] below. Ruff does not read [tool.isort], so without this
+# the ruff "I" rules and the isort CI step disagree on import order.
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["teloclip"]
+known-third-party = ["biopython", "click", "pyfaidx", "pysam", "rich"]
 
 [tool.ruff.format]
 indent-style = "space"
