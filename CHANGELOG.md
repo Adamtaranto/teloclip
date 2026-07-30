@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **Contig shortening**: `teloclip extend` could silently make a contig *shorter*. Extending an
+  end trims the bases the supporting read did not cover before grafting on its soft clip, but
+  nothing checked that the clip reached past the contig terminus. A read aligning from position
+  10 with a 3 bp clip trimmed 9 bases and added 3. `validate_extension` did not catch it because
+  it was handed the already-trimmed sequence as the "original", making its length check trivially
+  true. Extensions are now rejected unless they add at least one net base.
+- **`teloclip extract` crash**: `EnhancedStreamingSamFilter` read `self.exclude_secondary`
+  without ever assigning it, raising `AttributeError` on the first secondary alignment in the
+  input. Only inputs already stripped of secondary alignments ran to completion.
+- **`teloclip extract` motif filtering**: a read whose left clip contained no motif skipped the
+  whole record, so its right clip was never examined. Each end is now judged independently.
+
+### Changed
+
+Each sub-command carried its own copy of the "is this soft clip a valid terminal overhang?"
+test, and the three copies disagreed. They are now a single shared implementation
+(`teloclip.overhang`) using 1-based inclusive coordinates. This changes which reads are
+accepted:
+
+- **`alignment_end` is now inclusive everywhere.** `filter` and `extract` computed it as
+  `POS + reference_span`, one base past the last aligned base. Their right-end tolerance was
+  therefore one base wider than intended, and out of step with their own left end.
+- **`max_break` is now an inclusive gap, applied identically at both ends.** `gap <= max_break`,
+  where the gap is the count of terminal contig bases the alignment does not cover.
+  `--max-break 0` now means the alignment must reach the terminal base exactly.
+- **`min_clip` now measures bases past the terminus, not raw clip length**, matching what its
+  help text has always said. It was previously applied to the raw clip on the left end and
+  **not enforced at all on the right end**, where the test reduced to "overhang >= 0" and so
+  accepted clips that reached the terminus without passing it.
+- **Anchor length in `extend` now counts `M`/`=`/`X` only.** It was computed as read length
+  minus clips, which counts insertions as anchoring evidence. `filter` and `extract` were
+  already correct. Expect a small tightening on insertion-rich long-read alignments.
+- **`teloclip extend --max-break` default moves from 10 to 50**, matching `filter` and
+  `extract`. Users previously filtered at 50 and then silently lost candidates at 10.
+- **Overhang selection now ranks on net gain, preferring less trimming.** A long clip anchored
+  well inside a contig can contribute less novel sequence than a shorter clip flush with the
+  terminus. Where two candidates offer comparable gain, the one that discards less assembly
+  wins, so a single extra base cannot justify replacing polished consensus with one raw read.
+  `--min-extension` likewise now gates on novel bases contributed.
+- **Dry runs now account for trimming.** They hard-coded the trim to zero, so a dry run
+  predicted a longer contig than the real run produced wherever trimming occurred.
+
+### Added
+
+- **`teloclip extend --min-clip`** (default 1, clamped to at least 1), so the
+  `(max_break, min_clip, min_anchor)` triple is uniform across all three sub-commands.
+
+### Removed
+
+- **`analysis.collect_overhang_stats`**, an unused fourth copy of the overhang test carrying
+  its own hard-coded thresholds.
+
+---
+
 ## [0.3.4] - 2025-11-07
 
 ### Added
