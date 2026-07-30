@@ -3,9 +3,19 @@
 import logging
 import re
 import sys
-from typing import TYPE_CHECKING, Dict, Iterator, Optional, Tuple
+from typing import TYPE_CHECKING, Dict, Iterator, Optional
 
 from teloclip.motifs import check_sequence_for_patterns
+from teloclip.overhang import (
+    REASON_MAX_BREAK,
+    REASON_MIN_CLIP,
+    REASON_NO_CLIP,
+    anchor_length,
+    cigar_ops_from_string,
+    classify,
+    ends_from_sam_fields,
+    reference_span,
+)
 from teloclip.seqops import isMotifInClip
 
 if TYPE_CHECKING:
@@ -85,7 +95,6 @@ def processSamlines(
     SAM_QNAME = 0
     SAM_FLAG = 1
     SAM_RNAME = 2
-    SAM_POS = 3
     SAM_CIGAR = 5
     SAM_SEQ = 9
 
@@ -132,70 +141,59 @@ def processSamlines(
 
         # Check if line contains soft-clip and no hard-clipping.
         if 'S' in samline[SAM_CIGAR] and 'H' not in samline[SAM_CIGAR]:
+            try:
+                ContigLen = contig_dict[str(samline[SAM_RNAME])]
+            except KeyError:
+                sys.exit(
+                    'Reference sequence not found in FAI file: '
+                    + str(samline[SAM_RNAME])
+                )
+
+            ends = ends_from_sam_fields(samline, ContigLen)
+
             # Check if alignment meets minimum anchor requirement
-            if not validate_min_anchor(samline[SAM_CIGAR], min_anchor):
+            if ends.anchor < min_anchor:
                 excluded_min_anchor += 1
                 anchorFilteredCount += 1
                 removeCount += 1
                 continue
 
-            # Get length of left and right overhangs
-            leftClipLen, rightClipLen = checkClips(samline[SAM_CIGAR])
-            alnLen = lenCIGAR(samline[SAM_CIGAR])
-
-            # Track exclusion reasons for reads with clips
-            left_excluded_max_break = False
-            left_excluded_min_clip = False
-            right_excluded_max_break = False
-            right_excluded_min_clip = False
+            # Both ends are judged by the shared predicate, so filter, extract
+            # and extend agree on what counts as a terminal overhang.
+            left_call, right_call = classify(
+                ends, max_break=max_break, min_clip=min_clip
+            )
+            leftClipLen = ends.left_clip
+            rightClipLen = ends.right_clip
 
             # Check for left overhang
-            if leftClipLen:
-                pos = int(samline[SAM_POS])
-                if pos > max_break:
-                    left_excluded_max_break = True
-                elif leftClipLen < (pos + min_clip):
-                    left_excluded_min_clip = True
-                else:
-                    # Overhang is on contig left
-                    keepLine = True
-                    leftClip = True
-                    keepCount += 1
+            if left_call.accepted:
+                keepLine = True
+                leftClip = True
+                keepCount += 1
+
             # Check for right overhang
-            if rightClipLen:
-                try:
-                    ContigLen = contig_dict[str(samline[SAM_RNAME])]
-                except KeyError:
-                    sys.exit(
-                        'Reference sequence not found in FAI file: '
+            if right_call.accepted:
+                rightClip = True
+                # Check if already found left OH
+                if not keepLine:
+                    keepLine = True
+                    keepCount += 1
+                else:
+                    # Print to stderr
+                    logging.info(
+                        str(samline[SAM_QNAME])
+                        + ' overhang on both ends of '
                         + str(samline[SAM_RNAME])
                     )
-                alnEnd = int(samline[SAM_POS]) + alnLen
-                # Check if overhang is on contig right end
-                if (ContigLen - alnEnd) > max_break:
-                    right_excluded_max_break = True
-                elif alnEnd + rightClipLen < ContigLen + 1:
-                    right_excluded_min_clip = True
-                else:
-                    rightClip = True
-                    # Check if already found left OH
-                    if not keepLine:
-                        keepLine = True
-                        keepCount += 1
-                    else:
-                        # Print to stderr
-                        logging.info(
-                            str(samline[SAM_QNAME])
-                            + ' overhang on both ends of '
-                            + str(samline[SAM_RNAME])
-                        )
-                        bothCount += 1
+                    bothCount += 1
 
             # Track exclusion reasons for reads that weren't kept
             if not keepLine and (leftClipLen or rightClipLen):
-                if left_excluded_max_break or right_excluded_max_break:
+                reasons = {left_call.reason, right_call.reason}
+                if REASON_MAX_BREAK in reasons:
                     excluded_max_break += 1
-                elif left_excluded_min_clip or right_excluded_min_clip:
+                elif REASON_MIN_CLIP in reasons:
                     excluded_min_clip += 1
 
             # Optional check for Telomeric repeat motifs
@@ -299,12 +297,9 @@ def splitCIGAR(SAM_CIGAR):
     >>> splitCIGAR('96S154M')
     [(96, 'S'), (154, 'M')]
     """
-    CIGARlist = []
-    for x in re.findall('[0-9]*[A-Z|=]', SAM_CIGAR):
-        CIGARlist.append((int(re.findall('[0-9]*', x)[0]), re.findall('[A-Z]|=', x)[0]))
     # 174M76S --> [(174,M),(76,S)]
     # 96S154M --> [(96,S),(154,M)]
-    return CIGARlist
+    return cigar_ops_from_string(SAM_CIGAR)
 
 
 def checkClips(SAM_CIGAR):
@@ -369,13 +364,7 @@ def lenCIGAR(SAM_CIGAR):
     Includes operations: M (match), D (deletion), N (splice), X (mismatch), = (sequence match)
     Excludes operations: I (insertion), P (padding), H (hard clip), S (soft clip)
     """
-    alnLen = 0
-    CIGARlist = splitCIGAR(SAM_CIGAR)
-    for x in CIGARlist:  # i.e. = [(174,M),(76,S)]
-        if x[1] in {'D', 'M', 'N', 'X', '='}:
-            alnLen += x[0]
-    # Ignore operators in set('P','H','S','I')
-    return alnLen
+    return reference_span(cigar_ops_from_string(SAM_CIGAR))
 
 
 def calculate_aligned_bases(cigar_string):
@@ -399,12 +388,7 @@ def calculate_aligned_bases(cigar_string):
     int
         Number of aligned bases (M + = + X operations only).
     """
-    aligned_bases = 0
-    cigar_list = splitCIGAR(cigar_string)
-    for length, operation in cigar_list:
-        if operation in {'M', '=', 'X'}:
-            aligned_bases += length
-    return aligned_bases
+    return anchor_length(cigar_ops_from_string(cigar_string))
 
 
 def validate_min_anchor(cigar_string, min_anchor):
@@ -571,76 +555,6 @@ class EnhancedStreamingSamFilter:
         self.SAM_CIGAR = 5
         self.SAM_SEQ = 9
 
-    def _split_cigar(self, cigar_string: str) -> list:
-        """
-        Split CIGAR string into list of (length, operation) tuples.
-
-        Parameters
-        ----------
-        cigar_string : str
-            CIGAR string from SAM alignment.
-
-        Returns
-        -------
-        list
-            List of (length, operation) tuples.
-        """
-        cigar_list = []
-        for match in re.findall(r'[0-9]*[A-Z=]', cigar_string):
-            length = int(re.findall(r'[0-9]*', match)[0])
-            operation = re.findall(r'[A-Z=]', match)[0]
-            cigar_list.append((length, operation))
-        return cigar_list
-
-    def _check_clips(self, cigar_string: str) -> Tuple[Optional[int], Optional[int]]:
-        """
-        Get lengths of soft-clipped blocks from either end of alignment.
-
-        Parameters
-        ----------
-        cigar_string : str
-            CIGAR string from SAM alignment.
-
-        Returns
-        -------
-        Tuple[Optional[int], Optional[int]]
-            Left and right clip lengths (None if no clipping).
-        """
-        left_clip_len = None
-        right_clip_len = None
-        cigar_list = self._split_cigar(cigar_string)
-
-        # Check if first segment is soft-clipped
-        if cigar_list and cigar_list[0][1] == 'S':
-            left_clip_len = cigar_list[0][0]
-
-        # Check if last segment is soft-clipped
-        if cigar_list and cigar_list[-1][1] == 'S':
-            right_clip_len = cigar_list[-1][0]
-
-        return (left_clip_len, right_clip_len)
-
-    def _calculate_alignment_length(self, cigar_string: str) -> int:
-        """
-        Calculate alignment length on reference sequence.
-
-        Parameters
-        ----------
-        cigar_string : str
-            CIGAR string from SAM alignment.
-
-        Returns
-        -------
-        int
-            Total alignment length on reference sequence.
-        """
-        aln_len = 0
-        cigar_list = self._split_cigar(cigar_string)
-        for length, operation in cigar_list:
-            if operation in {'D', 'M', 'N', 'X', '='}:
-                aln_len += length
-        return aln_len
-
     def _count_motifs_in_sequence(self, sequence: str) -> Dict[str, int]:
         """
         Count motif occurrences in sequence.
@@ -730,113 +644,64 @@ class EnhancedStreamingSamFilter:
                     logging.warning(f'Invalid MAPQ in line: {line.strip()}')
                     continue
 
-                # Anchor length validation
-                if not validate_min_anchor(cigar, self.min_anchor):
-                    if self.stats:
-                        self.stats.record_filter('anchor')
-                    continue
-
-                # Get clip lengths and alignment info
-                left_clip_len, right_clip_len = self._check_clips(cigar)
-                aln_len = self._calculate_alignment_length(cigar)
-
                 contig_name = samline[self.SAM_RNAME]
                 if contig_name not in self.contigs:
                     logging.warning(f'Unknown contig in SAM: {contig_name}')
                     continue
 
-                contig_len = self.contigs[contig_name]
-                pos = int(samline[self.SAM_POS])
-                sequence = samline[self.SAM_SEQ]
-                read_name = samline[self.SAM_QNAME]
+                ends = ends_from_sam_fields(samline, self.contigs[contig_name])
 
-                # Track exclusion reasons and process overhangs
+                # Anchor length validation
+                if ends.anchor < self.min_anchor:
+                    if self.stats:
+                        self.stats.record_filter('anchor')
+                    continue
 
-                # Check for left overhang
-                if left_clip_len:
-                    if left_clip_len < self.min_clip:
-                        # Track min_clip exclusion but continue to check right overhang
-                        if self.stats:
-                            self.stats.record_filter('min_clip')
-                    elif pos > self.max_break:
-                        # Track max_break exclusion but continue to check right overhang
-                        if self.stats:
-                            self.stats.record_filter('max_break')
-                    elif left_clip_len >= (pos + self.min_clip):
-                        # Valid left overhang
-                        aln_end = pos + aln_len
-                        # Extract left overhang sequence (clipped region) and convert to uppercase for motif counting
-                        overhang_seq = sequence[:left_clip_len].upper()
-
-                        # Count motifs in the clipped overhang region only
-                        motif_counts = None
-                        if self.motif_patterns:
-                            motif_counts = self._count_motifs_in_sequence(overhang_seq)
-                            # Check if no motifs found and track exclusion
-                            if not any(count > 0 for count in motif_counts.values()):
-                                if self.stats:
-                                    self.stats.record_filter('motifs')
-                                continue  # Skip this overhang
-
-                        yield {
-                            'aln_start': pos,
-                            'aln_end': aln_end,
-                            'clip_length': left_clip_len,
-                            'sequence': sequence,
-                            'read_name': read_name,
-                            'contig_name': contig_name,
-                            'end': 'L',
-                            'mapq': mapq,
-                            'motif_counts': motif_counts,
-                            'overhang_seq': overhang_seq,
-                        }
-                    else:
-                        # Does not meet min_clip requirement relative to position
-                        if self.stats:
-                            self.stats.record_filter('min_clip')
-
-                # Check for right overhang
-                if right_clip_len:
-                    aln_end = pos + aln_len
-                    if right_clip_len < self.min_clip:
-                        # Track min_clip exclusion
-                        if self.stats:
-                            self.stats.record_filter('min_clip')
-                    elif (contig_len - aln_end) > self.max_break:
-                        # Track max_break exclusion
-                        if self.stats:
-                            self.stats.record_filter('max_break')
-                    elif aln_end + right_clip_len >= contig_len + 1:
-                        # Valid right overhang
-                        # Extract right overhang sequence (clipped region) and convert to uppercase for motif counting
-                        overhang_seq = sequence[-right_clip_len:].upper()
-
-                        # Count motifs in the clipped overhang region only
-                        motif_counts = None
-                        if self.motif_patterns:
-                            motif_counts = self._count_motifs_in_sequence(overhang_seq)
-                            # Check if no motifs found and track exclusion
-                            if not any(count > 0 for count in motif_counts.values()):
-                                if self.stats:
-                                    self.stats.record_filter('motifs')
-                                continue  # Skip this overhang
-
-                        yield {
-                            'aln_start': pos,
-                            'aln_end': aln_end,
-                            'clip_length': right_clip_len,
-                            'sequence': sequence,
-                            'read_name': read_name,
-                            'contig_name': contig_name,
-                            'end': 'R',
-                            'mapq': mapq,
-                            'motif_counts': motif_counts,
-                            'overhang_seq': overhang_seq,
-                        }
+                # Both ends are judged by the shared predicate, so filter,
+                # extract and extend agree on what counts as a terminal
+                # overhang.
+                calls = classify(ends, max_break=self.max_break, min_clip=self.min_clip)
 
             except (IndexError, ValueError) as e:
                 logging.warning(f'Error processing SAM line: {e}')
                 continue
+
+            sequence = samline[self.SAM_SEQ]
+            read_name = samline[self.SAM_QNAME]
+
+            for call in calls:
+                if not call.accepted:
+                    # A missing clip is not an exclusion worth reporting: most
+                    # reads are clipped at one end only.
+                    if call.reason != REASON_NO_CLIP and self.stats:
+                        self.stats.record_filter(call.reason)
+                    continue
+
+                # Uppercased for motif counting.
+                overhang_seq = call.overhang_sequence(ends).upper()
+
+                # Count motifs in the clipped overhang region only
+                motif_counts = None
+                if self.motif_patterns:
+                    motif_counts = self._count_motifs_in_sequence(overhang_seq)
+                    # Check if no motifs found and track exclusion
+                    if not any(count > 0 for count in motif_counts.values()):
+                        if self.stats:
+                            self.stats.record_filter('motifs')
+                        continue  # Skip this overhang
+
+                yield {
+                    'aln_start': ends.aln_start,
+                    'aln_end': ends.aln_end,
+                    'clip_length': call.clip_len,
+                    'sequence': sequence,
+                    'read_name': read_name,
+                    'contig_name': contig_name,
+                    'end': 'L' if call.is_left else 'R',
+                    'mapq': mapq,
+                    'motif_counts': motif_counts,
+                    'overhang_seq': overhang_seq,
+                }
 
 
 def enhanced_streaming_split_by_contig(

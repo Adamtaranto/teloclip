@@ -210,26 +210,27 @@ class TestProcessSamlines:
 
 
 class TestProcessSamlinesMaxBreakFilter:
-    """Test max_break filter application in processSamlines.
+    """Test max_break and min_clip filtering in processSamlines.
 
-    These tests verify that the max_break filter is correctly applied to both
-    left and right overhangs in SAM alignments:
+    Acceptance is symmetric across both contig ends, in 1-based inclusive
+    coordinates (see teloclip.overhang)::
 
-    Left overhangs:
-    - Position (SAM_POS) must be <= max_break from contig start (1-based)
-    - Soft clip length must be >= (position + min_clip) to extend past contig start
+        aln_end  = POS + reference_span - 1
+        gap      = aln_start - 1        (left)  /  contig_len - aln_end  (right)
+        overhang = clip_len - gap
 
-    Right overhangs:
-    - Alignment end must be <= max_break from contig end
-    - Soft clip must extend >= 1 base past contig end (alnEnd + clipLen >= contigLen + 1)
+        accepted  <=>  clip_len > 0
+                       and gap <= max_break        (inclusive)
+                       and overhang >= min_clip
 
-    The tests verify boundary conditions, exclusions, and complex CIGAR strings.
+    These tests pin the boundaries in both directions. Before the shared
+    predicate existed, the left and right tests here disagreed with each other
+    by a base and min_clip was not enforced on the right end at all.
     """
 
     def test_left_overhang_within_max_break(self):
         """Test left overhang read within max_break threshold is kept."""
-        # Read at position 1 with 50bp soft clip, max_break=50
-        # Should be kept since position 1 <= max_break (50)
+        # POS 1, 50S50M: gap = 0 <= 50, overhang = 50 - 0 = 50 >= 1. Kept.
         sam_lines = [
             '@HD\tVN:1.0\tSO:coordinate',
             '@SQ\tSN:contig1\tLN:1000',
@@ -255,13 +256,12 @@ class TestProcessSamlinesMaxBreakFilter:
 
     def test_left_overhang_at_max_break_boundary(self):
         """Test left overhang read exactly at max_break threshold is kept."""
-        # Read at position 50 with 52bp soft clip, max_break=50, min_clip=1
-        # Conditions: pos <= max_break (50 <= 50) AND leftClipLen >= (pos + min_clip) (52 >= 51)
-        # Should be kept since both conditions are met
+        # POS 51, 52S50M: gap = 50, exactly max_break, so the tolerance is
+        # inclusive. overhang = 52 - 50 = 2 >= 1. Kept.
         sam_lines = [
             '@HD\tVN:1.0\tSO:coordinate',
             '@SQ\tSN:contig1\tLN:1000',
-            'read1\t0\tcontig1\t50\t30\t52S50M\t*\t0\t0\t' + 'A' * 102 + '\t*',
+            'read1\t0\tcontig1\t51\t30\t52S50M\t*\t0\t0\t' + 'A' * 102 + '\t*',
         ]
 
         from io import StringIO
@@ -283,8 +283,39 @@ class TestProcessSamlinesMaxBreakFilter:
 
     def test_left_overhang_exceeds_max_break(self):
         """Test left overhang read beyond max_break threshold is excluded."""
-        # Read at position 51 with 50bp soft clip, max_break=50
-        # Should be excluded since position 51 > max_break (50)
+        # POS 52, 100S50M: gap = 51 > 50. Rejected on max_break, before the
+        # clip is even considered.
+        sam_lines = [
+            '@HD\tVN:1.0\tSO:coordinate',
+            '@SQ\tSN:contig1\tLN:1000',
+            'read1\t0\tcontig1\t52\t30\t100S50M\t*\t0\t0\t' + 'A' * 150 + '\t*',
+        ]
+
+        from io import StringIO
+
+        samfile = StringIO('\n'.join(sam_lines))
+        contig_dict = {'contig1': 1000}
+
+        result = processSamlines(
+            samfile,
+            contig_dict,
+            max_break=50,
+            min_clip=1,
+            min_anchor=10,
+            return_counts=True,
+        )
+
+        assert result['keepCount'] == 0
+        assert result['excluded_max_break'] == 1
+        assert result['excluded_min_clip'] == 0
+
+    def test_left_overhang_that_does_not_reach_contig_start(self):
+        """Test left clip stopping exactly at the contig start is excluded.
+
+        POS 51, 50S50M: gap = 50 is inside max_break, but the 50-base clip only
+        reaches back to position 1 and adds nothing beyond it, so overhang = 0.
+        This is a min_clip exclusion, not a max_break one.
+        """
         sam_lines = [
             '@HD\tVN:1.0\tSO:coordinate',
             '@SQ\tSN:contig1\tLN:1000',
@@ -306,7 +337,8 @@ class TestProcessSamlinesMaxBreakFilter:
         )
 
         assert result['keepCount'] == 0
-        assert result['excluded_max_break'] == 1
+        assert result['excluded_max_break'] == 0
+        assert result['excluded_min_clip'] == 1
 
     def test_right_overhang_within_max_break(self):
         """Test right overhang read within max_break threshold is kept."""
@@ -338,14 +370,13 @@ class TestProcessSamlinesMaxBreakFilter:
 
     def test_right_overhang_at_max_break_boundary(self):
         """Test right overhang read exactly at max_break threshold is kept."""
-        # Contig length 1000, read alignment ends at position 900 + 50 = 950
-        # Distance from contig end: 1000 - 950 = 50 <= max_break (50)
-        # Overhang condition: alnEnd + rightClipLen >= ContigLen + 1 → 950 + 52 >= 1001 → 1002 >= 1001 ✓
-        # Should be kept
+        # POS 901, 50M52S: aln_end = 901 + 50 - 1 = 950, so gap = 1000 - 950 =
+        # 50, exactly max_break. overhang = 52 - 50 = 2 >= 1. Kept.
+        # This mirrors test_left_overhang_at_max_break_boundary exactly.
         sam_lines = [
             '@HD\tVN:1.0\tSO:coordinate',
             '@SQ\tSN:contig1\tLN:1000',
-            'read1\t0\tcontig1\t900\t30\t50M52S\t*\t0\t0\t' + 'A' * 102 + '\t*',
+            'read1\t0\tcontig1\t901\t30\t50M52S\t*\t0\t0\t' + 'A' * 102 + '\t*',
         ]
 
         from io import StringIO
@@ -367,9 +398,7 @@ class TestProcessSamlinesMaxBreakFilter:
 
     def test_right_overhang_exceeds_max_break(self):
         """Test right overhang read beyond max_break threshold is excluded."""
-        # Contig length 1000, read alignment ends at position 899 + 50 = 949
-        # Distance from contig end: 1000 - 949 = 51 > max_break (50)
-        # Should be excluded
+        # POS 899, 50M50S: aln_end = 948, gap = 1000 - 948 = 52 > 50. Excluded.
         sam_lines = [
             '@HD\tVN:1.0\tSO:coordinate',
             '@SQ\tSN:contig1\tLN:1000',
@@ -395,16 +424,13 @@ class TestProcessSamlinesMaxBreakFilter:
 
     def test_right_overhang_with_gaps_in_cigar(self):
         """Test right overhang with deletions/insertions in CIGAR string."""
-        # Contig length 1000, read starts at 900
-        # CIGAR: 30M5D10M5I5M = alignment length on reference = 30+5+10+5 = 50
-        # Alignment end: 900 + 50 = 950
-        # Distance from contig end: 1000 - 950 = 50 <= max_break (50)
-        # Overhang condition: alnEnd + rightClipLen >= ContigLen + 1 → 950 + 52 >= 1001 → 1002 >= 1001 ✓
-        # Should be kept
+        # POS 901, 30M5D10M5I5M52S. The 5I consumes read bases but not
+        # reference, so the reference span is 30+5+10+5 = 50 and aln_end = 950.
+        # gap = 50 <= max_break, overhang = 52 - 50 = 2 >= 1. Kept.
         sam_lines = [
             '@HD\tVN:1.0\tSO:coordinate',
             '@SQ\tSN:contig1\tLN:1000',
-            'read1\t0\tcontig1\t900\t30\t30M5D10M5I5M52S\t*\t0\t0\t'
+            'read1\t0\tcontig1\t901\t30\t30M5D10M5I5M52S\t*\t0\t0\t'
             + 'A' * 102
             + '\t*',
         ]
@@ -428,16 +454,19 @@ class TestProcessSamlinesMaxBreakFilter:
 
     def test_zero_max_break_filter(self):
         """Test max_break=0 only allows reads at exact contig boundaries."""
+        # max_break=0 means the alignment must reach the terminal base exactly:
+        # aln_start == 1 on the left, aln_end == contig_len on the right.
         sam_lines = [
             '@HD\tVN:1.0\tSO:coordinate',
             '@SQ\tSN:contig1\tLN:1000',
-            # Left overhang at position 1 (not allowed with max_break=0 since 1 > 0)
+            # POS 1: gap = 0, flush with the contig start. overhang = 2. Kept.
             'read1\t0\tcontig1\t1\t30\t2S50M\t*\t0\t0\t' + 'A' * 52 + '\t*',
-            # Left overhang at position 2 (not allowed with max_break=0)
+            # POS 2: gap = 1 > 0. Excluded on max_break.
             'read2\t0\tcontig1\t2\t30\t4S50M\t*\t0\t0\t' + 'A' * 54 + '\t*',
-            # Right overhang ending exactly at contig end: 950+50=1000, clip 2 → 1000+2=1002 >= 1001 ✓
-            'read3\t0\tcontig1\t950\t30\t50M2S\t*\t0\t0\t' + 'A' * 52 + '\t*',
-            # Right overhang ending 1bp before contig end: 949+50=999, distance=1000-999=1 > max_break(0)
+            # POS 951: aln_end = 1000, gap = 0, flush with the contig end.
+            # overhang = 2. Kept.
+            'read3\t0\tcontig1\t951\t30\t50M2S\t*\t0\t0\t' + 'A' * 52 + '\t*',
+            # POS 949: aln_end = 998, gap = 2 > 0. Excluded on max_break.
             'read4\t0\tcontig1\t949\t30\t50M52S\t*\t0\t0\t' + 'A' * 102 + '\t*',
         ]
 
@@ -455,22 +484,21 @@ class TestProcessSamlinesMaxBreakFilter:
             return_counts=True,
         )
 
-        assert result['keepCount'] == 1  # Only read3
-        assert result['excluded_max_break'] == 3  # read1, read2, and read4
+        assert result['keepCount'] == 2  # read1 and read3, one at each end
+        assert result['excluded_max_break'] == 2  # read2 and read4
 
     def test_max_break_filter_with_both_overhangs(self):
         """Test max_break filter with reads having both left and right overhangs."""
         sam_lines = [
             '@HD\tVN:1.0\tSO:coordinate',
             '@SQ\tSN:contig1\tLN:100',
-            # Read spanning entire contig: pos 1, length 100, both overhangs valid
-            # Left: pos 1 <= 25, clip 27 >= (1+1)=2 ✓
-            # Right: alnEnd=101, (100-101)=-1 <= 25 ✓, 101+27=128 >= 101 ✓
+            # Read spanning the entire contig: POS 1, 27S100M27S.
+            # aln_end = 100. Left: gap 0, overhang 27. Right: gap 0,
+            # overhang 27. Both ends valid.
             'read1\t0\tcontig1\t1\t30\t27S100M27S\t*\t0\t0\t' + 'A' * 154 + '\t*',
-            # Read with BOTH overhangs exceeding max_break to ensure exclusion
-            # Left: pos 50 > 25, Right: alnEnd=100, (100-100)=0 <= 25 but pos 50 > 25 for left
-            # To make right also fail: use position 26, alnEnd = 26+25 = 51, (100-51)=49 > 25
-            'read2\t0\tcontig1\t26\t30\t30S25M30S\t*\t0\t0\t' + 'A' * 85 + '\t*',
+            # POS 27, 30S25M30S: aln_end = 51. Left gap = 26 > 25 and right
+            # gap = 49 > 25, so both ends fail on max_break.
+            'read2\t0\tcontig1\t27\t30\t30S25M30S\t*\t0\t0\t' + 'A' * 85 + '\t*',
         ]
 
         from io import StringIO
@@ -490,6 +518,81 @@ class TestProcessSamlinesMaxBreakFilter:
         assert result['keepCount'] == 1  # Only read1 should be kept
         assert result['bothCount'] == 1  # read1 spans entire contig
         assert result['excluded_max_break'] == 1  # read2 excluded
+
+    def test_right_overhang_that_does_not_reach_contig_end(self):
+        """Test right clip stopping exactly at the contig end is excluded.
+
+        POS 946, 50M5S: aln_end = 995, gap = 5, and the 5-base clip only
+        reaches position 1000 without passing it, so overhang = 0.
+
+        Before the shared predicate, the right-end test was
+        ``aln_end + clip >= contig_len + 1``, which reduces to overhang >= 0 and
+        therefore accepted this read while ignoring min_clip entirely. The left
+        end has always rejected the equivalent case.
+        """
+        sam_lines = [
+            '@HD\tVN:1.0\tSO:coordinate',
+            '@SQ\tSN:contig1\tLN:1000',
+            'read1\t0\tcontig1\t946\t30\t50M5S\t*\t0\t0\t' + 'A' * 55 + '\t*',
+        ]
+
+        from io import StringIO
+
+        samfile = StringIO('\n'.join(sam_lines))
+        contig_dict = {'contig1': 1000}
+
+        result = processSamlines(
+            samfile,
+            contig_dict,
+            max_break=50,
+            min_clip=1,
+            min_anchor=10,
+            return_counts=True,
+        )
+
+        assert result['keepCount'] == 0
+        assert result['excluded_min_clip'] == 1
+
+    def test_right_overhang_honours_min_clip_threshold(self):
+        """Test that min_clip is enforced on the right end.
+
+        POS 946, 50M8S: aln_end = 995, gap = 5, overhang = 3. Accepted at
+        min_clip 3, rejected at 4.
+        """
+        sam_lines = [
+            '@HD\tVN:1.0\tSO:coordinate',
+            '@SQ\tSN:contig1\tLN:1000',
+            'read1\t0\tcontig1\t946\t30\t50M8S\t*\t0\t0\t' + 'A' * 58 + '\t*',
+        ]
+
+        from io import StringIO
+
+        def run(min_clip):
+            """
+            Run processSamlines over the fixture at a given min_clip.
+
+            Parameters
+            ----------
+            min_clip : int
+                Minimum bases required past the contig terminus.
+
+            Returns
+            -------
+            dict
+                Processing counters.
+            """
+            return processSamlines(
+                StringIO('\n'.join(sam_lines)),
+                {'contig1': 1000},
+                max_break=50,
+                min_clip=min_clip,
+                min_anchor=10,
+                return_counts=True,
+            )
+
+        assert run(3)['keepCount'] == 1
+        assert run(4)['keepCount'] == 0
+        assert run(4)['excluded_min_clip'] == 1
 
 
 class TestEnhancedStreamingSamFilterSecondary:
