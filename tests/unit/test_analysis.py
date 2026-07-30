@@ -202,14 +202,50 @@ class TestRankOverhangsByGain:
         assert ranked[0].read_name == 'flush'
         assert ranked[1].read_name == 'buried'
 
-    def test_length_breaks_ties_on_equal_gain(self):
-        """Test that raw clip length is the tiebreak when net gain is equal."""
-        short = OverhangInfo('AAAA', 4, 1, 100, 'short', True, 4, 96, 'c', 4)
-        long_ = OverhangInfo('C' * 10, 10, 7, 100, 'long', True, 10, 90, 'c', 4)
+    def test_least_trim_wins_on_equal_gain(self):
+        """Test that the candidate trimming least wins when gains are equal.
 
-        ranked = rank_overhangs_by_gain([short, long_])
+        Both contribute 4 novel bases, but one does it without discarding any
+        assembly while the other first trims 6 bases.
+        """
+        intact = OverhangInfo('AAAA', 4, 1, 100, 'intact', True, 4, 96, 'c', 4)
+        trimming = OverhangInfo('C' * 10, 10, 7, 100, 'trimming', True, 10, 90, 'c', 4)
 
-        assert ranked[0].read_name == 'long'
+        ranked = rank_overhangs_by_gain([intact, trimming])
+
+        assert ranked[0].read_name == 'intact'
+
+    def test_marginally_larger_gain_does_not_justify_trimming(self):
+        """Test that one extra base does not buy the right to trim 13.
+
+        Taken from contig01 of the mock dataset. Read L67 contributes one more
+        novel base than L91, but only by discarding 13 bases of polished
+        consensus and replacing them with a single raw read's sequence. L91
+        leaves the contig intact and is the better choice.
+        """
+        l91 = OverhangInfo('A' * 128, 128, 433, 560, 'L91', False, 128, 122, 'c', 128)
+        l67 = OverhangInfo('C' * 142, 142, 440, 547, 'L67', False, 142, 108, 'c', 129)
+
+        ranked = rank_overhangs_by_gain([l67, l91])
+
+        assert ranked[0].read_name == 'L91'
+
+    def test_materially_larger_gain_outranks_an_intact_candidate(self):
+        """Test that a gain clearing the margin wins despite trimming.
+
+        Trimming 13 bases to gain 50 more is worth it; trimming 13 to gain 1
+        is not. Only the margin separates the two cases.
+        """
+        intact = OverhangInfo(
+            'A' * 128, 128, 433, 560, 'intact', False, 128, 122, 'c', 128
+        )
+        better = OverhangInfo(
+            'C' * 191, 191, 440, 547, 'better', False, 191, 108, 'c', 178
+        )
+
+        ranked = rank_overhangs_by_gain([intact, better])
+
+        assert ranked[0].read_name == 'better'
 
     def test_rank_empty_list(self):
         """Test ranking empty list."""

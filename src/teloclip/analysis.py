@@ -281,27 +281,80 @@ def identify_outlier_contigs(
     return {'left_outliers': left_outliers, 'right_outliers': right_outliers}
 
 
-def rank_overhangs_by_gain(overhangs_list: List[OverhangInfo]) -> List[OverhangInfo]:
+# Candidates whose net gain falls within this margin of the best available are
+# treated as equally good, and the one trimming least assembly wins. The margin
+# is the larger of an absolute floor and a fraction of the best gain, so it stays
+# meaningful for both short and long overhangs.
+GAIN_MARGIN_BASES = 10
+GAIN_MARGIN_FRACTION = 0.05
+
+
+def rank_overhangs_by_gain(
+    overhangs_list: List[OverhangInfo],
+    margin_bases: int = GAIN_MARGIN_BASES,
+    margin_fraction: float = GAIN_MARGIN_FRACTION,
+) -> List[OverhangInfo]:
     """
-    Sort overhangs by the sequence they would actually add, descending.
+    Sort overhangs by the sequence they would add, preferring less trimming.
 
     Ranking is on ``net_gain`` rather than raw clip length. Applying an overhang
     trims the contig bases the read did not cover before grafting on the clip,
     so a long clip anchored well inside the contig can contribute less novel
-    sequence than a shorter clip flush with the terminus. Raw clip length is
-    used only to break ties.
+    sequence than a shorter clip flush with the terminus.
+
+    Maximising net gain alone is not quite right either, because trimming
+    discards polished assembly consensus and replaces it with a single raw
+    read's version of the same region. Gaining one extra base at the cost of
+    thirteen bases of consensus is a bad trade. Candidates are therefore grouped
+    into bands of comparable net gain, and within a band the one that trims
+    least wins. Only a materially larger gain, one that clears the margin,
+    outranks a candidate that leaves the contig intact.
 
     Parameters
     ----------
     overhangs_list : List[OverhangInfo]
         List of overhang information objects.
+    margin_bases : int, optional
+        Absolute floor on the band width, in bases (default: 10).
+    margin_fraction : float, optional
+        Band width as a fraction of the best available net gain (default: 0.05).
 
     Returns
     -------
     List[OverhangInfo]
-        Sorted list of overhangs, largest net gain first.
+        Sorted list of overhangs, best candidate first.
     """
-    return sorted(overhangs_list, key=lambda oh: (oh.net_gain, oh.length), reverse=True)
+    if not overhangs_list:
+        return []
+
+    best_gain = max(oh.net_gain for oh in overhangs_list)
+    # At least 1, so the band arithmetic below cannot divide by zero.
+    margin = max(1, margin_bases, int(best_gain * margin_fraction))
+
+    def sort_key(oh: OverhangInfo) -> Tuple[int, int, int, int]:
+        """
+        Build the ranking key for one overhang.
+
+        Parameters
+        ----------
+        oh : OverhangInfo
+            Overhang to rank.
+
+        Returns
+        -------
+        Tuple[int, int, int, int]
+            ``(band, trim, -net_gain, -length)``, ascending. Banding by distance
+            from the best gain keeps the ordering a proper total order, rather
+            than the intransitive mess a pairwise "within margin" test would
+            produce.
+        """
+        band = (best_gain - oh.net_gain) // margin
+        # The gap that gets trimmed is whatever part of the clip did not clear
+        # the terminus.
+        trim = oh.length - oh.net_gain
+        return (band, trim, -oh.net_gain, -oh.length)
+
+    return sorted(overhangs_list, key=sort_key)
 
 
 def detect_homopolymer_runs(
