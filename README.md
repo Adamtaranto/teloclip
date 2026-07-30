@@ -1,7 +1,7 @@
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](https://www.gnu.org/licenses/gpl-3.0)
 [![PyPI version](https://badge.fury.io/py/teloclip.svg)](https://badge.fury.io/py/teloclip)
 [![codecov](https://codecov.io/gh/adamtaranto/teloclip/graph/badge.svg?token=NBS8YPLZDT)](https://codecov.io/gh/adamtaranto/teloclip)
-[![install with bioconda](https://img.shields.io/badge/install%20with-bioconda-brightgreen.svg?style=flat)](http://bioconda.github.io/recipes/teloclip/README.html)
+[![BioConda Install](https://img.shields.io/conda/dn/bioconda/teloclip.svg?style=flag&label=BioConda%20install)](https://anaconda.org/bioconda/teloclip)
 [![Downloads](https://pepy.tech/badge/teloclip)](https://pepy.tech/project/teloclip)
 [![Docker Image](https://img.shields.io/docker/v/adamtaranto/teloclip?label=docker&color=blue)](https://hub.docker.com/r/adamtaranto/teloclip)
 [![Docker Pulls](https://img.shields.io/docker/pulls/adamtaranto/teloclip)](https://hub.docker.com/r/adamtaranto/teloclip)
@@ -90,15 +90,7 @@ This is the best way to ensure you have the latest development version.
 pip install git+https://github.com/Adamtaranto/teloclip.git
 ```
 
-4. Clone from this repository and install as a local Python package.
-
-Do this if you want to edit the code.
-
-```bash
-git clone https://github.com/Adamtaranto/teloclip.git && cd teloclip && pip install -e '.[dev]'
-```
-
-5. Use Docker for reproducible containerized environments.
+4. Use Docker for reproducible containerized environments.
 
 Ideal for pipelines and reproducible workflows. No local Python installation required.
 
@@ -482,5 +474,10 @@ Software provided under GPL-3 license.
 
 ## Star History
 
-[![Star History
-Chart](https://api.star-history.com/svg?repos=adamtaranto/teloclip&type=Date)](https://star-history.com/#adamtaranto/teloclip&Date)
+<a href="https://www.star-history.com/?repos=Adamtaranto%2Fteloclip&type=date&legend=top-left">
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=Adamtaranto/teloclip&type=date&theme=dark&legend=top-left&sealed_token=jCjxdn3HLLirH-ScvCrYTN-0ifrY4W7QfxFw9K0PsgyDTl_ibIlzfv5kFzeGd_7mzLL14Ftmm6SeBzyKBXHzdMOsjkyJERa1irqLV-QpsqZ6FlcKyytaZOLLbM72VECXt78_7k4-SXz6eh3F-nRAyMZMP6mBOXZJ4TyRHAAae4-w4s8SZ1Bx_F7-kgN2" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=Adamtaranto/teloclip&type=date&legend=top-left&sealed_token=jCjxdn3HLLirH-ScvCrYTN-0ifrY4W7QfxFw9K0PsgyDTl_ibIlzfv5kFzeGd_7mzLL14Ftmm6SeBzyKBXHzdMOsjkyJERa1irqLV-QpsqZ6FlcKyytaZOLLbM72VECXt78_7k4-SXz6eh3F-nRAyMZMP6mBOXZJ4TyRHAAae4-w4s8SZ1Bx_F7-kgN2" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=Adamtaranto/teloclip&type=date&legend=top-left&sealed_token=jCjxdn3HLLirH-ScvCrYTN-0ifrY4W7QfxFw9K0PsgyDTl_ibIlzfv5kFzeGd_7mzLL14Ftmm6SeBzyKBXHzdMOsjkyJERa1irqLV-QpsqZ6FlcKyytaZOLLbM72VECXt78_7k4-SXz6eh3F-nRAyMZMP6mBOXZJ4TyRHAAae4-w4s8SZ1Bx_F7-kgN2" />
+ </picture>
+</a>

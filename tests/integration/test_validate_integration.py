@@ -200,7 +200,7 @@ def run_integration_tests(quick: bool = False, verbose: bool = False) -> bool:
 
 
 def main():
-    """Main validation function."""
+    """Run the integration validation suite."""
     parser = argparse.ArgumentParser(
         description='Validate teloclip integration test framework'
     )

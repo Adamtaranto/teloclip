@@ -1,6 +1,4 @@
-"""
-Pytest configuration and fixtures for teloclip tests.
-"""
+"""Pytest configuration and fixtures for teloclip tests."""
 
 from pathlib import Path
 import tempfile

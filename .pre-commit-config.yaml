@@ -15,30 +15,29 @@ repos:
       - id: check-yaml
       - id: debug-statements
       - id: end-of-file-fixer
-      - id: end-of-file-fixer
       - id: name-tests-test
         args: [--pytest-test-first]
       - id: trailing-whitespace
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.14.3
+    rev: v0.16.0
     hooks:
       - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix, --show-fixes]
       - id: ruff-format
   - repo: https://github.com/numpy/numpydoc
-    rev: v1.9.0
+    rev: v1.11.0rc0
     hooks:
       - id: numpydoc-validation
         exclude: (tests/|docs/).*
   - repo: https://github.com/rhysd/actionlint
-    rev: v1.7.8
+    rev: v1.7.12
     hooks:
       - id: actionlint
   - repo: https://github.com/google/yamlfmt
-    rev: v0.20.0
+    rev: v0.21.0
     hooks:
       - id: yamlfmt
-  - repo: https://github.com/pre-commit/mirrors-prettier
-    rev: v4.0.0-alpha.8
-    hooks:
-      - id: prettier
+#  - repo: https://github.com/pre-commit/mirrors-prettier
+#    rev: v4.0.0-alpha.8
+#    hooks:
+#      - id: prettier

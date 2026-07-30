@@ -478,7 +478,7 @@ def write_sam_file(
 
 
 def main():
-    """Main function to generate synthetic SAM alignments."""
+    """Generate synthetic SAM alignments."""
     parser = argparse.ArgumentParser(
         description='Generate synthetic SAM alignments for teloclip integration testing'
     )

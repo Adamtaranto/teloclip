@@ -434,6 +434,50 @@ class TestDualEndOverhang:
             'Should end with right overhang'
         )
 
+    def test_end_motif_counts_are_windowed_per_end(self):
+        """Per-end motif counts cover only the terminal window plus that extension."""
+        contig_stats = self.create_dual_end_contig_stats('spanning_read_001')
+        # Plant a motif deep in the contig interior; it must not be counted.
+        original_sequence = 'A' * 240 + 'TTAGGG' + 'A' * 254
+
+        result = self.process_extension(
+            contig_name='short_contig',
+            contig_stats=contig_stats,
+            original_sequence=original_sequence,
+            min_extension=1,
+            max_homopolymer=100,
+            motif_patterns={'TTAGGG': 'TTAGGG', 'CCCTAA': 'CCCTAA'},
+            dry_run=False,
+            terminal_length=10,
+        )
+
+        assert result is not None
+
+        # Whole-sequence counts still see the interior match.
+        assert result.motif_counts['TTAGGG'] == 4  # 3 in the left overhang + 1 interior
+
+        # Per-end windows are 10 + 18 = 28bp and exclude the interior match.
+        assert result.end_motif_counts['left'] == {'TTAGGG': 3, 'CCCTAA': 0}
+        assert result.end_motif_counts['right'] == {'TTAGGG': 0, 'CCCTAA': 3}
+
+    def test_end_motif_counts_empty_without_patterns(self):
+        """No per-end counts are produced when no motifs were requested."""
+        contig_stats = self.create_dual_end_contig_stats('spanning_read_001')
+
+        result = self.process_extension(
+            contig_name='short_contig',
+            contig_stats=contig_stats,
+            original_sequence='A' * 500,
+            min_extension=1,
+            max_homopolymer=100,
+            motif_patterns=None,
+            dry_run=False,
+            terminal_length=10,
+        )
+
+        assert result is not None
+        assert result.end_motif_counts == {}
+
     def test_dual_end_with_competing_overhangs(self):
         """Test when the dual-end read competes with other shorter overhangs."""
         contig_stats = self.create_dual_end_contig_stats('long_spanning_read')

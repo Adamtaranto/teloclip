@@ -1,3 +1,5 @@
+"""Tests for the teloclip.motifs module."""
+
 import pytest
 
 from teloclip.motifs import (
@@ -10,6 +12,7 @@ from teloclip.motifs import (
 
 
 def test_check_sequence_for_patterns():
+    """Check sequences against a list of regex patterns."""
     # Test case with a simple DNA sequence and patterns
     dna_sequence = 'ATCGATCGATCG'
     regex_patterns = ['ATC', 'GAT', 'CGA']
@@ -33,6 +36,7 @@ def test_check_sequence_for_patterns():
 
 
 def test_count_regex_patterns_in_sequence():
+    """Count regex pattern occurrences in a sequence."""
     # Test case with a simple DNA sequence and patterns
     dna_sequence = 'ATCGATCGATCG'
     regex_patterns = ['ATC', 'GAT', 'CGA']
@@ -59,6 +63,7 @@ def test_count_regex_patterns_in_sequence():
 
 
 def test_format_pattern_counts():
+    """Format a pattern-count mapping for display."""
     # Test case with a simple pattern counts dictionary
     pattern_counts = {'ATC': 3, 'GAT': 1, 'CGA': 2}
     assert format_pattern_counts(pattern_counts) == 'ATC=3:GAT=1:CGA=2'
@@ -75,6 +80,7 @@ def test_format_pattern_counts():
 
 
 def test_count_continuous_runs():
+    """Count continuous runs of identical bases."""
     # Test case with a simple sequence
     assert count_continuous_runs('AAATTTGGCCCG') == [
         ('A', 3),
@@ -102,6 +108,7 @@ def test_count_continuous_runs():
 
 
 def test_construct_regex_pattern():
+    """Construct a regex pattern from a motif sequence."""
     # Test case with a simple motif
     motif_sequence = 'TTTAGGG'
     motif_tuples = count_continuous_runs(motif_sequence)

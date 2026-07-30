@@ -13,14 +13,15 @@ jobs:
         with:
           ref: ${{ github.sha }}
           token: ${{ secrets.GITHUB_TOKEN }}
-      - uses: astral-sh/ruff-action@v3
-        with:
-          src: "./src/teloclip ./tests"
-          args: "format"
+      # Run check --fix before format so that any fixes it applies get formatted.
       - uses: astral-sh/ruff-action@v3
         with:
           src: "./src/teloclip ./tests"
           args: "check --fix"
+      - uses: astral-sh/ruff-action@v3
+        with:
+          src: "./src/teloclip ./tests"
+          args: "format"
       - uses: isort/isort-action@v1
         with:
           configuration: "--settings-path=./pyproject.toml"

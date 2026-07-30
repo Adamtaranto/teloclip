@@ -33,10 +33,17 @@ dev = [
     "ruff",
 ]
 
-test = [
-        "pytest-cov",
-        "pytest",
-        ]
+docs = [
+    "zensical>=0.0.51",
+    "mkdocstrings-python",
+    "mkdocstrings",
+    "notebook",
+    "nbconvert",
+    "pymdown-extensions>=10.21.2,<11",
+    "seaborn",
+]
+
+test = ["pytest", "pytest-codspeed", "pytest-cov"]
 
 [project.urls]
 documentation = "https://github.com/adamtaranto/teloclip"
@@ -49,7 +56,14 @@ teloclip = "teloclip.cli:main"
 [tool.hatch.build]
 source = "src"
 
-exclude = ["environment.yml", ".github", ".vscode"]
+exclude = [
+    "environment.yml",
+    ".github",
+    ".vscode",
+    "tests",
+    "scripts",
+    "examples",
+]
 
 [tool.hatch.version]
 source = "vcs"
@@ -79,13 +93,24 @@ select = [
     "W", # pycodestyle warning rules
     "B", # flake8-bugbear rules
     "I", # isort rules
+    "D", # pydocstyle rules
 ]
 ignore = [
     "C901", # max-complexity-10
     "E501", # line-too-long
-    "I001", # isort-imports
+    #"I001", # isort-imports
     "B905", # `zip()` without an explicit `strict=` parameter
 ]
+
+[tool.ruff.lint.pydocstyle]
+convention = "numpy"
+
+# Mirror [tool.isort] below. Ruff does not read [tool.isort], so without this
+# the ruff "I" rules and the isort CI step disagree on import order.
+[tool.ruff.lint.isort]
+force-sort-within-sections = true
+known-first-party = ["teloclip"]
+known-third-party = ["biopython", "click", "pyfaidx", "pysam", "rich"]
 
 [tool.ruff.format]
 indent-style = "space"
@@ -116,3 +141,14 @@ override_SS05 = [ # allow docstrings to start with these words
     '^Assess ',
     '^Access ',
 ]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+disallow_untyped_defs = true
+
+[tool.pydocstyle]
+convention = "numpy"
+# Ignore files in directories named "tests"
+match-dir = "((?!tests).)*"

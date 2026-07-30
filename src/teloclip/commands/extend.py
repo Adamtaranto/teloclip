@@ -12,7 +12,7 @@ import logging
 from pathlib import Path
 import re
 import sys
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
 import click
 import pyfaidx
@@ -20,6 +20,7 @@ import pysam
 
 from ..analysis import ContigStats, calculate_overhang_statistics
 from ..motifs import make_fuzzy_motif_regex, make_motif_regex
+from ..reporting import fmt_delta, fmt_float, fmt_int, kv_table, md_table
 from ..seqops import read_fai, revComp
 from ..streaming_analysis import (
     process_single_contig_extension,
@@ -66,6 +67,92 @@ def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
                     ) from e
 
 
+def _extension_lengths(ext_info: Dict) -> Tuple[int, int]:
+    """
+    Extract the left and right extension lengths from an extension record.
+
+    Parameters
+    ----------
+    ext_info : Dict
+        Extension info dictionary as stored in ``extensions_applied``.
+
+    Returns
+    -------
+    Tuple[int, int]
+        Bases added at the left end and at the right end.
+    """
+    left = (
+        ext_info.get('left_overhang_length', 0)
+        if ext_info.get('has_left_extension', False)
+        else 0
+    )
+    right = (
+        ext_info.get('right_overhang_length', 0)
+        if ext_info.get('has_right_extension', False)
+        else 0
+    )
+    return left, right
+
+
+def _motif_gain_rows(
+    extensions_applied: Dict[str, dict],
+    terminal_motif_counts: Dict[str, Dict[str, Dict[str, int]]],
+    post_motif_counts: Dict[str, Dict[str, Dict[str, int]]],
+    screen_terminal_bases: int,
+) -> Tuple[List[List[str]], int]:
+    """
+    Build the per-end motif analysis table rows.
+
+    Parameters
+    ----------
+    extensions_applied : Dict[str, dict]
+        Extension records keyed by contig name.
+    terminal_motif_counts : Dict[str, Dict[str, Dict[str, int]]]
+        Pre-extension motif counts, ``contig -> end -> motif -> count``, counted
+        over the ``--screen-terminal-bases`` window.
+    post_motif_counts : Dict[str, Dict[str, Dict[str, int]]]
+        Post-extension motif counts over the same window plus the length of the
+        extension at that end.
+    screen_terminal_bases : int
+        Size of the pre-extension screening window, in bases.
+
+    Returns
+    -------
+    Tuple[List[List[str]], int]
+        Table rows and the total motif gain summed across all contig ends.
+    """
+    rows: List[List[str]] = []
+    total_gain = 0
+
+    for contig_name in sorted(post_motif_counts):
+        end_counts = post_motif_counts[contig_name]
+        pre_counts = terminal_motif_counts.get(contig_name, {})
+        left_added, right_added = _extension_lengths(
+            extensions_applied.get(contig_name, {})
+        )
+
+        for end, added in (('left', left_added), ('right', right_added)):
+            window = screen_terminal_bases + added
+            for motif_name in sorted(end_counts.get(end, {})):
+                post = end_counts[end][motif_name]
+                pre = pre_counts.get(end, {}).get(motif_name, 0)
+                gain = post - pre
+                total_gain += gain
+                rows.append(
+                    [
+                        contig_name,
+                        end,
+                        motif_name,
+                        fmt_int(window),
+                        fmt_int(pre),
+                        fmt_int(post),
+                        fmt_delta(gain),
+                    ]
+                )
+
+    return rows, total_gain
+
+
 def generate_extension_report(
     stats_dict: Dict[str, ContigStats],
     extensions_applied: Dict[str, dict],
@@ -73,200 +160,338 @@ def generate_extension_report(
     overall_stats: Dict[str, Dict[str, float]],
     excluded_contigs: List[str],
     warnings: List[str],
-    motif_stats: Dict[str, Dict[str, int]] = None,
-    terminal_motif_counts: Dict[str, Dict[str, Dict[str, int]]] = None,
+    motif_stats: Optional[Dict[str, Dict[str, int]]] = None,
+    terminal_motif_counts: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None,
     dry_run: bool = False,
+    post_motif_counts: Optional[Dict[str, Dict[str, Dict[str, int]]]] = None,
+    screen_terminal_bases: int = 0,
+    total_contigs: Optional[int] = None,
 ) -> str:
     """
-    Generate a comprehensive statistics report for contig extension analysis.
+    Generate a Markdown statistics report for a contig extension run.
+
+    The report opens with an at-a-glance summary and then presents per-contig
+    detail as GitHub-flavoured Markdown tables, which also read as aligned
+    plain text in a terminal.
 
     Parameters
     ----------
     stats_dict : Dict[str, ContigStats]
-        Dictionary mapping contig names to their statistics.
+        Overhang statistics for every contig with overhang support.
     extensions_applied : Dict[str, dict]
-        Dictionary of extensions that were applied to contigs.
+        Extension records keyed by contig name.
     outliers : Dict[str, List[str]]
-        Dictionary of outlier contigs by category.
+        Outlier contig names under the keys ``left_outliers`` and
+        ``right_outliers``.
     overall_stats : Dict[str, Dict[str, float]]
-        Overall statistics across all contigs.
+        Aggregate overhang statistics keyed by ``left``, ``right`` and
+        ``combined``.
     excluded_contigs : List[str]
-        List of contig names that were excluded from analysis.
+        Contigs excluded from extension by the user.
     warnings : List[str]
-        List of warning messages generated during analysis.
-    motif_stats : Dict[str, Dict[str, int]], optional
-        Statistics about motif occurrences. Default is None.
-    terminal_motif_counts : Dict[str, Dict[str, Dict[str, int]]], optional
-        Pre-extension terminal motif counts. Default is None.
+        Warning messages accumulated during the run.
+    motif_stats : Optional[Dict[str, Dict[str, int]]], optional
+        Whole-sequence motif counts per extended contig.
+    terminal_motif_counts : Optional[Dict[str, Dict[str, Dict[str, int]]]], optional
+        Pre-extension motif counts per contig end.
     dry_run : bool, optional
-        Whether this is a dry run (no actual extensions applied). Default is False.
+        Whether extensions were simulated rather than applied (default: False).
+    post_motif_counts : Optional[Dict[str, Dict[str, Dict[str, int]]]], optional
+        Post-extension motif counts per contig end, counted over the screening
+        window plus the extension length at that end.
+    screen_terminal_bases : int, optional
+        Size of the terminal screening window in bases (default: 0).
+    total_contigs : Optional[int], optional
+        Number of contigs in the input assembly. Falls back to the number of
+        contigs with overhang support when not supplied.
 
     Returns
     -------
     str
-        Formatted statistics report as a multi-line string.
+        The rendered Markdown report.
     """
-    report_lines = []
+    motif_stats = motif_stats or {}
+    terminal_motif_counts = terminal_motif_counts or {}
+    post_motif_counts = post_motif_counts or {}
 
+    lines: List[str] = []
+
+    def section(title: str, body: str) -> None:
+        """
+        Append a titled section to the report, skipping empty bodies.
+
+        Parameters
+        ----------
+        title : str
+            Section heading text, without the leading ``##``.
+        body : str
+            Rendered section body.
+
+        Returns
+        -------
+        None
+            The section is appended to the enclosing ``lines`` list.
+        """
+        if not body:
+            return
+        lines.append(f'## {title}')
+        lines.append('')
+        lines.append(body)
+        lines.append('')
+
+    # ------------------------------------------------------------------
+    # Title
+    # ------------------------------------------------------------------
+    title = 'Teloclip Extend Report'
     if dry_run:
-        report_lines.append('# Teloclip Extend Statistics Report (DRY RUN)')
-    else:
-        report_lines.append('# Teloclip Extend Statistics Report')
-    report_lines.append('=' * 50)
-    report_lines.append('')
+        title += ' (dry run)'
+    lines.append(f'# {title}')
+    lines.append('')
 
-    # Overall statistics
-    report_lines.append('## Overall Overhang Statistics')
-    for category, stats in overall_stats.items():
-        report_lines.append(f'\n### {category.title()} Overhangs')
-        for metric, value in stats.items():
-            report_lines.append(f'  {metric}: {value:.2f}')
+    # ------------------------------------------------------------------
+    # Summary
+    # ------------------------------------------------------------------
+    n_contigs = total_contigs if total_contigs is not None else len(stats_dict)
+    ends_extended = 0
+    total_gained = 0
+    total_trimmed = 0
 
-    report_lines.append('')
+    for ext_info in extensions_applied.values():
+        left_added, right_added = _extension_lengths(ext_info)
+        ends_extended += int(left_added > 0) + int(right_added > 0)
+        total_gained += left_added + right_added
+        total_trimmed += ext_info.get('left_trim_length', 0) + ext_info.get(
+            'right_trim_length', 0
+        )
 
+    motif_rows, total_motif_gain = _motif_gain_rows(
+        extensions_applied,
+        terminal_motif_counts,
+        post_motif_counts,
+        screen_terminal_bases,
+    )
+
+    motif_names = sorted(
+        {
+            motif
+            for counts in post_motif_counts.values()
+            for end in counts.values()
+            for motif in end
+        }
+    )
+
+    summary_pairs = [
+        ('Mode', 'dry run (no sequences written)' if dry_run else 'extension applied'),
+        ('Contigs in assembly', fmt_int(n_contigs)),
+        ('Contigs with overhang support', fmt_int(len(stats_dict))),
+        ('Contigs extended', fmt_int(len(extensions_applied))),
+        (
+            'Contig ends extended',
+            f'{fmt_int(ends_extended)} of {fmt_int(n_contigs * 2)}',
+        ),
+        ('Total bases added', fmt_int(total_gained)),
+        ('Total bases trimmed back', fmt_int(total_trimmed)),
+    ]
+    if motif_names:
+        summary_pairs.append(('Motifs counted', ', '.join(motif_names)))
+        summary_pairs.append(('Total motif gain', fmt_delta(total_motif_gain)))
+    if screen_terminal_bases > 0:
+        summary_pairs.append(
+            ('Terminal screening window', f'{fmt_int(screen_terminal_bases)} bp')
+        )
+    summary_pairs.append(('Contigs excluded', fmt_int(len(excluded_contigs))))
+    summary_pairs.append(('Warnings', fmt_int(len(warnings))))
+
+    section('Summary', kv_table(summary_pairs))
+
+    # ------------------------------------------------------------------
     # Extensions applied
-    if dry_run:
-        report_lines.append('## Extensions That Would Be Applied')
-        report_lines.append(
-            f'Total contigs that would be extended: {len(extensions_applied)}'
+    # ------------------------------------------------------------------
+    ext_rows: List[List[str]] = []
+    for contig_name in sorted(extensions_applied):
+        ext_info = extensions_applied[contig_name]
+        left_added, right_added = _extension_lengths(ext_info)
+        ext_rows.append(
+            [
+                contig_name,
+                fmt_int(ext_info.get('original_length', 0)),
+                fmt_int(ext_info.get('final_length', 0)),
+                fmt_delta(left_added),
+                fmt_delta(right_added),
+                fmt_delta(left_added + right_added),
+                ext_info.get('left_read_name', '-') if left_added else '-',
+                ext_info.get('right_read_name', '-') if right_added else '-',
+                fmt_int(ext_info.get('left_trim_length', 0)),
+                fmt_int(ext_info.get('right_trim_length', 0)),
+            ]
         )
-    else:
-        report_lines.append('## Extensions Applied')
-        report_lines.append(f'Total contigs extended: {len(extensions_applied)}')
-    report_lines.append('')
 
-    for contig_name, ext_info in extensions_applied.items():
-        report_lines.append(f'### {contig_name}')
-        report_lines.append(f'  Original length: {ext_info["original_length"]:,}')
-        report_lines.append(f'  Final length: {ext_info["final_length"]:,}')
+    section(
+        'Extensions That Would Be Applied' if dry_run else 'Extensions Applied',
+        md_table(
+            [
+                'Contig',
+                'Original bp',
+                'Final bp',
+                'Left +bp',
+                'Right +bp',
+                'Total +bp',
+                'Left read',
+                'Right read',
+                'Left trim',
+                'Right trim',
+            ],
+            ext_rows,
+            align=['l', 'r', 'r', 'r', 'r', 'r', 'l', 'l', 'r', 'r'],
+        ),
+    )
 
-        # Report left extension if present
-        if ext_info.get('has_left_extension', False):
-            left_length = ext_info.get('left_overhang_length', 0)
-            left_read = ext_info.get('left_read_name', 'unknown')
-            left_trim = ext_info.get('left_trim_length', 0)
-            report_lines.append(
-                f'  Left extension: +{left_length}bp from read {left_read}'
+    # ------------------------------------------------------------------
+    # Motif analysis
+    # ------------------------------------------------------------------
+    if motif_rows:
+        lines.append('## Telomere Motif Analysis')
+        lines.append('')
+        lines.append(
+            f'Counts are per contig end. `Pre` counts the {fmt_int(screen_terminal_bases)} bp '
+            'terminal screening window of the original contig; `Post` counts that same window '
+            'plus the bases added at that end, in the extended contig.'
+        )
+        lines.append('')
+        lines.append(
+            md_table(
+                ['Contig', 'End', 'Motif', 'Window bp', 'Pre', 'Post', 'Gain'],
+                motif_rows,
+                align=['l', 'l', 'l', 'r', 'r', 'r', 'r'],
             )
-            if left_trim > 0:
-                report_lines.append(f'    Left bases trimmed: {left_trim}')
+        )
+        lines.append('')
+        lines.append(f'**Total motif gain: {fmt_delta(total_motif_gain)}**')
+        lines.append('')
 
-        # Report right extension if present
-        if ext_info.get('has_right_extension', False):
-            right_length = ext_info.get('right_overhang_length', 0)
-            right_read = ext_info.get('right_read_name', 'unknown')
-            right_trim = ext_info.get('right_trim_length', 0)
-            report_lines.append(
-                f'  Right extension: +{right_length}bp from read {right_read}'
+    # ------------------------------------------------------------------
+    # Overhang statistics
+    # ------------------------------------------------------------------
+    n_left = sum(cs.left_count for cs in stats_dict.values())
+    n_right = sum(cs.right_count for cs in stats_dict.values())
+    set_counts = {'left': n_left, 'right': n_right, 'combined': n_left + n_right}
+
+    stat_rows: List[List[str]] = []
+    for label in ('left', 'right', 'combined'):
+        stats = overall_stats.get(label)
+        if not stats:
+            continue
+        stat_rows.append(
+            [
+                label.title(),
+                fmt_int(set_counts[label]),
+                fmt_float(stats.get('mean', 0.0)),
+                fmt_float(stats.get('median', 0.0)),
+                fmt_float(stats.get('std_dev', 0.0)),
+                fmt_int(int(stats.get('min', 0))),
+                fmt_int(int(stats.get('max', 0))),
+            ]
+        )
+
+    section(
+        'Overhang Length Statistics',
+        md_table(
+            ['Set', 'N', 'Mean', 'Median', 'SD', 'Min', 'Max'],
+            stat_rows,
+            align=['l', 'r', 'r', 'r', 'r', 'r', 'r'],
+        ),
+    )
+
+    # ------------------------------------------------------------------
+    # Per-contig overhang support
+    # ------------------------------------------------------------------
+    support_rows: List[List[str]] = []
+    for contig_name in sorted(stats_dict):
+        contig_stats = stats_dict[contig_name]
+        longest_left = max((oh.length for oh in contig_stats.left_overhangs), default=0)
+        longest_right = max(
+            (oh.length for oh in contig_stats.right_overhangs), default=0
+        )
+        ext_info = extensions_applied.get(contig_name, {})
+        left_added, right_added = _extension_lengths(ext_info)
+        if left_added and right_added:
+            extended = 'both'
+        elif left_added:
+            extended = 'left'
+        elif right_added:
+            extended = 'right'
+        else:
+            extended = 'no'
+        support_rows.append(
+            [
+                contig_name,
+                fmt_int(contig_stats.contig_length),
+                fmt_int(contig_stats.left_count),
+                fmt_int(contig_stats.right_count),
+                fmt_int(longest_left),
+                fmt_int(longest_right),
+                extended,
+            ]
+        )
+
+    if support_rows:
+        lines.append('## Per-Contig Overhang Support')
+        lines.append('')
+        lines.append(
+            'Read counts are clipped reads anchored at that contig end which passed '
+            'filtering. `Longest` is the longest overhang seen at that end, which is the '
+            'sequence used for extension unless it failed a homopolymer or length check.'
+        )
+        lines.append('')
+        lines.append(
+            md_table(
+                [
+                    'Contig',
+                    'Length',
+                    'Left reads',
+                    'Right reads',
+                    'Longest left',
+                    'Longest right',
+                    'Extended',
+                ],
+                support_rows,
+                align=['l', 'r', 'r', 'r', 'r', 'r', 'l'],
             )
-            if right_trim > 0:
-                report_lines.append(f'    Right bases trimmed: {right_trim}')
+        )
+        lines.append('')
 
-        # Fallback for backward compatibility (single extension)
-        if not ext_info.get('has_left_extension', False) and not ext_info.get(
-            'has_right_extension', False
-        ):
-            direction = 'Left' if ext_info.get('is_left', False) else 'Right'
-            report_lines.append(f'  Direction: {direction}')
-            report_lines.append(
-                f'  Extension length: {ext_info.get("overhang_length", 0)}'
-            )
-            report_lines.append(
-                f'  Source read: {ext_info.get("read_name", "unknown")}'
-            )
-            if ext_info.get('trim_length', 0) > 0:
-                report_lines.append(f'  Bases trimmed: {ext_info["trim_length"]}')
+    # ------------------------------------------------------------------
+    # Excluded contigs and outliers
+    # ------------------------------------------------------------------
+    exclusion_rows = [[contig, 'user exclusion list'] for contig in excluded_contigs]
+    for contig in outliers.get('left_outliers', []):
+        exclusion_rows.append([contig, 'left overhang outlier'])
+    for contig in outliers.get('right_outliers', []):
+        exclusion_rows.append([contig, 'right overhang outlier'])
 
-        report_lines.append('')
+    section(
+        'Excluded Contigs',
+        md_table(['Contig', 'Reason'], exclusion_rows, align=['l', 'l']),
+    )
 
-    # Terminal motif screening results
-    if terminal_motif_counts:
-        report_lines.append('## Terminal Region Motif Analysis (Pre-Extension)')
-        report_lines.append('')
-        for contig_name, terminal_counts in terminal_motif_counts.items():
-            left_total = sum(terminal_counts['left'].values())
-            right_total = sum(terminal_counts['right'].values())
-            if left_total > 0 or right_total > 0:
-                report_lines.append(f'### {contig_name}')
-                report_lines.append(f'  Left terminal: {left_total} total motifs')
-                for motif_name, count in terminal_counts['left'].items():
-                    if count > 0:
-                        report_lines.append(f'    {motif_name}: {count}')
-                report_lines.append(f'  Right terminal: {right_total} total motifs')
-                for motif_name, count in terminal_counts['right'].items():
-                    if count > 0:
-                        report_lines.append(f'    {motif_name}: {count}')
-                report_lines.append('')
-
-    # Extension motif analysis results
-    if motif_stats:
-        report_lines.append('## Extension Region Motif Analysis (Post-Extension)')
-        report_lines.append('')
-        for contig_name, motif_counts in motif_stats.items():
-            if any(count > 0 for count in motif_counts.values()):
-                report_lines.append(f'### {contig_name}')
-                for motif_name, count in motif_counts.items():
-                    if count > 0:
-                        report_lines.append(f'  {motif_name}: {count} matches')
-
-                        # Calculate gain if terminal counts available
-                        if (
-                            terminal_motif_counts
-                            and contig_name in terminal_motif_counts
-                        ):
-                            # Determine which terminal was extended
-                            extension_info = extensions_applied.get(contig_name, {})
-                            if extension_info:
-                                is_left = extension_info.get('is_left', False)
-                                terminal_side = 'left' if is_left else 'right'
-                                pre_count = terminal_motif_counts[contig_name][
-                                    terminal_side
-                                ].get(motif_name, 0)
-                                gain = count - pre_count
-                                if gain != 0:
-                                    report_lines.append(
-                                        f'    Gain from extension: {gain:+d}'
-                                    )
-                report_lines.append('')
-
-    # Outliers detected
-    if any(outliers.values()):
-        report_lines.append('## Outlier Contigs Detected')
-        if outliers['left_outliers']:
-            report_lines.append(
-                f'Left outliers: {", ".join(outliers["left_outliers"])}'
-            )
-        if outliers['right_outliers']:
-            report_lines.append(
-                f'Right outliers: {", ".join(outliers["right_outliers"])}'
-            )
-        report_lines.append('')
-
-    # Excluded contigs
-    if excluded_contigs:
-        report_lines.append('## Excluded Contigs')
-        for contig in excluded_contigs:
-            report_lines.append(f'  {contig}')
-        report_lines.append('')
-
+    # ------------------------------------------------------------------
     # Warnings
+    # ------------------------------------------------------------------
     if warnings:
-        report_lines.append('## Warnings')
+        lines.append('## Warnings')
+        lines.append('')
         for warning in warnings:
-            report_lines.append(f'  - {warning}')
-        report_lines.append('')
+            lines.append(f'- {warning}')
+        lines.append('')
 
-    # Per-contig summary
-    report_lines.append('## Per-Contig Overhang Summary')
-    report_lines.append('Contig\tLength\tLeft_Count\tRight_Count')
-
-    for contig_name, contig_stats in stats_dict.items():
-        report_lines.append(
-            f'{contig_name}\t{contig_stats.contig_length}\t'
-            f'{contig_stats.left_count}\t{contig_stats.right_count}'
+    if extensions_applied and not dry_run:
+        lines.append(
+            'Note: extended contigs should be polished (e.g. Medaka for ONT data, '
+            'Pypolca for Illumina data) before downstream analysis.'
         )
+        lines.append('')
 
-    return '\n'.join(report_lines)
+    return '\n'.join(lines).rstrip() + '\n'
 
 
 def count_terminal_motifs(
@@ -561,7 +786,6 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
     Dict[str, re.Pattern]
         Dictionary mapping motif sequences to compiled regex patterns.
     """
-
     # Initialize motif patterns dictionary
     motif_patterns = {}
     # Parse comma-delimited motifs
@@ -864,6 +1088,7 @@ def extend(
             excluded_contigs = []
             warnings = []
             motif_stats = {}
+            post_motif_counts = {}
             all_stats = {}
 
             # Collect statistics for contigs that meet extension criteria
@@ -909,6 +1134,7 @@ def extend(
                     max_homopolymer=max_homopolymer,
                     motif_patterns=motif_patterns,
                     dry_run=dry_run,
+                    terminal_length=screen_terminal_bases,
                 )
 
                 if extension_result:
@@ -918,6 +1144,10 @@ def extend(
                     warnings.extend(extension_result.warnings)
                     if extension_result.motif_counts:
                         motif_stats[contig_name] = extension_result.motif_counts
+                    if extension_result.end_motif_counts:
+                        post_motif_counts[contig_name] = (
+                            extension_result.end_motif_counts
+                        )
 
                     # Log successful extension(s)
                     ext_info = extension_result.extension_info
@@ -999,6 +1229,9 @@ def extend(
             motif_stats,
             terminal_motif_counts,
             dry_run,
+            post_motif_counts=post_motif_counts,
+            screen_terminal_bases=screen_terminal_bases,
+            total_contigs=len(contig_dict),
         )
 
         # Write outputs

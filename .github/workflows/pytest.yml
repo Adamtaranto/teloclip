@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13"]
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
       # Checkout the latest commit associated with the PR
       - uses: actions/checkout@v7
@@ -49,7 +49,7 @@ jobs:
       # Only upload coverage for the latest Python version
       - name: Upload coverage reports to Codecov
         uses: codecov/codecov-action@v7
-        if: matrix.python-version == '3.13'
+        if: matrix.python-version == '3.14'
         with:
           token: ${{ secrets.CODECOV_TOKEN }}
           slug: Adamtaranto/teloclip
