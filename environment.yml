@@ -8,14 +8,8 @@ dependencies:
   - pip
   - pyfaidx
   - pysam
-  - python >=3.12
+  - python 3.14
   - samtools
-  - pip:
-      - click
-      - hatch
-      - isort
-      - numpydoc-validation
-      - pre-commit
-      - pytest
-      - pytest-cov
-      - ruff
+#  - pip:
+#      - isort
+#      - ruff

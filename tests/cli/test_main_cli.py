@@ -31,7 +31,8 @@ class CLIRunner:
             input_data: Data to pass to stdin
             check: If True, raise CalledProcessError on non-zero exit
 
-        Returns:
+        Returns
+        -------
             Tuple of (exit_code, stdout, stderr)
         """
         try:
@@ -68,7 +69,8 @@ class CLIRunner:
             input_data: Data to pass to stdin
             check: If True, raise CalledProcessError on non-zero exit
 
-        Returns:
+        Returns
+        -------
             Tuple of (exit_code, stdout, stderr)
         """
         cmd = ['teloclip'] + args

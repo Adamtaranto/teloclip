@@ -2,13 +2,12 @@
 # package ecosystems to update and where the package manifests are located.
 # Please see the documentation for all configuration options:
 # https://docs.github.com/code-security/dependabot/dependabot-version-updates/configuration-options-for-the-dependabot.yml-file
-
 # Set update schedule for GitHub Actions and other dependencies
 version: 2
 updates:
   # Enable version updates for GitHub Actions
   - package-ecosystem: "github-actions"
     # Check for workflow files in the .github/workflows directory
-    directory: "/" 
+    directory: "/"
     schedule:
       interval: "monthly" # Check for updates every month

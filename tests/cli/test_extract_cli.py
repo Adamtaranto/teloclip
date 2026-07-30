@@ -50,7 +50,8 @@ def test_files(test_data_dir, temp_dir):
             corrupt_files: Create corrupted versions of files
             empty_files: Create empty versions of files
 
-        Returns:
+        Returns
+        -------
             Dict with file paths
         """
         if copy_to_temp or corrupt_files or empty_files:

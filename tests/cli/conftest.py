@@ -31,7 +31,8 @@ class CLIRunner:
             input_data: Data to pass to stdin
             check: If True, raise CalledProcessError on non-zero exit
 
-        Returns:
+        Returns
+        -------
             Tuple of (exit_code, stdout, stderr)
         """
         try:
@@ -68,7 +69,8 @@ class CLIRunner:
             input_data: Data to pass to stdin
             check: If True, raise CalledProcessError on non-zero exit
 
-        Returns:
+        Returns
+        -------
             Tuple of (exit_code, stdout, stderr)
         """
         cmd = ['teloclip'] + args
@@ -136,7 +138,8 @@ def create_test_files(temp_dir, minimal_sam_content, minimal_fasta_content):
             corrupt_sam: Create corrupted SAM file
             empty_files: Create empty files
 
-        Returns:
+        Returns
+        -------
             Dict with file paths
         """
         files = {}

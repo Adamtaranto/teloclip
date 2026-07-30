@@ -51,7 +51,7 @@ To set up your development environment:
 1. Clone your fork of the repository
 
 ```bash
-git clone https://github.com/adamtaranto/teloclip.git
+git clone https://github.com/{your_user_name}/teloclip.git
 cd teloclip
 ```
 
@@ -65,7 +65,7 @@ conda activate teloclip
 3. Install development dependencies
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,docs,test]"
 ```
 
 4. Enable git pre-commit checks
