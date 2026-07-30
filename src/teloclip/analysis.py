@@ -26,6 +26,10 @@ class OverhangInfo:
     clip_length: int
     anchor_length: int
     contig_name: str
+    # Bases the contig grows by if this overhang is applied: the clipped bases
+    # lying past the terminus, i.e. clip length minus the gap that gets trimmed.
+    # See teloclip.overhang for the full coordinate convention.
+    net_gain: int = 0
 
 
 @dataclass
