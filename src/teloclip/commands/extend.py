@@ -29,7 +29,6 @@ from ..streaming_analysis import (
 from ..streaming_io import (
     BufferedContigWriter,
     StreamingGenomeProcessor,
-    copy_unmodified_contigs,
     validate_indexed_files,
 )
 
@@ -1217,20 +1216,41 @@ def extend(
                     logging.info(f'Writing extended sequences to {output_fasta}...')
                 else:
                     logging.info('Writing extended sequences to stdout...')
+                # Write in a single pass over the reference index, so output
+                # contig order matches input order. Writing all extended
+                # contigs first and appending the rest afterwards would shunt
+                # every excluded, unsupported or failed contig to the end of
+                # the file, breaking any downstream tool that assumes
+                # input/output correspondence.
                 with BufferedContigWriter(output_fasta) as writer:
-                    # Write extended contigs using stored results
-                    extended_contig_names = set()
-                    for contig_name, extension_result in extension_results.items():
-                        writer.write_contig(
-                            contig_name, extension_result.extended_sequence
-                        )
-                        extended_contig_names.add(contig_name)
-                        logging.debug(f'Wrote extended sequence for {contig_name}')
+                    missing = 0
+                    for contig_name in contig_dict:
+                        extension_result = extension_results.get(contig_name)
+                        if extension_result is not None:
+                            writer.write_contig(
+                                contig_name, extension_result.extended_sequence
+                            )
+                            logging.debug(f'Wrote extended sequence for {contig_name}')
+                            continue
 
-                    # Copy unmodified contigs
-                    copy_unmodified_contigs(
-                        processor, writer, extended_contig_names, contig_dict
-                    )
+                        try:
+                            writer.write_contig(
+                                contig_name,
+                                processor.get_contig_sequence(contig_name),
+                            )
+                        except KeyError:
+                            # Present in the .fai but not the FASTA itself.
+                            missing += 1
+                            logging.warning(
+                                f'Contig {contig_name} is in the index but not the '
+                                'FASTA; omitted from output'
+                            )
+
+                    if missing:
+                        logging.warning(
+                            f'{missing} indexed contig(s) were missing from the '
+                            'FASTA and are absent from the output'
+                        )
 
             bam_file_handle.close()
 

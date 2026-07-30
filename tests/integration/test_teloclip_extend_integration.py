@@ -118,6 +118,28 @@ class TeloclipExtendRunner:
         }
 
 
+def read_fasta_order(fasta_path: Path) -> List[str]:
+    """
+    Read FASTA record names in the order they appear in the file.
+
+    Parameters
+    ----------
+    fasta_path : Path
+        Path to a FASTA file.
+
+    Returns
+    -------
+    List[str]
+        Record names, first token of each header, in file order.
+    """
+    names = []
+    with open(fasta_path, 'r') as f:
+        for line in f:
+            if line.startswith('>'):
+                names.append(line[1:].strip().split()[0])
+    return names
+
+
 def read_fasta_sequences(fasta_path: Path) -> Dict[str, str]:
     """Read FASTA file and return dictionary of sequences."""
     sequences = {}
@@ -394,6 +416,56 @@ class TestContigExclusion:
             extended_len = len(extended_seqs[excluded])
             assert extended_len == original_len, (
                 f'Excluded contig {excluded} was extended: {original_len} -> {extended_len}'
+            )
+
+
+class TestOutputOrdering:
+    """Test that output contig order matches the input assembly."""
+
+    def test_output_order_matches_input(self, runner, temp_dir, test_data_available):
+        """Test that extended output preserves input contig order."""
+        result = runner.run_extend(SYNTHETIC_FASTA, SYNTHETIC_BAM)
+
+        assert result['returncode'] == 0
+
+        assert read_fasta_order(result['output_files']['extended_fasta']) == (
+            read_fasta_order(SYNTHETIC_FASTA)
+        )
+
+    def test_output_order_preserved_with_exclusions(
+        self, runner, temp_dir, test_data_available
+    ):
+        """Test that excluded contigs stay in place rather than moving to the end.
+
+        Extended and non-extended contigs were previously written in two
+        separate passes, so every excluded, unsupported or failed contig was
+        appended after the extended ones. Anything downstream that assumes
+        input/output correspondence would silently break.
+        """
+        result = runner.run_extend(
+            SYNTHETIC_FASTA, SYNTHETIC_BAM, exclude_contigs=['contig_2', 'contig_4']
+        )
+
+        assert result['returncode'] == 0
+
+        assert read_fasta_order(result['output_files']['extended_fasta']) == (
+            read_fasta_order(SYNTHETIC_FASTA)
+        )
+
+    def test_no_contig_is_shorter_than_its_input(
+        self, runner, temp_dir, test_data_available
+    ):
+        """Test that extension never shortens a contig."""
+        result = runner.run_extend(SYNTHETIC_FASTA, SYNTHETIC_BAM)
+
+        assert result['returncode'] == 0
+
+        original = read_fasta_sequences(SYNTHETIC_FASTA)
+        extended = read_fasta_sequences(result['output_files']['extended_fasta'])
+
+        for name, seq in original.items():
+            assert len(extended[name]) >= len(seq), (
+                f'{name} was shortened: {len(seq)} -> {len(extended[name])}'
             )
 
 

@@ -7,7 +7,7 @@ loading entire files into memory, using pysam for indexed access.
 
 from pathlib import Path
 import sys
-from typing import Dict, Iterator, Optional, Tuple, Union
+from typing import Iterator, Optional, Tuple, Union
 
 from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
@@ -331,33 +331,3 @@ def validate_indexed_files(
         )
 
     return True, ''
-
-
-def copy_unmodified_contigs(
-    processor: StreamingGenomeProcessor,
-    writer: BufferedContigWriter,
-    modified_contigs: set,
-    contig_dict: Dict[str, int],
-) -> None:
-    """
-    Copy unmodified contigs from input to output.
-
-    Parameters
-    ----------
-    processor : StreamingGenomeProcessor
-        Processor for accessing original sequences.
-    writer : BufferedContigWriter
-        Writer for output.
-    modified_contigs : set
-        Set of contig names that were modified (to skip).
-    contig_dict : Dict[str, int]
-        Dictionary of all contigs and their lengths.
-    """
-    for contig_name in contig_dict:
-        if contig_name not in modified_contigs:
-            try:
-                sequence = processor.get_contig_sequence(contig_name)
-                writer.write_contig(contig_name, sequence)
-            except KeyError:
-                # Contig not found in FASTA (should have been caught earlier)
-                continue
