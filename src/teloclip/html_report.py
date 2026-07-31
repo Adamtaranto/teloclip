@@ -915,16 +915,22 @@ svg .pt:hover .dot {{ r: 6; }}
 .ref {{ color: var(--ink); }}
 .anchor {{ color: var(--muted); }}
 .gap {{ color: var(--axis); }}
-.aln-ruler {{ position: relative; height: 1.45em; }}
-.aln-ruler .aln-seq {{ position: relative; display: inline-block; }}
+.aln-ruler {{ position: relative; height: 2.6em; }}
+.aln-ruler .aln-seq {{ position: relative; display: inline-block; height: 100%; }}
 .ruler .tick {{
   /* No font-size here: `left` is expressed in `ch`, which must resolve
      against the 12px monospace grid the sequences use. Shrinking the tick
-     would shrink its `ch` and drift the scale off the bases. */
-  position: absolute; top: 0; white-space: nowrap;
-  border-left: 1px solid var(--axis); padding-left: 2px;
+     would shrink its `ch` and drift the scale off the bases.
+     The mark occupies only the lower part of the row so the label can sit
+     above it with clear air between the numbers and the first read. */
+  position: absolute; top: 1.5em; bottom: 0;
+  border-left: 1px solid var(--axis);
 }}
-.ruler .tick i {{ font-style: normal; font-size: 10px; color: var(--muted); }}
+.ruler .tick i {{
+  position: absolute; bottom: 100%; left: 0; padding: 0 0 3px 3px;
+  font-style: normal; font-size: 10px; line-height: 1.1;
+  color: var(--muted); white-space: nowrap;
+}}
 .aln-read {{ cursor: default; }}
 .aln-read:hover {{ background: color-mix(in srgb, var(--left) 10%, transparent); }}
 .both {{ color: var(--critical); margin-right: .25rem; }}
@@ -954,7 +960,20 @@ mark {{ background: var(--motif); color: inherit; border-radius: 2px; }}
 .table-view {{ margin-top: .75rem; font-size: .85rem; }}
 .table-view summary {{ cursor: pointer; color: var(--ink2); }}
 .table-view table {{ margin-top: .5rem; }}
-footer {{ margin-top: 3rem; color: var(--muted); font-size: .8rem; }}
+footer {{
+  margin-top: 3rem; padding-top: 1rem; border-top: 1px solid var(--grid);
+  color: var(--ink2); font-size: .8rem;
+}}
+footer dl {{ display: grid; grid-template-columns: max-content 1fr;
+  gap: .3rem .9rem; margin: 0; }}
+footer dt {{ color: var(--muted); text-transform: uppercase;
+  letter-spacing: .04em; font-size: .72rem; padding-top: .1rem; }}
+footer dd {{ margin: 0; }}
+footer code {{
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: .78rem; white-space: pre-wrap; word-break: break-all;
+  color: var(--ink);
+}}
 """
 
 
@@ -973,6 +992,7 @@ def render_html_report(
     max_overhang: int = 300,
     version: str = '',
     command: str = '',
+    generated: str = '',
 ) -> str:
     """
     Render the full HTML report.
@@ -1005,7 +1025,9 @@ def render_html_report(
     version : str, optional
         Teloclip version, for the footer.
     command : str, optional
-        Command line that produced the report.
+        Command line that produced the report, verbatim.
+    generated : str, optional
+        Timestamp for the footer.
 
     Returns
     -------
@@ -1168,8 +1190,24 @@ unmodified.</p><ul>{items}</ul></div>
 </div>
 """
 
-    footer_bits = [b for b in (f'teloclip {version}' if version else '', command) if b]
-    footer = '<br>'.join(escape(b) for b in footer_bits)
+    # Provenance: what produced this file, and exactly how. Labelled rather
+    # than run together, so the version cannot be mistaken for part of the
+    # command line.
+    footer_rows = [('Version', f'teloclip {version}' if version else 'teloclip')]
+    footer_rows.append(('Generated', generated))
+    if command:
+        footer_rows.append(('Command', command))
+
+    footer = (
+        '<dl>'
+        + ''.join(
+            f'<dt>{escape(k)}</dt><dd>'
+            + (f'<code>{escape(v)}</code>' if k == 'Command' else escape(v))
+            + '</dd>'
+            for k, v in footer_rows
+        )
+        + '</dl>'
+    )
 
     return f"""<!doctype html>
 <html lang="en">

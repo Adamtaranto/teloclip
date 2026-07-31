@@ -8,9 +8,11 @@ This version is optimized for large genomes using streaming I/O and indexed acce
 to avoid loading entire genomes into memory.
 """
 
+from datetime import datetime
 import logging
 from pathlib import Path
 import re
+import shlex
 import sys
 from typing import Dict, List, Optional, Tuple
 
@@ -1649,7 +1651,11 @@ def extend(
                     max_reads=max(1, html_max_reads),
                     max_overhang=HTML_MAX_OVERHANG,
                     version=__version__,
-                    command=' '.join(sys.argv),
+                    # Verbatim, so the report can be reproduced from itself.
+                    command=shlex.join(sys.argv),
+                    generated=datetime.now()
+                    .astimezone()
+                    .strftime('%Y-%m-%d %H:%M:%S %Z'),
                 ),
                 encoding='utf-8',
             )

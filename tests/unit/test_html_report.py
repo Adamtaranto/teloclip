@@ -163,7 +163,8 @@ class TestRenderedDocument:
             'dry_run': False,
             'motifs': ['TTAGGG'],
             'version': '0.0.0-test',
-            'command': 'teloclip extend ...',
+            'command': 'teloclip extend reads.bam ref.fa --html-report out.html',
+            'generated': '2026-07-31 12:00:00 UTC',
         }
         kwargs.update(overrides)
         return render_html_report(**kwargs)
@@ -325,6 +326,45 @@ class TestRenderedDocument:
         assert '<img src=x>' not in body
         assert '&lt;script&gt;x&lt;/script&gt;' in body
         assert '&lt;img src=x&gt;' in body
+
+    def test_footer_records_provenance(self):
+        """Version, timestamp and the full command close the report.
+
+        The report is an artefact people keep; without these it cannot be
+        traced back to the run that produced it.
+        """
+        html = self._report()
+        footer = re.search(r'<footer>(.*?)</footer>', html, re.S).group(1)
+
+        assert 'teloclip 0.0.0-test' in footer
+        assert '2026-07-31 12:00:00 UTC' in footer
+        # The command is preserved in full, not truncated or summarised.
+        assert 'teloclip extend reads.bam ref.fa --html-report out.html' in footer
+        # Labelled, so the version cannot be misread as part of the command.
+        for label in ('Version', 'Generated', 'Command'):
+            assert f'<dt>{label}</dt>' in footer
+
+    def test_footer_survives_missing_provenance(self):
+        """A report rendered without version or command still closes cleanly."""
+        html = self._report(version='', command='', generated='')
+        footer = re.search(r'<footer>(.*?)</footer>', html, re.S).group(1)
+
+        assert 'teloclip' in footer
+        assert '<dt>Command</dt>' not in footer
+
+    def test_ruler_labels_are_lifted_off_the_sequence(self):
+        """Tick labels sit above the mark, not flush with the first row.
+
+        The label is positioned against the bottom of its tick, and the tick
+        occupies only the lower part of the ruler row, which is what puts air
+        between the numbers and the contig sequence below.
+        """
+        html = self._report()
+
+        assert '.ruler .tick i' in html
+        assert 'bottom: 100%' in html
+        # The tick mark starts partway down the row rather than at its top.
+        assert re.search(r'\.ruler \.tick \{[^}]*top: 1\.5em', html, re.S)
 
     def test_dry_run_is_stated(self):
         """A dry run says so, so the report is not mistaken for applied work."""

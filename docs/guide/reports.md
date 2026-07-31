@@ -155,8 +155,8 @@ contig     ACGTACGT--ACCCTAACCCTGCTAGATT…
 - **Grey** is the anchored portion of the read — the part that aligned.
 - **Colour** is the soft clip, in that end's series colour.
 - The **vertical rule** is the contig/overhang boundary.
-- The **ruler** is in contig bases with `0` at the terminus, negative outside
-  the contig and positive inside it.
+- The **ruler** across the top is in contig bases with `0` at the terminus,
+  negative outside the contig and positive inside it.
 - **`▸`** marks the read the extension actually used.
 - **`⇆`** marks a read that overhangs *both* ends of the contig, which usually
   means a very short contig or a circular molecule.
@@ -195,3 +195,10 @@ Blocks open scrolled to the terminus. `--html-max-reads` (default 25) caps the
 rows per end; the reads contributing the most sequence come first and the
 remainder are counted in a note beneath. Clips are drawn to 300 bases, which is
 well past the point of reading them base by base.
+
+### Provenance
+
+The report closes with the teloclip version, the time it was generated, and the
+full command that produced it. A report is an artefact people keep and share, so
+it has to be traceable back to the run behind it without relying on where the
+file happens to sit.
