@@ -171,6 +171,29 @@ class TestValidateExtension:
 
         assert result is False
 
+    def test_validate_accepts_trimmed_extension(self):
+        """Test validation of a net-positive extension that trimmed bases."""
+        original = 'ATCGATCGATCG'
+        overhang = OverhangInfo('GGGG', 4, 3, 100, 'read1', True, 4, 96, 'test_contig')
+        # First 2 bases trimmed, 4-base overhang prepended: net +2.
+        extended = 'GGGGCGATCGATCG'
+
+        assert validate_extension(original, extended, overhang, trim_length=2) is True
+
+    def test_validate_rejects_net_shortening_after_trim(self):
+        """Test validation of an extension that trims more than it adds.
+
+        The length comparison must be made against the untrimmed original.
+        Comparing against the trimmed remainder makes this trivially true, which
+        is how net-shortening extensions previously went undetected.
+        """
+        original = 'ATCGATCGATCG'
+        overhang = OverhangInfo('GGG', 3, 10, 12, 'read1', True, 3, 96, 'test_contig')
+        # 9 bases trimmed, 3-base overhang prepended: net -6.
+        extended = 'GGG' + original[9:]
+
+        assert validate_extension(original, extended, overhang, trim_length=9) is False
+
 
 class TestApplyContigExtension:
     """Test the apply_contig_extension function."""
@@ -233,15 +256,86 @@ class TestApplyContigExtension:
         assert extended_seq == 'ATCGATCGATAAAA'
         assert ext_info['trim_length'] == 2
 
-    def test_apply_extension_validation_failure(self):
-        """Test that validation failure raises exception."""
+    def test_apply_extension_zero_gain_rejected(self):
+        """Test that an overhang adding nothing is rejected."""
         contig_seq = 'ATCGATCGATCG'
-        # Create an overhang that would cause validation to fail
-        # This is a bit artificial but tests the error path
+        # An empty overhang at a flush alignment: no trim, nothing added.
         overhang = OverhangInfo('', 0, 1, 100, 'read1', True, 0, 100, 'test_contig')
 
-        with pytest.raises(ValueError, match='Extension validation failed'):
+        with pytest.raises(ValueError, match=r'would change its length by \+0 bp'):
             apply_contig_extension(contig_seq, overhang, len(contig_seq))
+
+    def test_apply_left_extension_that_would_shorten_is_rejected(self):
+        """Test that a short left clip anchored inside the contig is rejected.
+
+        Regression test for the core defect this guard exists to prevent. A read
+        aligning from position 10 of a 12 bp contig with only a 3 bp clip causes
+        9 bases to be trimmed and 3 to be added, shortening the contig by 6.
+        Before the guard, ``validate_extension`` compared the result against the
+        already-trimmed sequence, so this passed silently.
+        """
+        contig_seq = 'ATCGATCGATCG'
+        overhang = OverhangInfo('GGG', 3, 10, 12, 'read1', True, 3, 96, 'test_contig')
+
+        with pytest.raises(ValueError, match=r'would change its length by -6 bp'):
+            apply_contig_extension(contig_seq, overhang, len(contig_seq))
+
+    def test_apply_right_extension_that_would_shorten_is_rejected(self):
+        """Test that a short right clip anchored inside the contig is rejected."""
+        contig_seq = 'ATCGATCGATCG'
+        # Alignment ends at position 3 of a 12 bp contig: 9 bases trimmed.
+        overhang = OverhangInfo('GGG', 3, 1, 3, 'read1', False, 3, 96, 'test_contig')
+
+        with pytest.raises(ValueError, match=r'would change its length by -6 bp'):
+            apply_contig_extension(contig_seq, overhang, len(contig_seq))
+
+    def test_apply_extension_with_zero_net_gain_rejected(self):
+        """Test that a clip exactly reaching the terminus is rejected.
+
+        Trimming 4 bases and adding 4 leaves the contig the same length, which
+        is not an extension.
+        """
+        contig_seq = 'ATCGATCGATCG'
+        overhang = OverhangInfo('GGGG', 4, 5, 12, 'read1', True, 4, 96, 'test_contig')
+
+        with pytest.raises(ValueError, match=r'would change its length by \+0 bp'):
+            apply_contig_extension(contig_seq, overhang, len(contig_seq))
+
+    def test_min_net_gain_is_configurable(self):
+        """Test that the required net gain can be raised above the default."""
+        contig_seq = 'ATCGATCGATCG'
+        # Trims 2, adds 4: a net gain of exactly 2.
+        overhang = OverhangInfo('GGGG', 4, 3, 100, 'read1', True, 4, 96, 'test_contig')
+
+        _, ext_info = apply_contig_extension(
+            contig_seq, overhang, len(contig_seq), min_net_gain=2
+        )
+        assert ext_info['net_gain'] == 2
+
+        with pytest.raises(ValueError, match='at least 3 bp is required'):
+            apply_contig_extension(
+                contig_seq, overhang, len(contig_seq), min_net_gain=3
+            )
+
+    def test_net_gain_reconciles_with_lengths(self):
+        """Test that original + net_gain == final for a trimmed extension."""
+        contig_seq = 'ATCGATCGATCG'
+        overhang = OverhangInfo('GGGG', 4, 3, 100, 'read1', True, 4, 96, 'test_contig')
+
+        _, ext_info = apply_contig_extension(contig_seq, overhang, len(contig_seq))
+
+        assert ext_info['net_gain'] == 2
+        assert (
+            ext_info['original_length'] + ext_info['net_gain']
+            == ext_info['final_length']
+        )
+        # And the same identity expressed through the raw clip and trim.
+        assert (
+            ext_info['original_length']
+            + ext_info['overhang_length']
+            - ext_info['trim_length']
+            == ext_info['final_length']
+        )
 
     def test_extension_info_completeness(self):
         """Test that extension info contains all expected fields."""

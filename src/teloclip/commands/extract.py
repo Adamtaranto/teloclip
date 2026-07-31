@@ -2,7 +2,6 @@
 
 import logging
 from pathlib import Path
-import sys
 from typing import Dict
 
 import click
@@ -21,7 +20,7 @@ from ..seqops import read_fai, revComp
     'extract',
     help='Extract overhanging reads for each end of each reference contig. Reads are always written to output files.',
 )
-@click.argument('samfile', type=click.File('r'), default=sys.stdin)
+@click.argument('samfile', type=click.File('r'), default='-')
 @click.option(
     '--ref-idx',
     required=True,
@@ -108,6 +107,11 @@ from ..seqops import read_fai, revComp
     type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR']),
     help='Logging level (default: INFO).',
 )
+@click.option(
+    '--logfile',
+    type=click.Path(path_type=Path),
+    help='Also write log messages to this file (parent directories are created).',
+)
 @click.pass_context
 def extract_cmd(
     ctx,
@@ -128,6 +132,7 @@ def extract_cmd(
     report_stats,
     no_mask_overhangs,
     log_level,
+    logfile,
 ):
     r"""
     Extract overhanging reads for each end of each reference contig.
@@ -175,6 +180,8 @@ def extract_cmd(
         Disable overhang sequence masking.
     log_level : str
         Logging verbosity level.
+    logfile : Path or None
+        Optional path to also write log messages to.
 
     Examples
     --------
@@ -195,7 +202,7 @@ def extract_cmd(
         --count-motifs TTAGGG --fuzzy-count
     """
     # Initialize logging for this command
-    init_logging(log_level)
+    init_logging(log_level, logfile)
 
     try:
         # Load reference contig info

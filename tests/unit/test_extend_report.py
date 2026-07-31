@@ -176,9 +176,12 @@ def test_summary_counts_both_ends(stats_dict, both_ends_extension, empty_outlier
     )
     assert 'Contig ends extended' in report
     assert '2 of 2' in report
-    assert '| Total bases added' in report
-    assert '140' in report  # 60 + 80
-    assert '| Total bases trimmed back' in report
+    assert '| Net bases gained' in report
+    # 60 grafted less 5 trimmed on the left, plus 80 on the right.
+    assert '135' in report
+    assert '| Bases trimmed back' in report
+    assert '| Raw overhang bases grafted' in report
+    assert '140' in report  # 60 + 80 before trimming
 
 
 def test_extensions_table_reports_both_ends(
@@ -196,12 +199,53 @@ def test_extensions_table_reports_both_ends(
     row = find_row(report, 'contig01')
     assert row[1] == '1,000'
     assert row[2] == '1,135'
-    assert row[3] == '+60'
+    # Net of the 5 bases trimmed at the left end, so the row reconciles:
+    # 1,000 + 135 = 1,135.
+    assert row[3] == '+55'
     assert row[4] == '+80'
-    assert row[5] == '+140'
+    assert row[5] == '+135'
     assert row[6] == 'readL2'
     assert row[7] == 'readR1'
     assert row[8] == '5'
+
+
+def test_extension_row_arithmetic_reconciles(
+    stats_dict, both_ends_extension, empty_outliers
+):
+    """Original bp plus the net columns equals Final bp.
+
+    Reporting raw clip lengths instead of net gain made this identity false
+    wherever an end needed trimming, so the report could not be checked
+    against the sequences it described.
+    """
+    report = generate_extension_report(
+        stats_dict,
+        both_ends_extension,
+        empty_outliers,
+        {},
+        [],
+        [],
+    )
+    row = find_row(report, 'contig01')
+
+    def as_int(cell):
+        """
+        Parse a formatted report cell into an integer.
+
+        Parameters
+        ----------
+        cell : str
+            Cell text, possibly carrying thousands separators and a sign.
+
+        Returns
+        -------
+        int
+            The numeric value.
+        """
+        return int(cell.replace(',', '').replace('+', ''))
+
+    assert as_int(row[1]) + as_int(row[5]) == as_int(row[2])
+    assert as_int(row[3]) + as_int(row[4]) == as_int(row[5])
 
 
 def test_motif_gain_is_attributed_per_end(
@@ -236,8 +280,9 @@ def test_motif_gain_is_attributed_per_end(
     ]
     left_row = next(r for r in motif_rows if r[1] == 'left')
     right_row = next(r for r in motif_rows if r[1] == 'right')
-    # Windows are the screening window plus that end's extension.
-    assert left_row[3] == '1,060'
+    # Windows are the screening window plus that end's net extension, which is
+    # how much longer the sequence actually is there.
+    assert left_row[3] == '1,055'
     assert left_row[4:] == ['1', '6', '+5']
     assert right_row[3] == '1,080'
     assert right_row[4:] == ['2', '12', '+10']
@@ -304,10 +349,48 @@ def test_excluded_and_warnings_rendered(stats_dict, empty_outliers):
     assert '## Excluded Contigs' in report
     assert '| chrM' in report
     assert 'user exclusion list' in report
-    assert 'contig09' in report
-    assert 'left overhang outlier' in report
     assert '## Warnings' in report
-    assert '- terminal screening window exceeds contig length' in report
+    assert 'terminal screening window exceeds contig length' in report
+
+
+def test_anomalous_coverage_reported_separately_from_exclusions(stats_dict):
+    """Flagged contigs are reported for review, not listed as excluded.
+
+    Anomalous overhang coverage used to remove a contig from extension
+    silently, and the report was passed empty outlier lists regardless, so the
+    exclusion was never visible anywhere.
+    """
+    report = generate_extension_report(
+        stats_dict,
+        {},
+        {'left_outliers': ['contig09'], 'right_outliers': []},
+        {},
+        ['chrM'],
+        [],
+    )
+
+    assert '## Contigs With Anomalous Overhang Coverage' in report
+    assert 'contig09' in report
+    assert 'have **not** been excluded' in report
+
+    # The flagged contig must not appear in the exclusion table.
+    excluded_section = report.split('## Excluded Contigs')[1].split('##')[0]
+    assert 'chrM' in excluded_section
+    assert 'contig09' not in excluded_section
+
+
+def test_anomaly_section_omitted_when_nothing_flagged(stats_dict, empty_outliers):
+    """No anomaly section is emitted for an assembly with even coverage."""
+    report = generate_extension_report(
+        stats_dict,
+        {},
+        empty_outliers,
+        {},
+        [],
+        [],
+    )
+
+    assert '## Contigs With Anomalous Overhang Coverage' not in report
 
 
 def test_overhang_statistics_table(stats_dict, empty_outliers):

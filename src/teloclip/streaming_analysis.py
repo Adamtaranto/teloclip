@@ -11,7 +11,7 @@ from typing import Dict, Iterator, List, Optional
 import pysam
 
 from .analysis import ContigStats, OverhangInfo
-from .samops import checkClips, splitCIGAR
+from .overhang import classify, ends_from_aligned_segment, overhang_info_from_call
 
 
 def collect_contig_overhangs_streaming(
@@ -21,6 +21,7 @@ def collect_contig_overhangs_streaming(
     max_break: int = 10,
     min_clip: int = 1,
     min_anchor: int = 500,
+    anchor_context: int = 0,
 ) -> ContigStats:
     """
     Collect overhang statistics for a single contig using streaming access.
@@ -34,16 +35,27 @@ def collect_contig_overhangs_streaming(
     contig_length : int
         Length of the contig.
     max_break : int, optional
-        Maximum gap allowed between alignment and contig end (default: 10).
+        Maximum tolerated gap between a contig terminus and the start of the
+        alignment, inclusive (default: 10).
     min_clip : int, optional
-        Minimum clip length required (default: 1).
+        Minimum number of clipped bases required to lie past the terminus
+        (default: 1).
     min_anchor : int, optional
-        Minimum anchor length required for alignment (default: 500).
+        Minimum number of anchoring (M/=/X) bases required (default: 500).
+    anchor_context : int, optional
+        Aligned bases adjacent to each clip to retain for display
+        (default: 0). Only the HTML report needs these.
 
     Returns
     -------
     ContigStats
         Statistics for this contig's overhangs.
+
+    Notes
+    -----
+    Acceptance is delegated to :func:`teloclip.overhang.classify`, which applies
+    the same rules used by ``filter`` and ``extract``. See that module for the
+    coordinate convention.
     """
     contig_stats = ContigStats(contig_name, contig_length)
 
@@ -63,73 +75,31 @@ def collect_contig_overhangs_streaming(
         if alignment.is_secondary or alignment.is_supplementary:
             continue
 
-        # Check for soft clipping
+        # Require a soft clip, and reject hard-clipped reads: their clipped
+        # bases are absent from the record, so there is no sequence to graft.
         cigar_string = alignment.cigarstring
         if not cigar_string or 'S' not in cigar_string or 'H' in cigar_string:
             continue
 
-        # Get clip lengths
-        left_clip, right_clip = checkClips(cigar_string)
-        left_clip = left_clip or 0
-        right_clip = right_clip or 0
-
-        if left_clip == 0 and right_clip == 0:
-            continue
-
-        # Calculate alignment positions
-        alignment_pos = alignment.reference_start + 1  # Convert to 1-based
-        cigar_ops = splitCIGAR(cigar_string)
-        alignment_end = (
-            alignment_pos + sum(length for length, op in cigar_ops if op in 'MDN=X') - 1
+        ends = ends_from_aligned_segment(alignment, contig_length, contig_name)
+        left_call, right_call = classify(
+            ends, max_break=max_break, min_clip=min_clip, min_anchor=min_anchor
         )
 
-        # Calculate anchor length (aligned portion)
-        read_length = alignment.query_length or len(alignment.query_sequence)
-        anchor_length = read_length - left_clip - right_clip
+        # A read accepted at both ends spans the whole contig and hangs off
+        # each side. That is worth surfacing: it usually means a very short
+        # contig, or a circular molecule whose ends are the same locus.
+        spans_both = left_call.accepted and right_call.accepted
 
-        # Check minimum anchor requirement
-        if anchor_length < min_anchor:
-            continue
+        if left_call.accepted:
+            info = overhang_info_from_call(ends, left_call, anchor_context)
+            info.spans_both_ends = spans_both
+            contig_stats.left_overhangs.append(info)
 
-        # Check for left clip at contig start
-        if left_clip >= min_clip and alignment_pos <= max_break:
-            overhang_seq = (
-                alignment.query_sequence[:left_clip] if alignment.query_sequence else ''
-            )
-
-            overhang = OverhangInfo(
-                sequence=overhang_seq,
-                length=left_clip,
-                alignment_pos=alignment_pos,
-                alignment_end=alignment_end,
-                read_name=alignment.query_name,
-                is_left=True,
-                clip_length=left_clip,
-                anchor_length=anchor_length,
-                contig_name=contig_name,
-            )
-            contig_stats.left_overhangs.append(overhang)
-
-        # Check for right clip at contig end
-        if right_clip >= min_clip and alignment_end >= contig_length - max_break:
-            overhang_seq = (
-                alignment.query_sequence[-right_clip:]
-                if alignment.query_sequence
-                else ''
-            )
-
-            overhang = OverhangInfo(
-                sequence=overhang_seq,
-                length=right_clip,
-                alignment_pos=alignment_pos,
-                alignment_end=alignment_end,
-                read_name=alignment.query_name,
-                is_left=False,
-                clip_length=right_clip,
-                anchor_length=anchor_length,
-                contig_name=contig_name,
-            )
-            contig_stats.right_overhangs.append(overhang)
+        if right_call.accepted:
+            info = overhang_info_from_call(ends, right_call, anchor_context)
+            info.spans_both_ends = spans_both
+            contig_stats.right_overhangs.append(info)
 
     return contig_stats
 
@@ -141,11 +111,13 @@ def stream_contigs_for_extension(
     max_break: int = 10,
     min_clip: int = 1,
     min_anchor: int = 500,
-    exclude_outliers: bool = False,
-    outlier_threshold: float = 2.0,
+    anchor_context: int = 0,
 ) -> Iterator[tuple]:
     """
     Stream contigs that meet criteria for extension.
+
+    Contigs are processed one at a time and never held collectively, so peak
+    memory is set by the largest contig rather than by the assembly.
 
     Parameters
     ----------
@@ -156,57 +128,37 @@ def stream_contigs_for_extension(
     min_overhangs : int, optional
         Minimum number of overhangs required (default: 1).
     max_break : int, optional
-        Maximum gap allowed between alignment and contig end (default: 10).
+        Maximum tolerated gap between a contig terminus and the alignment
+        (default: 10).
     min_clip : int, optional
-        Minimum clip length required (default: 1).
+        Minimum number of clipped bases required past the terminus (default: 1).
     min_anchor : int, optional
-        Minimum anchor length required (default: 500).
-    exclude_outliers : bool, optional
-        Whether to exclude outlier contigs (default: False).
-    outlier_threshold : float, optional
-        Z-score threshold for outlier detection (default: 2.0).
+        Minimum number of anchoring (M/=/X) bases required (default: 500).
+    anchor_context : int, optional
+        Aligned bases adjacent to each clip to retain for display (default: 0).
 
     Yields
     ------
     tuple
         (contig_name, contig_stats) for contigs that meet extension criteria.
     """
-    # First pass: collect all stats if outlier detection is needed
-    all_stats = {}
-    if exclude_outliers:
-        for contig_name, contig_length in contig_dict.items():
-            stats = collect_contig_overhangs_streaming(
-                bam_file, contig_name, contig_length, max_break, min_clip, min_anchor
-            )
-            all_stats[contig_name] = stats
+    for contig_name, contig_length in contig_dict.items():
+        stats = collect_contig_overhangs_streaming(
+            bam_file,
+            contig_name,
+            contig_length,
+            max_break,
+            min_clip,
+            min_anchor,
+            anchor_context,
+        )
 
-        # Import here to avoid circular imports
-        from .analysis import identify_outlier_contigs
-
-        outliers = identify_outlier_contigs(all_stats, outlier_threshold)
-        outlier_set = set(outliers['left_outliers'] + outliers['right_outliers'])
-
-        # Yield non-outlier contigs with sufficient overhangs
-        for contig_name, contig_stats in all_stats.items():
-            if contig_name not in outlier_set:
-                if (
-                    len(contig_stats.left_overhangs) >= min_overhangs
-                    or len(contig_stats.right_overhangs) >= min_overhangs
-                ):
-                    yield contig_name, contig_stats
-    else:
-        # Stream contigs individually without outlier detection
-        for contig_name, contig_length in contig_dict.items():
-            stats = collect_contig_overhangs_streaming(
-                bam_file, contig_name, contig_length, max_break, min_clip, min_anchor
-            )
-
-            # Check if this contig has sufficient overhangs for extension
-            if (
-                len(stats.left_overhangs) >= min_overhangs
-                or len(stats.right_overhangs) >= min_overhangs
-            ):
-                yield contig_name, stats
+        # Check if this contig has sufficient overhangs for extension
+        if (
+            len(stats.left_overhangs) >= min_overhangs
+            or len(stats.right_overhangs) >= min_overhangs
+        ):
+            yield contig_name, stats
 
 
 @dataclass
@@ -265,7 +217,7 @@ def process_single_contig_extension(
     import re
 
     from .analysis import select_best_overhang
-    from .extension import apply_contig_extension
+    from .extension import apply_contig_extension, calculate_extension_position
 
     warnings = []
 
@@ -310,12 +262,21 @@ def process_single_contig_extension(
                 warnings.append(f'Left extension failed for {contig_name}: {e}')
                 best_left_overhang = None
         else:
-            # Simulate left extension for dry run
+            # Simulate left extension for dry run. The trim must be reported
+            # here too, otherwise a dry run predicts a different final length
+            # than the real run produces for any contig needing trimming.
+            _, left_trim = calculate_extension_position(
+                best_left_overhang.alignment_pos,
+                best_left_overhang.alignment_end,
+                contig_stats.contig_length,
+                True,
+            )
             final_extension_info.update(
                 {
                     'left_overhang_length': best_left_overhang.length,
                     'left_read_name': best_left_overhang.read_name,
-                    'left_trim_length': 0,
+                    'left_trim_length': left_trim,
+                    'left_net_gain': best_left_overhang.length - left_trim,
                     'has_left_extension': True,
                 }
             )
@@ -340,6 +301,7 @@ def process_single_contig_extension(
                     clip_length=best_right_overhang.clip_length,
                     anchor_length=best_right_overhang.anchor_length,
                     contig_name=best_right_overhang.contig_name,
+                    net_gain=best_right_overhang.net_gain,
                 )
 
                 # Apply to the current working sequence (which may already include left extension)
@@ -358,12 +320,19 @@ def process_single_contig_extension(
                 warnings.append(f'Right extension failed for {contig_name}: {e}')
                 best_right_overhang = None
         else:
-            # Simulate right extension for dry run
+            # Simulate right extension for dry run (see the left branch above).
+            _, right_trim = calculate_extension_position(
+                best_right_overhang.alignment_pos,
+                best_right_overhang.alignment_end,
+                contig_stats.contig_length,
+                False,
+            )
             final_extension_info.update(
                 {
                     'right_overhang_length': best_right_overhang.length,
                     'right_read_name': best_right_overhang.read_name,
-                    'right_trim_length': 0,
+                    'right_trim_length': right_trim,
+                    'right_net_gain': best_right_overhang.length - right_trim,
                     'has_right_extension': True,
                 }
             )
@@ -372,15 +341,21 @@ def process_single_contig_extension(
     if not final_extension_info:
         return None
 
-    # Add overall extension info
+    # Add overall extension info. The dry-run length must account for trimming
+    # as well as addition, so that a dry run and a real run agree.
+    if dry_run:
+        predicted_length = (
+            contig_stats.contig_length
+            + final_extension_info.get('left_net_gain', 0)
+            + final_extension_info.get('right_net_gain', 0)
+        )
+    else:
+        predicted_length = len(working_sequence)
+
     final_extension_info.update(
         {
             'original_length': contig_stats.contig_length,
-            'final_length': len(working_sequence)
-            if not dry_run
-            else contig_stats.contig_length
-            + (best_left_overhang.length if best_left_overhang else 0)
-            + (best_right_overhang.length if best_right_overhang else 0),
+            'final_length': predicted_length,
             'contig_name': contig_name,
         }
     )
@@ -425,9 +400,10 @@ def process_single_contig_extension(
         # Count motifs in an explicit window at each end of the extended
         # sequence: the original terminal screening window plus whatever was
         # added at that end. This makes the counts directly comparable with the
-        # pre-extension terminal counts.
-        left_added = final_extension_info.get('left_overhang_length', 0)
-        right_added = final_extension_info.get('right_overhang_length', 0)
+        # pre-extension terminal counts. The window uses the net gain, since
+        # that is how much longer the sequence actually is at that end.
+        left_added = final_extension_info.get('left_net_gain', 0)
+        right_added = final_extension_info.get('right_net_gain', 0)
         left_window = min(terminal_length + left_added, len(target_seq))
         right_window = min(terminal_length + right_added, len(target_seq))
 

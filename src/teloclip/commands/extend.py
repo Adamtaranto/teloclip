@@ -8,9 +8,11 @@ This version is optimized for large genomes using streaming I/O and indexed acce
 to avoid loading entire genomes into memory.
 """
 
+from datetime import datetime
 import logging
 from pathlib import Path
 import re
+import shlex
 import sys
 from typing import Dict, List, Optional, Tuple
 
@@ -18,9 +20,13 @@ import click
 import pyfaidx
 import pysam
 
-from ..analysis import ContigStats, calculate_overhang_statistics
+from ..analysis import (
+    ContigStats,
+    calculate_overhang_statistics,
+    flag_anomalous_overhang_coverage,
+)
 from ..motifs import make_fuzzy_motif_regex, make_motif_regex
-from ..reporting import fmt_delta, fmt_float, fmt_int, kv_table, md_table
+from ..reporting import fmt_delta, fmt_float, fmt_int, histogram, kv_table, md_table
 from ..seqops import read_fai, revComp
 from ..streaming_analysis import (
     process_single_contig_extension,
@@ -29,7 +35,6 @@ from ..streaming_analysis import (
 from ..streaming_io import (
     BufferedContigWriter,
     StreamingGenomeProcessor,
-    copy_unmodified_contigs,
     validate_indexed_files,
 )
 
@@ -67,9 +72,122 @@ def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
                     ) from e
 
 
+# The HTML alignment view walks each read's CIGAR against the contig, so it
+# needs real read bases rather than a pre-extracted anchor. These bound how much
+# is retained and rendered; read slices are dropped as soon as a contig's panels
+# are built, so nothing accumulates across the assembly.
+#
+# The rendered anchor window is at least HTML_MIN_WINDOW, or the longest anchor
+# among the reads at that end if longer, capped at HTML_WINDOW_CAP and never
+# more than the contig itself.
+HTML_MIN_WINDOW = 500
+# Generous enough to cover a typical long-read anchor whole; a pathological
+# 50 kb anchor would otherwise render 50 kb of columns.
+HTML_WINDOW_CAP = 2000
+HTML_CONTIG_CONTEXT = HTML_WINDOW_CAP
+
+# Read bases retained per overhang: enough for the widest window plus the clip
+# and slack for insertions.
+HTML_READ_CONTEXT = HTML_WINDOW_CAP + 1500
+
+# Clipped bases rendered per read. Long telomeric overhangs run to kilobases,
+# which no one reads base by base.
+HTML_MAX_OVERHANG = 300
+
+
+# Column order for the --overhang-log TSV.
+OVERHANG_LOG_HEADER = (
+    'contig',
+    'contig_length',
+    'end',
+    'read',
+    'aln_start',
+    'aln_end',
+    'gap_from_end',
+    'clip_length',
+    'overhang_length',
+    'anchor_length',
+)
+
+
+def _prune_read_slices(contig_stats: ContigStats, keep: int) -> None:
+    """
+    Drop retained read sequence from overhangs that will not be rendered.
+
+    The HTML report shows at most ``keep`` reads per contig end, chosen by net
+    gain. Every other overhang's slice is dead weight, and holding all of them
+    across an assembly is what would make the report expensive on a real
+    genome.
+
+    Parameters
+    ----------
+    contig_stats : ContigStats
+        Statistics for one contig. Modified in place.
+    keep : int
+        Reads per end whose sequence is retained.
+    """
+    for overhangs in (contig_stats.left_overhangs, contig_stats.right_overhangs):
+        if len(overhangs) <= keep:
+            continue
+        ranked = sorted(
+            overhangs, key=lambda oh: (oh.net_gain, oh.length), reverse=True
+        )
+        for oh in ranked[keep:]:
+            oh.read_seq = ''
+            oh.read_seq_offset = 0
+
+
+def _write_overhang_log_rows(handle, contig_stats: ContigStats) -> None:
+    """
+    Append one TSV row per accepted overhang for a contig.
+
+    Written as the contig is processed rather than collected first, so the log
+    costs no additional memory on large assemblies.
+
+    Parameters
+    ----------
+    handle : file-like
+        Open text handle positioned after the header row.
+    contig_stats : ContigStats
+        Overhang statistics for one contig.
+    """
+    for overhangs, end in (
+        (contig_stats.left_overhangs, 'L'),
+        (contig_stats.right_overhangs, 'R'),
+    ):
+        for oh in overhangs:
+            # The gap is whatever part of the clip did not clear the terminus,
+            # and is exactly the number of contig bases trimmed if used.
+            gap = oh.length - oh.net_gain
+            handle.write(
+                '\t'.join(
+                    str(field)
+                    for field in (
+                        contig_stats.contig_name,
+                        contig_stats.contig_length,
+                        end,
+                        oh.read_name,
+                        oh.alignment_pos,
+                        oh.alignment_end,
+                        gap,
+                        oh.clip_length,
+                        oh.net_gain,
+                        oh.anchor_length,
+                    )
+                )
+                + '\n'
+            )
+
+
 def _extension_lengths(ext_info: Dict) -> Tuple[int, int]:
     """
-    Extract the left and right extension lengths from an extension record.
+    Extract the net bases gained at each end from an extension record.
+
+    Extending an end trims the contig bases the supporting read did not cover
+    before grafting on its whole soft clip, so the bases the contig actually
+    gains are the clip length minus the trim. Reporting the raw clip length
+    instead overstates the extension and leaves the arithmetic in the report
+    unable to reconcile with the final contig length.
 
     Parameters
     ----------
@@ -79,19 +197,34 @@ def _extension_lengths(ext_info: Dict) -> Tuple[int, int]:
     Returns
     -------
     Tuple[int, int]
-        Bases added at the left end and at the right end.
+        Net bases gained at the left end and at the right end.
     """
-    left = (
-        ext_info.get('left_overhang_length', 0)
-        if ext_info.get('has_left_extension', False)
-        else 0
-    )
-    right = (
-        ext_info.get('right_overhang_length', 0)
-        if ext_info.get('has_right_extension', False)
-        else 0
-    )
-    return left, right
+
+    def net(side: str) -> int:
+        """
+        Net gain at one end, zero if that end was not extended.
+
+        Parameters
+        ----------
+        side : str
+            Either ``'left'`` or ``'right'``.
+
+        Returns
+        -------
+        int
+            Bases gained at that end.
+        """
+        if not ext_info.get(f'has_{side}_extension', False):
+            return 0
+        # apply_contig_extension records net_gain directly; fall back to the
+        # clip-minus-trim arithmetic for dry runs and older records.
+        if f'{side}_net_gain' in ext_info:
+            return ext_info[f'{side}_net_gain']
+        return ext_info.get(f'{side}_overhang_length', 0) - ext_info.get(
+            f'{side}_trim_length', 0
+        )
+
+    return net('left'), net('right')
 
 
 def _motif_gain_rows(
@@ -131,8 +264,13 @@ def _motif_gain_rows(
             extensions_applied.get(contig_name, {})
         )
 
+        # The screening window is halved for contigs shorter than twice the
+        # requested length, so report the window actually used rather than the
+        # one asked for.
+        effective_terminal = pre_counts.get('window', screen_terminal_bases)
+
         for end, added in (('left', left_added), ('right', right_added)):
-            window = screen_terminal_bases + added
+            window = effective_terminal + added
             for motif_name in sorted(end_counts.get(end, {})):
                 post = end_counts[end][motif_name]
                 pre = pre_counts.get(end, {}).get(motif_name, 0)
@@ -181,8 +319,9 @@ def generate_extension_report(
     extensions_applied : Dict[str, dict]
         Extension records keyed by contig name.
     outliers : Dict[str, List[str]]
-        Outlier contig names under the keys ``left_outliers`` and
-        ``right_outliers``.
+        Contigs flagged as having anomalous overhang coverage, under the keys
+        ``left_outliers`` and ``right_outliers``. These are reported for review,
+        not excluded.
     overall_stats : Dict[str, Dict[str, float]]
         Aggregate overhang statistics keyed by ``left``, ``right`` and
         ``combined``.
@@ -289,8 +428,9 @@ def generate_extension_report(
             'Contig ends extended',
             f'{fmt_int(ends_extended)} of {fmt_int(n_contigs * 2)}',
         ),
-        ('Total bases added', fmt_int(total_gained)),
-        ('Total bases trimmed back', fmt_int(total_trimmed)),
+        ('Net bases gained', fmt_int(total_gained)),
+        ('Bases trimmed back', fmt_int(total_trimmed)),
+        ('Raw overhang bases grafted', fmt_int(total_gained + total_trimmed)),
     ]
     if motif_names:
         summary_pairs.append(('Motifs counted', ', '.join(motif_names)))
@@ -326,9 +466,18 @@ def generate_extension_report(
             ]
         )
 
+    ext_note = (
+        'The `+bp` columns are net: the overhang grafted on at that end, less '
+        'the contig bases trimmed to make room for it. So '
+        '`Original bp + Total +bp = Final bp` for every row.\n\n'
+        if ext_rows
+        else ''
+    )
+
     section(
         'Extensions That Would Be Applied' if dry_run else 'Extensions Applied',
-        md_table(
+        ext_note
+        + md_table(
             [
                 'Contig',
                 'Original bp',
@@ -461,18 +610,42 @@ def generate_extension_report(
         lines.append('')
 
     # ------------------------------------------------------------------
-    # Excluded contigs and outliers
+    # Excluded contigs
     # ------------------------------------------------------------------
-    exclusion_rows = [[contig, 'user exclusion list'] for contig in excluded_contigs]
-    for contig in outliers.get('left_outliers', []):
-        exclusion_rows.append([contig, 'left overhang outlier'])
-    for contig in outliers.get('right_outliers', []):
-        exclusion_rows.append([contig, 'right overhang outlier'])
-
     section(
         'Excluded Contigs',
-        md_table(['Contig', 'Reason'], exclusion_rows, align=['l', 'l']),
+        md_table(
+            ['Contig', 'Reason'],
+            [[contig, 'user exclusion list'] for contig in excluded_contigs],
+            align=['l', 'l'],
+        ),
     )
+
+    # ------------------------------------------------------------------
+    # Anomalous overhang coverage
+    # ------------------------------------------------------------------
+    anomaly_rows: List[List[str]] = []
+    for end in ('left', 'right'):
+        for contig in outliers.get(f'{end}_outliers', []):
+            counts = stats_dict.get(contig)
+            observed = getattr(counts, f'{end}_count', 0) if counts is not None else 0
+            anomaly_rows.append([contig, end, fmt_int(observed)])
+
+    if anomaly_rows:
+        section(
+            'Contigs With Anomalous Overhang Coverage',
+            'These contig ends carry far more clipped reads than the rest of '
+            'the assembly. That often marks a collapsed repeat, an rDNA array '
+            'or an organellar contig attracting reads from elsewhere, in which '
+            'case extending from a single read is not meaningful.\n\n'
+            'They have **not** been excluded. Review them and, if you agree, '
+            're-run with `--exclude-contigs`.\n\n'
+            + md_table(
+                ['Contig', 'End', 'Overhang reads'],
+                anomaly_rows,
+                align=['l', 'l', 'r'],
+            ),
+        )
 
     # ------------------------------------------------------------------
     # Warnings
@@ -555,10 +728,13 @@ def count_terminal_motifs(
                 left_seq = str(fasta[contig_name][:actual_length]).upper()
                 right_seq = str(fasta[contig_name][-actual_length:]).upper()
 
-                # Initialize counts for this contig
+                # Initialize counts for this contig. 'window' records the
+                # window actually used, which is halved for short contigs and
+                # so may be smaller than the requested terminal_length.
                 terminal_counts[contig_name] = {
                     'left': {},
                     'right': {},
+                    'window': actual_length,
                 }
 
                 # Count motifs in each terminal region
@@ -711,7 +887,12 @@ def combine_excluded_contigs(
     Returns
     -------
     set
-        Combined set of valid contig names to exclude.
+        Combined set of contig names to exclude.
+
+    Raises
+    ------
+    click.ClickException
+        If any listed name is absent from the reference index.
     """
     all_excluded_names = []
 
@@ -751,21 +932,22 @@ def combine_excluded_contigs(
     if duplicates_removed > 0:
         logging.info(f'Removed {duplicates_removed} duplicate contig names')
 
-    # Validate each contig name
-    excluded_set = set()
-    for contig_name in unique_names:
-        if contig_name in contig_dict:
-            excluded_set.add(contig_name)
-            logging.info(f'Contig "{contig_name}" will be excluded from extension')
-        else:
-            logging.warning(
-                f'Excluded contig "{contig_name}" not found in reference FASTA index'
-            )
+    # Validate every name against the reference index. A misspelled name
+    # excludes nothing while looking like it worked, so this is an error rather
+    # than a warning: the run would otherwise extend a contig the user believed
+    # they had held back.
+    unknown = sorted(name for name in unique_names if name not in contig_dict)
+    if unknown:
+        raise click.ClickException(
+            'These contigs were listed for exclusion but are not in the '
+            f'reference index: {", ".join(unknown)}. '
+            'Check the spelling against the .fai file.'
+        )
 
-    if excluded_set:
-        logging.info(f'Total unique contigs excluded: {len(excluded_set)}')
-    else:
-        logging.warning('No valid contigs found in exclusion sources')
+    excluded_set = set(unique_names)
+    for contig_name in sorted(excluded_set):
+        logging.info(f'Contig "{contig_name}" will be excluded from extension')
+    logging.info(f'Total unique contigs excluded: {len(excluded_set)}')
 
     return excluded_set
 
@@ -867,13 +1049,18 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
     help='Statistics report output file',
 )
 @click.option(
-    '--exclude-outliers', is_flag=True, help='Exclude outlier contigs from extension'
+    '--exclude-outliers',
+    is_flag=True,
+    help='DEPRECATED and ignored. Contigs with anomalous overhang coverage are '
+    'now reported for review rather than silently dropped; exclude them with '
+    '--exclude-contigs if you agree with the assessment.',
 )
 @click.option(
     '--outlier-threshold',
     type=float,
-    default=2.0,
-    help='Z-score threshold for outlier detection (default: 2.0)',
+    default=3.5,
+    help='Modified z-score above which a contig end is reported as having '
+    'anomalous overhang coverage (default: 3.5)',
 )
 @click.option(
     '--min-overhangs',
@@ -891,13 +1078,19 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
     '--min-extension',
     type=int,
     default=1,
-    help='Minimum overhang length for extension (default: 1)',
+    help='Minimum novel bases an overhang must contribute to be used (default: 1)',
+)
+@click.option(
+    '--min-clip',
+    type=int,
+    default=1,
+    help='Require clip to extend past the contig end by at least N bases (default: 1)',
 )
 @click.option(
     '--max-break',
     type=int,
-    default=10,
-    help='Maximum gap allowed between alignment and contig end (default: 10)',
+    default=50,
+    help='Maximum gap allowed between alignment and contig end (default: 50)',
 )
 @click.option(
     '--min-anchor',
@@ -946,6 +1139,31 @@ def get_motif_regex(motif_str: str, fuzzy: bool = False) -> Dict[str, re.Pattern
     type=click.Choice(['DEBUG', 'INFO', 'WARNING', 'ERROR'], case_sensitive=False),
     help='Logging level (default: INFO).',
 )
+@click.option(
+    '--logfile',
+    type=click.Path(path_type=Path),
+    help='Also write log messages to this file (parent directories are created).',
+)
+@click.option(
+    '--html-report',
+    type=click.Path(path_type=Path),
+    help='Write a self-contained HTML report showing every overhang read '
+    'aligned against the contig terminus it supports, plus overhang depth '
+    'across the assembly.',
+)
+@click.option(
+    '--html-max-reads',
+    type=int,
+    default=25,
+    help='Maximum overhang reads rendered per contig end in the HTML report '
+    '(default: 25). Reads contributing the most sequence are shown first.',
+)
+@click.option(
+    '--overhang-log',
+    type=click.Path(path_type=Path),
+    help='Write a TSV describing every accepted overhang read: contig, end, '
+    'gap from the contig terminus, clip length and overhang length.',
+)
 @click.pass_context
 def extend(
     ctx,
@@ -958,6 +1176,7 @@ def extend(
     min_overhangs,
     max_homopolymer,
     min_extension,
+    min_clip,
     max_break,
     min_anchor,
     dry_run,
@@ -968,6 +1187,10 @@ def extend(
     exclude_contigs,
     exclude_contigs_file,
     log_level,
+    logfile,
+    html_report,
+    html_max_reads,
+    overhang_log,
 ):
     """
     Extend contigs based on alignment overhangs.
@@ -989,19 +1212,23 @@ def extend(
     stats_report : str
         Path for output statistics report.
     exclude_outliers : bool
-        Exclude outlier overhangs from analysis.
+        Deprecated and ignored. Retained so existing command lines keep working;
+        emits a warning pointing at --exclude-contigs.
     outlier_threshold : float
-        Z-score threshold for outlier detection.
+        Modified z-score above which a contig end is reported as having
+        anomalous overhang coverage.
     min_overhangs : int
         Minimum number of overhangs required for extension.
     max_homopolymer : int
         Maximum homopolymer length allowed in extensions.
     min_extension : int
-        Minimum extension length to report.
+        Minimum number of novel bases an overhang must contribute to be used.
+    min_clip : int
+        Minimum number of clipped bases required past the contig terminus.
     max_break : int
-        Maximum distance from contig end to search for overhangs.
+        Maximum tolerated gap between a contig terminus and the alignment.
     min_anchor : int
-        Minimum anchor length in aligned portion.
+        Minimum number of anchoring (M/=/X) bases required.
     dry_run : bool
         Perform analysis without writing output files.
     count_motifs : bool
@@ -1018,13 +1245,42 @@ def extend(
         Path to file containing contig names to exclude (one per line).
     log_level : str
         Logging level (DEBUG, INFO, WARNING, ERROR, CRITICAL).
+    logfile : Path or None
+        Optional path to also write log messages to.
+    html_report : Path or None
+        Optional path for a self-contained HTML report.
+    html_max_reads : int
+        Maximum overhang reads rendered per contig end in the HTML report.
+    overhang_log : Path or None
+        Optional path for a per-overhang TSV describing every accepted read.
     """
     from ..logs import init_logging
 
     # Initialize logging for this command
-    init_logging(log_level)
+    init_logging(log_level, logfile)
 
     ctx.ensure_object(dict)
+
+    # A clip that does not reach past the contig terminus contributes no novel
+    # sequence, and applying it would trim more bases than it adds. Clamping
+    # here is what makes "every accepted overhang lengthens the contig" hold.
+    if min_clip < 1:
+        logging.warning(
+            f'--min-clip must be at least 1 (got {min_clip}); using 1. '
+            'A clip that stops short of the contig end would shorten it.'
+        )
+        min_clip = 1
+
+    if exclude_outliers:
+        logging.warning(
+            '--exclude-outliers is deprecated and no longer excludes anything. '
+            'Contigs with anomalous overhang coverage are reported in the '
+            'stats report; exclude them with --exclude-contigs if you agree '
+            'with the assessment.'
+        )
+
+    # Bound before the try so the finally clause can always close it.
+    overhang_log_handle = None
 
     try:
         # Validate indexed files
@@ -1077,6 +1333,13 @@ def extend(
                 f'Completed terminal motif screening for {total_screened} contigs'
             )
 
+        # Open the per-overhang log, if requested, before streaming begins.
+        if overhang_log:
+            overhang_log.parent.mkdir(parents=True, exist_ok=True)
+            overhang_log_handle = overhang_log.open('w', encoding='utf-8')
+            overhang_log_handle.write('\t'.join(OVERHANG_LOG_HEADER) + '\n')
+            logging.info(f'Writing per-overhang log to {overhang_log}')
+
         # Open indexed files
         logging.info('Opening indexed BAM and FASTA files...')
         with StreamingGenomeProcessor(reference_fasta, bam_file) as processor:
@@ -1090,6 +1353,10 @@ def extend(
             motif_stats = {}
             post_motif_counts = {}
             all_stats = {}
+            # Only populated when --html-report is requested.
+            terminal_sequences = {}
+            selected_reads = {}
+            html_panels = []
 
             # Collect statistics for contigs that meet extension criteria
             extension_results = {}  # Store ExtensionResult objects for writing phase
@@ -1098,13 +1365,18 @@ def extend(
                 contig_dict,
                 min_overhangs=min_overhangs,
                 max_break=max_break,
-                min_clip=1,  # Use default minimum clip
+                min_clip=min_clip,
                 min_anchor=min_anchor,
-                exclude_outliers=exclude_outliers,
-                outlier_threshold=outlier_threshold,
+                anchor_context=HTML_READ_CONTEXT if html_report else 0,
             ):
                 all_stats[contig_name] = contig_stats
-                logging.debug(f'Processing contig {contig_name} for extension...')
+                logging.info(
+                    f'{contig_name}: {contig_stats.left_count} left, '
+                    f'{contig_stats.right_count} right overhang reads'
+                )
+
+                if overhang_log_handle is not None:
+                    _write_overhang_log_rows(overhang_log_handle, contig_stats)
 
                 # Check if this contig is explicitly excluded
                 if contig_name in excluded_contig_set:
@@ -1125,6 +1397,15 @@ def extend(
                     )
                     continue
 
+                if html_report:
+                    # Keep only the terminal windows; the whole sequence is far
+                    # too large to hold for every contig in an assembly.
+                    window = min(HTML_CONTIG_CONTEXT, len(original_sequence))
+                    terminal_sequences[contig_name] = (
+                        original_sequence[:window].upper(),
+                        original_sequence[-window:].upper(),
+                    )
+
                 # Process extension for this contig
                 extension_result = process_single_contig_extension(
                     contig_name=contig_name,
@@ -1137,10 +1418,30 @@ def extend(
                     terminal_length=screen_terminal_bases,
                 )
 
+                if html_report:
+                    # Only the reads that will actually be rendered need their
+                    # sequence kept. Pruning here bounds peak memory at roughly
+                    # max_reads per end rather than every overhang in the
+                    # assembly.
+                    _prune_read_slices(contig_stats, max(1, html_max_reads))
+
                 if extension_result:
                     # Store the complete ExtensionResult for later use
                     extension_results[contig_name] = extension_result
                     extensions_applied[contig_name] = extension_result.extension_info
+
+                    if html_report:
+                        # Record which read won at each end, so the alignment
+                        # view can mark it among the candidates it beat.
+                        info = extension_result.extension_info
+                        selected_reads[contig_name] = {
+                            'left': info.get('left_read_name')
+                            if info.get('has_left_extension')
+                            else None,
+                            'right': info.get('right_read_name')
+                            if info.get('has_right_extension')
+                            else None,
+                        }
                     warnings.extend(extension_result.warnings)
                     if extension_result.motif_counts:
                         motif_stats[contig_name] = extension_result.motif_counts
@@ -1185,12 +1486,75 @@ def extend(
                                 f'+{right_length}bp from read {right_read}'
                             )
 
+            if overhang_log_handle is not None:
+                overhang_log_handle.close()
+                overhang_log_handle = None
+
             # Calculate overall statistics if we have data
             if all_stats:
                 overall_stats = calculate_overhang_statistics(all_stats)
                 logging.info(f'Processed {len(all_stats)} contigs with overhangs')
+
+                # Show the shape of the per-contig-end distribution. A long
+                # right tail is the signature of a collapsed repeat or an
+                # organellar contig attracting reads from across the assembly.
+                end_counts = [s.left_count for s in all_stats.values()]
+                end_counts += [s.right_count for s in all_stats.values()]
+                chart = histogram(end_counts, label='overhang reads')
+                if chart:
+                    logging.info(
+                        'Overhang reads per contig end '
+                        f'({len(end_counts)} ends):\n{chart}'
+                    )
             else:
                 overall_stats = {'left': {}, 'right': {}}
+
+            # Flag contigs whose overhang coverage stands out from their peers.
+            # These are reported for review, never excluded automatically.
+            anomalous = flag_anomalous_overhang_coverage(all_stats, outlier_threshold)
+            flagged = sorted(
+                set(anomalous['left_outliers']) | set(anomalous['right_outliers'])
+            )
+            if flagged:
+                logging.warning(
+                    f'{len(flagged)} contig end(s) have anomalous overhang '
+                    'coverage, which can indicate a collapsed repeat, an rDNA '
+                    'array or an organellar contig attracting reads from '
+                    'elsewhere. Review the stats report and re-run with '
+                    '--exclude-contigs if extension is not appropriate: '
+                    + ', '.join(flagged)
+                )
+
+            if html_report:
+                from ..html_report import render_contig_panels
+
+                left_flags = set(anomalous['left_outliers'])
+                right_flags = set(anomalous['right_outliers'])
+                motif_list = sorted(motif_patterns) if motif_patterns else ()
+
+                for contig_name, contig_stats in all_stats.items():
+                    html_panels.extend(
+                        render_contig_panels(
+                            contig=contig_name,
+                            stats=contig_stats,
+                            terminal_sequences=terminal_sequences.get(
+                                contig_name, ('', '')
+                            ),
+                            selected_reads=selected_reads.get(contig_name, {}),
+                            flagged_left=contig_name in left_flags,
+                            flagged_right=contig_name in right_flags,
+                            motifs=motif_list,
+                            max_reads=max(1, html_max_reads),
+                            max_overhang=HTML_MAX_OVERHANG,
+                            min_window=HTML_MIN_WINDOW,
+                            window_cap=HTML_WINDOW_CAP,
+                        )
+                    )
+                    # The rendered blocks are all that is needed from here on.
+                    for oh in (
+                        contig_stats.left_overhangs + contig_stats.right_overhangs
+                    ):
+                        oh.read_seq = ''
 
             # Write extended sequences
             if not dry_run:
@@ -1198,20 +1562,41 @@ def extend(
                     logging.info(f'Writing extended sequences to {output_fasta}...')
                 else:
                     logging.info('Writing extended sequences to stdout...')
+                # Write in a single pass over the reference index, so output
+                # contig order matches input order. Writing all extended
+                # contigs first and appending the rest afterwards would shunt
+                # every excluded, unsupported or failed contig to the end of
+                # the file, breaking any downstream tool that assumes
+                # input/output correspondence.
                 with BufferedContigWriter(output_fasta) as writer:
-                    # Write extended contigs using stored results
-                    extended_contig_names = set()
-                    for contig_name, extension_result in extension_results.items():
-                        writer.write_contig(
-                            contig_name, extension_result.extended_sequence
-                        )
-                        extended_contig_names.add(contig_name)
-                        logging.debug(f'Wrote extended sequence for {contig_name}')
+                    missing = 0
+                    for contig_name in contig_dict:
+                        extension_result = extension_results.get(contig_name)
+                        if extension_result is not None:
+                            writer.write_contig(
+                                contig_name, extension_result.extended_sequence
+                            )
+                            logging.debug(f'Wrote extended sequence for {contig_name}')
+                            continue
 
-                    # Copy unmodified contigs
-                    copy_unmodified_contigs(
-                        processor, writer, extended_contig_names, contig_dict
-                    )
+                        try:
+                            writer.write_contig(
+                                contig_name,
+                                processor.get_contig_sequence(contig_name),
+                            )
+                        except KeyError:
+                            # Present in the .fai but not the FASTA itself.
+                            missing += 1
+                            logging.warning(
+                                f'Contig {contig_name} is in the index but not the '
+                                'FASTA; omitted from output'
+                            )
+
+                    if missing:
+                        logging.warning(
+                            f'{missing} indexed contig(s) were missing from the '
+                            'FASTA and are absent from the output'
+                        )
 
             bam_file_handle.close()
 
@@ -1219,10 +1604,7 @@ def extend(
         report_content = generate_extension_report(
             all_stats,
             extensions_applied,
-            {
-                'left_outliers': [],
-                'right_outliers': [],
-            },  # Outlier detection handled in streaming
+            anomalous,
             overall_stats,
             excluded_contigs,
             warnings,
@@ -1248,6 +1630,36 @@ def extend(
             # Default: write report to stderr if no file specified
             logging.info('Writing statistics report to stderr')
             print(report_content, file=sys.stderr)
+
+        if html_report:
+            from .._version import __version__
+            from ..html_report import render_html_report
+
+            logging.info(f'Writing HTML report to {html_report}...')
+            html_report.parent.mkdir(parents=True, exist_ok=True)
+            html_report.write_text(
+                render_html_report(
+                    stats_dict=all_stats,
+                    extensions_applied=extensions_applied,
+                    anomalous=anomalous,
+                    excluded_contigs=excluded_contigs,
+                    warnings=warnings,
+                    panels=html_panels,
+                    total_contigs=len(contig_dict),
+                    dry_run=dry_run,
+                    motifs=sorted(motif_patterns) if motif_patterns else (),
+                    max_reads=max(1, html_max_reads),
+                    max_overhang=HTML_MAX_OVERHANG,
+                    version=__version__,
+                    # Verbatim, so the report can be reproduced from itself.
+                    command=shlex.join(sys.argv),
+                    generated=datetime.now()
+                    .astimezone()
+                    .strftime('%Y-%m-%d %H:%M:%S %Z'),
+                ),
+                encoding='utf-8',
+            )
+            logging.info(f'HTML report written to {html_report}')
 
         # Summary
         if dry_run:
@@ -1289,6 +1701,14 @@ def extend(
         if warnings:
             logging.info(f'Generated {len(warnings)} warnings')
 
+    except click.ClickException:
+        # Already carries a user-facing message; do not wrap it again.
+        raise
     except Exception as e:
         logging.error(f'Error during extend operation: {e}')
         raise click.ClickException(str(e)) from e
+    finally:
+        # Close the overhang log even if the run failed partway through, so
+        # whatever was written is readable.
+        if overhang_log_handle is not None:
+            overhang_log_handle.close()

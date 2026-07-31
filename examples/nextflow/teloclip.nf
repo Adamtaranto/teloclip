@@ -27,7 +27,7 @@ if (!params.ref) error "Please provide --ref parameter"
  * Process: Index reference FASTA
  */
 process INDEX_FASTA {
-    container 'quay.io/biocontainers/samtools:latest'
+    container 'quay.io/biocontainers/samtools:1.24--h9dcdb79_0'
     publishDir "${params.outdir}/ref", mode: 'copy'
 
     input:
@@ -46,7 +46,7 @@ process INDEX_FASTA {
  * Process: Convert BAM to SAM
  */
 process BAM_TO_SAM {
-    container 'quay.io/biocontainers/samtools:latest'
+    container 'quay.io/biocontainers/samtools:1.24--h9dcdb79_0'
 
     input:
     path bam
@@ -90,7 +90,7 @@ process TELOCLIP_FILTER {
  * Process: Convert SAM to sorted BAM
  */
 process SAM_TO_BAM {
-    container 'quay.io/biocontainers/samtools:latest'
+    container 'quay.io/biocontainers/samtools:1.24--h9dcdb79_0'
     publishDir "${params.outdir}/filtered", mode: 'copy'
 
     input:

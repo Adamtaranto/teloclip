@@ -35,12 +35,7 @@ dev = [
 
 docs = [
     "zensical>=0.0.51",
-    "mkdocstrings-python",
-    "mkdocstrings",
-    "notebook",
-    "nbconvert",
     "pymdown-extensions>=10.21.2,<11",
-    "seaborn",
 ]
 
 test = ["pytest", "pytest-codspeed", "pytest-cov"]
@@ -79,6 +74,22 @@ version-file = "src/teloclip/_version.py"
 addopts = "-v --cov=teloclip --cov-branch --cov-report=xml --cov-report=term"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
+
+[tool.coverage.run]
+branch = true
+source = ["teloclip"]
+
+[tool.coverage.paths]
+# Map the installed package onto the source tree, so an editable or site-packages
+# install reports against src/ rather than as a separate set of files.
+source = ["src/teloclip", "*/site-packages/teloclip"]
+
+[tool.coverage.report]
+exclude_also = [
+    "if TYPE_CHECKING:",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+]
 
 [tool.ruff]
 target-version = "py310"

@@ -28,7 +28,10 @@ repos:
     rev: v1.11.0rc0
     hooks:
       - id: numpydoc-validation
-        exclude: (tests/|docs/).*
+        # scripts/ holds test-data generators and benchmarks/ holds pytest
+        # cases; neither is library API, so both are exempt from the docstring
+        # contract in the same way tests are.
+        exclude: (tests/|docs/|scripts/|benchmarks/).*
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.12
     hooks:
