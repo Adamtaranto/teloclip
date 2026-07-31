@@ -18,10 +18,33 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install '.[test]'
+      # Verify the benchmarks still run even when CodSpeed is not configured,
+      # so a broken benchmark is caught rather than silently skipped along with
+      # the upload.
+      - name: Check benchmarks execute
+        run: pytest benchmarks -p no:cacheprovider --no-cov -q
+      - name: Report CodSpeed token status
+        id: codspeed
+        env:
+          TOKEN: ${{ secrets.CODSPEED_TOKEN }}
+        run: |
+          if [ -n "$TOKEN" ]; then
+            echo "configured=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "configured=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::CODSPEED_TOKEN is not set; skipping the upload to \
+            codspeed.io. Benchmarks were still executed above. Add the secret \
+            to enable performance tracking."
+          fi
       - name: Run benchmarks
+        if: steps.codspeed.outputs.configured == 'true'
         uses: CodSpeedHQ/action@v4
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
+          # Simulation mode: deterministic CPU measurement, which suits this
+          # CPU-bound parsing and regex work far better than walltime on a
+          # shared runner.
+          mode: simulation
           # Coverage instrumentation would distort the measurements, so the
           # addopts from pyproject.toml are overridden here.
           run: pytest benchmarks --codspeed -p no:cacheprovider --no-cov
