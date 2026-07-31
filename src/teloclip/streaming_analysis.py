@@ -86,15 +86,20 @@ def collect_contig_overhangs_streaming(
             ends, max_break=max_break, min_clip=min_clip, min_anchor=min_anchor
         )
 
+        # A read accepted at both ends spans the whole contig and hangs off
+        # each side. That is worth surfacing: it usually means a very short
+        # contig, or a circular molecule whose ends are the same locus.
+        spans_both = left_call.accepted and right_call.accepted
+
         if left_call.accepted:
-            contig_stats.left_overhangs.append(
-                overhang_info_from_call(ends, left_call, anchor_context)
-            )
+            info = overhang_info_from_call(ends, left_call, anchor_context)
+            info.spans_both_ends = spans_both
+            contig_stats.left_overhangs.append(info)
 
         if right_call.accepted:
-            contig_stats.right_overhangs.append(
-                overhang_info_from_call(ends, right_call, anchor_context)
-            )
+            info = overhang_info_from_call(ends, right_call, anchor_context)
+            info.spans_both_ends = spans_both
+            contig_stats.right_overhangs.append(info)
 
     return contig_stats
 

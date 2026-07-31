@@ -111,10 +111,12 @@ It contains:
   for anomalous coverage are ringed and labelled. A table view carries the same
   numbers.
 - **Overhang alignments**, one scrollable block per contig end. Every supporting
-  read is laid out against the contig terminus, marked by a vertical rule. Grey
-  is the anchored part of the read, colour is the soft clip, and the read used
-  for the extension is marked. Hover a row for the read name, what it adds and
-  what it trims. With `--count-motifs`, motif matches are highlighted.
+  read is laid out against the contig terminus by walking its CIGAR, so indels
+  place it correctly and an insertion in one read gaps every other row. Grey is
+  the anchored part of the read, colour is the soft clip, and a ruler runs in
+  contig bases with `0` at the terminus. The read used for the extension is
+  marked, as is any read overhanging both ends. Hovering a row gives a table of
+  the SAM record. With `--count-motifs`, motif matches are highlighted.
 
 That last view is the one worth spending time on. It answers the questions
 [Extracting reads](extract.md) asks you to check by eye — do the clips agree

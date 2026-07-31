@@ -88,6 +88,15 @@ accepted:
   with a median reference line and flagged ends ringed and labelled, backed by a table view.
   `--html-max-reads` (default 25) caps the rows rendered per contig end.
 
+  Reads are placed by walking their CIGAR, so indels shift them against the
+  reference as the aligner recorded: a deletion gaps the read where the contig
+  has bases, and an insertion in one read opens a column in every other row
+  including the contig, which is what keeps the rows aligned. The anchored
+  region shown is at least 500 bases, or the longest anchor at that end if
+  longer. A position ruler runs in contig bases with 0 at the terminus, reads
+  overhanging both ends of a contig are marked, hovering a read gives a table of
+  its SAM record, and chart points show their contig on hover or click.
+
 ### Removed
 
 - **`analysis.collect_overhang_stats`**, an unused fourth copy of the overhang test carrying

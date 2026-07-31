@@ -247,6 +247,11 @@ class AlignmentEnds:
     anchor: int
     read_name: str
     sequence: str = ''
+    # Retained for display and for CIGAR-aware layout in the HTML report.
+    # None of these take part in the acceptance decision.
+    cigar: str = ''
+    mapq: int = -1
+    flag: int = 0
 
     @property
     def gap_left(self) -> int:
@@ -344,46 +349,48 @@ class OverhangCall:
             return ends.sequence[: self.clip_len]
         return ends.sequence[-self.clip_len :]
 
-    def anchor_sequence(self, ends: AlignmentEnds, limit: int) -> str:
+    def read_slice(self, ends: AlignmentEnds, limit: int) -> Tuple[str, int]:
         """
-        Extract the aligned read sequence immediately adjacent to the clip.
+        Extract the portion of the read needed to render this terminus.
 
-        Used to render an overhang in the context of the alignment that
-        supports it: the anchor is the part of the read that agrees with the
-        contig, so showing it alongside the clip is what makes an overhang
-        look credible or suspect.
-
-        Only the portion abutting the clip is returned, bounded by ``limit``,
-        so retaining it for every overhang in an assembly stays cheap.
+        The HTML report walks the CIGAR to align the read against the contig,
+        which needs real read bases rather than a pre-extracted anchor. Keeping
+        the whole read would be wasteful for a 100 kb long read, so only the
+        end abutting the terminus is kept, along with how many bases were
+        dropped from the front so CIGAR offsets still resolve.
 
         Parameters
         ----------
         ends : AlignmentEnds
             The alignment this call was derived from.
         limit : int
-            Maximum number of aligned bases to return. Zero or less returns an
-            empty string, which is the default for runs that do not need it.
+            Maximum read bases to retain. Zero or less returns nothing, which
+            is the default for runs that do not need it.
 
         Returns
         -------
-        str
-            Up to ``limit`` aligned bases, ordered as they appear in the read,
-            or ``''`` if unavailable or not requested.
+        tuple
+            ``(sequence, offset)`` where ``offset`` is the number of read bases
+            dropped from the start of the record.
         """
         if limit <= 0 or not ends.sequence:
-            return ''
+            return '', 0
+        if len(ends.sequence) <= limit:
+            return ends.sequence, 0
         if self.is_left:
-            # Read is [clip][aligned...]; take the start of the aligned part.
-            return ends.sequence[self.clip_len : self.clip_len + limit]
-        # Read is [...aligned][clip]; take the end of the aligned part.
-        stop = len(ends.sequence) - self.clip_len
-        return ends.sequence[max(0, stop - limit) : stop]
+            # The 5' terminus is served by the start of the read.
+            return ends.sequence[:limit], 0
+        # The 3' terminus is served by the end of it.
+        offset = len(ends.sequence) - limit
+        return ends.sequence[offset:], offset
 
 
 # SAM field indices, per the SAM specification.
 _SAM_QNAME = 0
+_SAM_FLAG = 1
 _SAM_RNAME = 2
 _SAM_POS = 3
+_SAM_MAPQ = 4
 _SAM_CIGAR = 5
 _SAM_SEQ = 9
 
@@ -428,6 +435,9 @@ def ends_from_sam_fields(fields: Sequence[str], contig_length: int) -> Alignment
         anchor=anchor_length(ops),
         read_name=fields[_SAM_QNAME],
         sequence=fields[_SAM_SEQ],
+        cigar=fields[_SAM_CIGAR],
+        mapq=int(fields[_SAM_MAPQ]) if fields[_SAM_MAPQ].isdigit() else -1,
+        flag=int(fields[_SAM_FLAG]),
     )
 
 
@@ -474,6 +484,9 @@ def ends_from_aligned_segment(
         anchor=anchor_length(ops),
         read_name=aln.query_name or '',
         sequence=aln.query_sequence or '',
+        cigar=aln.cigarstring or '',
+        mapq=-1 if aln.mapping_quality is None else int(aln.mapping_quality),
+        flag=int(aln.flag),
     )
 
 
@@ -621,6 +634,8 @@ def overhang_info_from_call(
     # Imported lazily: analysis imports samops, which imports this module.
     from .analysis import OverhangInfo
 
+    _slice = call.read_slice(ends, anchor_context)
+
     return OverhangInfo(
         sequence=call.overhang_sequence(ends),
         length=call.clip_len,
@@ -632,5 +647,9 @@ def overhang_info_from_call(
         anchor_length=ends.anchor,
         contig_name=ends.contig_name,
         net_gain=call.net_gain,
-        anchor_seq=call.anchor_sequence(ends, anchor_context),
+        read_seq=_slice[0],
+        read_seq_offset=_slice[1],
+        cigar=ends.cigar,
+        mapq=ends.mapq,
+        flag=ends.flag,
     )

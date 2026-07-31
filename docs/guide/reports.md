@@ -129,7 +129,9 @@ report cannot express.
 ### Overhang depth across contigs
 
 A strip plot with one point per contig end, blue for left and orange for right,
-against a median reference line. Hover any point for the contig name and depth.
+against a median reference line. Hover any point for a table of the contig name,
+end and depth; click a point to pin its name to the chart, and click again to
+remove it. Points are keyboard-focusable and show the same detail on focus.
 
 The shape is the message: a healthy assembly is a flat band near the median.
 Points far above it are ringed, labelled with the contig name, and listed in the
@@ -141,21 +143,39 @@ nothing is reachable only by hovering.
 One scrollable block per contig end, showing every supporting read laid out
 against the terminus:
 
-```
-                              │ terminus
-contig                        │GGACCCTAACCCTAACCCTGCTAGATT…
-▸ read_1  CCCTAACCCTAACCCTAACC│TAACCCTAACCCTAACCCTGCTAGATT…
-  read_2  CCCTAACCCTAACCCTAACC│TAACCCTAACCCTAACCCTGCTAGATT…
-  read_3        CCCTAACCCTAACC│TAACCCTAACCCTAACCCTGCTAGATT…
+```text
+          -20        0        +20
+           |         |         |
+contig     ACGTACGT--ACCCTAACCCTGCTAGATT…
+▸ read_1  CCCTAACCCT--ACCCTAACCCTGCTAGATT…
+  read_2  CCCTAACCCTNNACCCTAACCCTGCTAGATT…
+  read_3      TAACCCT--ACCC--ACCCTGCTAGATT…
 ```
 
 - **Grey** is the anchored portion of the read — the part that aligned.
 - **Colour** is the soft clip, in that end's series colour.
 - The **vertical rule** is the contig/overhang boundary.
+- The **ruler** is in contig bases with `0` at the terminus, negative outside
+  the contig and positive inside it.
 - **`▸`** marks the read the extension actually used.
+- **`⇆`** marks a read that overhangs *both* ends of the contig, which usually
+  means a very short contig or a circular molecule.
 - Highlighted bases are motif matches, when `--count-motifs` was given.
 
-Hover a row for the read name, how many bases it adds and how many it trims.
+Reads are placed by walking their CIGAR, so an indel shifts a read against the
+reference exactly as the aligner recorded it. A deletion leaves the read gapped
+(`-`) where the contig still has bases; an insertion opens a column in *every*
+other row, including the contig, so the rows below stay aligned. Pasting read
+sequence beside the reference instead would drift by one column per indel and
+make a good alignment look mismatched.
+
+Hovering a row gives a table of the SAM record — alignment span, CIGAR, FLAG,
+MAPQ, anchor and clip lengths — alongside what the read contributes and what it
+costs in trimming.
+
+The anchored region shown is at least 500 bases, or the longest anchor among
+the reads at that end if that is longer, capped at 2,000 and never more than the
+contig itself.
 
 This view answers, in one place, the questions that otherwise require exporting
 reads and opening an alignment viewer:

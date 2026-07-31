@@ -16,6 +16,13 @@ from html import escape
 import re
 from typing import Dict, List, Optional, Sequence, Tuple
 
+from .alignment_layout import (
+    build_columns,
+    place_read,
+    render_reference,
+    render_row,
+    terminus_column,
+)
 from .analysis import ContigStats, OverhangInfo
 
 # --- Palette -----------------------------------------------------------------
@@ -58,19 +65,29 @@ _DARK = {
 
 @dataclass(frozen=True)
 class ReadRow:
-    """One overhang read, positioned relative to a contig terminus."""
+    """One overhang read, laid out over the shared alignment columns."""
 
     read_name: str
-    #: Column of the first rendered base, in offsets from the terminus.
-    start: int
-    anchor: str
-    clip: str
+    #: Blank columns before the read starts.
+    lead: int
+    #: ``(kind, text)`` runs, kind in {'clip', 'anchor', 'gap'}.
+    runs: List[Tuple[str, str]]
     #: Bases the contig would gain from this read.
     net_gain: int
     #: Contig bases that would be trimmed to graft this clip on.
     trim: int
     #: True when this is the read the extension actually used.
     selected: bool
+    #: True when the same read hangs off both ends of this contig.
+    spans_both_ends: bool
+    #: SAM record fields, for the hover table.
+    cigar: str
+    mapq: int
+    flag: int
+    aln_start: int
+    aln_end: int
+    clip_length: int
+    anchor_length: int
 
 
 @dataclass(frozen=True)
@@ -80,9 +97,14 @@ class EndPanel:
     contig: str
     end: str
     contig_length: int
+    #: Reference row text and its leading blank columns.
     reference: str
-    reference_start: int
+    reference_lead: int
     rows: List[ReadRow]
+    #: Rendered column index of the contig/overhang boundary.
+    terminus_col: int
+    #: ``(column_index, label)`` ticks for the position ruler.
+    ticks: List[Tuple[int, str]]
     total_reads: int
     flagged: bool
 
@@ -121,6 +143,62 @@ def _delta(value: int) -> str:
     return '–' if value == 0 else f'{value:+,}'
 
 
+def _anchor_window(
+    overhangs: Sequence[OverhangInfo], contig_length: int, minimum: int, cap: int
+) -> int:
+    """
+    Decide how much anchored reference to render at a contig end.
+
+    At least ``minimum`` bases, or the longest anchor among the reads if that is
+    longer, and never more than the contig itself.
+
+    Parameters
+    ----------
+    overhangs : sequence of OverhangInfo
+        Accepted overhangs at this end.
+    contig_length : int
+        Length of the contig.
+    minimum : int
+        Floor for the window.
+    cap : int
+        Ceiling, matching how much read sequence was retained.
+
+    Returns
+    -------
+    int
+        Window size in reference bases.
+    """
+    longest = max((oh.anchor_length for oh in overhangs), default=0)
+    return max(1, min(contig_length, cap, max(minimum, longest)))
+
+
+def _ruler(columns, terminus_col: int, step: int = 20) -> List[Tuple[int, str]]:
+    """
+    Build x-axis ticks with 0 at the contig terminus.
+
+    Parameters
+    ----------
+    columns : sequence
+        Shared column order, as ``(ref_offset, ins_index)`` pairs.
+    terminus_col : int
+        Rendered column index of the boundary.
+    step : int, optional
+        Spacing between ticks in reference bases (default: 20).
+
+    Returns
+    -------
+    list of tuple
+        ``(column_index, label)``, labelled by reference offset so insertion
+        columns do not shift the scale.
+    """
+    ticks: List[Tuple[int, str]] = []
+    for index, (offset, ins) in enumerate(columns):
+        if ins != 0 or offset % step != 0:
+            continue
+        ticks.append((index, f'{offset:+d}' if offset else '0'))
+    return ticks
+
+
 def build_end_panel(
     contig: str,
     end: str,
@@ -131,14 +209,15 @@ def build_end_panel(
     max_reads: int,
     max_overhang: int,
     flagged: bool,
+    min_window: int = 500,
+    window_cap: int = 1000,
 ) -> Optional[EndPanel]:
     """
     Lay out one contig end's overhang reads against the terminus.
 
-    Positions are offsets from the terminus: 0 is the terminal contig base,
-    negative is outside the contig at the left end, positive outside it at the
-    right end. Every read is placed on that one axis, which is what lets them
-    be read as an alignment rather than a list.
+    Each read is placed by walking its CIGAR, so indels shift it correctly
+    rather than by a flat offset, and the column set is computed across all
+    reads first so an insertion in one opens a gap in every other row.
 
     Parameters
     ----------
@@ -151,16 +230,19 @@ def build_end_panel(
     overhangs : Sequence[OverhangInfo]
         Accepted overhangs at this end.
     terminal_sequence : str
-        Terminal window of the original contig, oriented as it appears in the
-        assembly.
+        Terminal window of the original contig, oriented as in the assembly.
     selected_read : Optional[str]
         Name of the read the extension used, if any.
     max_reads : int
-        Maximum reads to render, longest net gain first.
+        Maximum reads to render, largest net gain first.
     max_overhang : int
         Maximum clipped bases to render per read.
     flagged : bool
         Whether this end was flagged for anomalous coverage.
+    min_window : int, optional
+        Minimum anchored reference bases to show (default: 500).
+    window_cap : int, optional
+        Maximum anchored reference bases to show (default: 1000).
 
     Returns
     -------
@@ -171,53 +253,71 @@ def build_end_panel(
         return None
 
     is_left = end == 'left'
+    contig_length = stats.contig_length
 
-    # Show the reads that contribute most first; they are the ones a reader
-    # cares about, and the ones the selection is choosing between.
+    window = _anchor_window(overhangs, contig_length, min_window, window_cap)
+    window = min(window, len(terminal_sequence) or window)
+
     ranked = sorted(overhangs, key=lambda oh: (oh.net_gain, oh.length), reverse=True)
     shown = ranked[:max_reads]
 
+    placements = [
+        place_read(
+            cigar=oh.cigar,
+            sequence=oh.read_seq,
+            aln_start=oh.alignment_pos,
+            aln_end=oh.alignment_end,
+            contig_length=contig_length,
+            clip_len=oh.clip_length,
+            is_left=is_left,
+            window=window,
+            max_overhang=max_overhang,
+            seq_offset=oh.read_seq_offset,
+        )
+        for oh in shown
+    ]
+
+    if is_left:
+        ref_offsets = list(range(0, window))
+        ref_seq = terminal_sequence[:window]
+    else:
+        ref_offsets = list(range(-window + 1, 1))
+        ref_seq = terminal_sequence[-window:]
+
+    columns = build_columns(placements, ref_offsets)
+    ref_text, ref_lead = render_reference(ref_seq, ref_offsets, columns)
+
     rows: List[ReadRow] = []
-    for oh in shown:
-        trim = oh.length - oh.net_gain
-        clip = oh.sequence or ''
-        anchor = oh.anchor_seq or ''
-
-        if is_left:
-            # Read is [clip][anchor]; the clip begins net_gain bases outside
-            # the contig. Truncating keeps the terminus-adjacent end.
-            if max_overhang and len(clip) > max_overhang:
-                clip = clip[-max_overhang:]
-            start = -(len(clip) - trim)
-        else:
-            # Read is [anchor][clip]. The anchor's last base sits at offset
-            # -trim (the alignment end), so it begins len(anchor) - 1 columns
-            # before that.
-            if max_overhang and len(clip) > max_overhang:
-                clip = clip[:max_overhang]
-            start = -trim - len(anchor) + 1
-
+    for oh, placed in zip(shown, placements):
+        lead, runs = render_row(placed, columns)
         rows.append(
             ReadRow(
                 read_name=oh.read_name,
-                start=start,
-                anchor=anchor,
-                clip=clip,
+                lead=lead,
+                runs=runs,
                 net_gain=oh.net_gain,
-                trim=trim,
+                trim=oh.length - oh.net_gain,
                 selected=oh.read_name == selected_read,
+                spans_both_ends=oh.spans_both_ends,
+                cigar=oh.cigar,
+                mapq=oh.mapq,
+                flag=oh.flag,
+                aln_start=oh.alignment_pos,
+                aln_end=oh.alignment_end,
+                clip_length=oh.clip_length,
+                anchor_length=oh.anchor_length,
             )
         )
-
-    reference_start = 0 if is_left else -len(terminal_sequence) + 1
 
     return EndPanel(
         contig=contig,
         end=end,
-        contig_length=stats.contig_length,
-        reference=terminal_sequence,
-        reference_start=reference_start,
+        contig_length=contig_length,
+        reference=ref_text,
+        reference_lead=ref_lead,
         rows=rows,
+        terminus_col=terminus_column(columns, is_left),
+        ticks=_ruler(columns, terminus_column(columns, is_left)),
         total_reads=len(overhangs),
         flagged=flagged,
     )
@@ -277,77 +377,102 @@ def _render_panel(panel: EndPanel, motif_pattern: Optional[re.Pattern]) -> str:
         HTML markup.
     """
     is_left = panel.end == 'left'
-
-    # Every row shares one column origin so the terminus lines up down the block.
-    origins = [r.start for r in panel.rows] + [panel.reference_start]
-    origin = min(origins)
-
     lines: List[str] = []
 
-    ref_pad = panel.reference_start - origin
+    # Position ruler, 0 at the contig terminus. Labels are anchored by their
+    # left edge at the tick column and allowed to overflow, so they do not
+    # widen the grid.
+    ruler = ''.join(
+        f'<span class="tick" style="left:{col}ch"><i>{escape(label)}</i></span>'
+        for col, label in panel.ticks
+    )
+    lines.append(
+        '<div class="aln-row aln-ruler">'
+        '<span class="aln-label"></span>'
+        f'<span class="aln-seq ruler">{ruler}</span>'
+        '</div>'
+    )
+
     lines.append(
         '<div class="aln-row aln-ref">'
-        f'<span class="aln-label" title="Original contig sequence">contig</span>'
-        f'<span class="aln-seq" style="padding-left:{ref_pad}ch">'
+        '<span class="aln-label" title="Original contig sequence">contig</span>'
+        f'<span class="aln-seq" style="padding-left:{panel.reference_lead}ch">'
         f'{_render_sequence(panel.reference, "ref", motif_pattern)}</span>'
         '</div>'
     )
 
     for row in panel.rows:
-        pad = row.start - origin
-        if is_left:
-            body = _render_sequence(row.clip, 'clip', motif_pattern) + _render_sequence(
-                row.anchor, 'anchor', motif_pattern
-            )
-        else:
-            body = _render_sequence(
-                row.anchor, 'anchor', motif_pattern
-            ) + _render_sequence(row.clip, 'clip', motif_pattern)
+        body = ''.join(
+            _render_sequence(text, kind, motif_pattern if kind != 'gap' else None)
+            for kind, text in row.runs
+        )
 
-        tip = (
-            f'{row.read_name} — adds {_fmt(row.net_gain)} bp'
-            + (f', trims {_fmt(row.trim)} bp' if row.trim else '')
-            + (' — used for this extension' if row.selected else '')
-        )
-        mark = (
-            '<span class="pick" aria-hidden="true">&#9656;</span>'
-            if row.selected
-            else ''
-        )
+        marks = ''
+        if row.selected:
+            marks += '<span class="pick" title="Used for this extension">&#9656;</span>'
+        if row.spans_both_ends:
+            marks += (
+                '<span class="both" title="This read overhangs BOTH ends of '
+                'the contig">&#8646;</span>'
+            )
+
         label = row.read_name if len(row.read_name) <= 18 else row.read_name[:17] + '…'
 
-        lines.append(
-            f'<div class="aln-row{" is-selected" if row.selected else ""}" title="{escape(tip)}">'
-            f'<span class="aln-label">{mark}{escape(label)}</span>'
-            f'<span class="aln-seq" style="padding-left:{pad}ch">{body}</span>'
-            '</div>'
+        # Attributes for the hover table. Kept as data-* rather than a title so
+        # the tooltip can be laid out as a table instead of one flat string.
+        meta = (
+            f' data-read="{escape(row.read_name)}"'
+            f' data-flag="{row.flag}"'
+            f' data-mapq="{"–" if row.mapq < 0 else row.mapq}"'
+            f' data-cigar="{escape(row.cigar or "–")}"'
+            f' data-span="{_fmt(row.aln_start)}–{_fmt(row.aln_end)}"'
+            f' data-clip="{_fmt(row.clip_length)}"'
+            f' data-anchor="{_fmt(row.anchor_length)}"'
+            f' data-gain="{_delta(row.net_gain)}"'
+            f' data-trim="{_fmt(row.trim)}"'
+            f' data-end="{panel.end}"'
+            f' data-both="{"yes" if row.spans_both_ends else "no"}"'
+            f' data-selected="{"yes" if row.selected else "no"}"'
         )
 
-    # The marker sits on the contig/overhang boundary, which is the left edge
-    # of the terminal base at the left end and its right edge at the right end.
-    terminus_col = -origin + (0 if is_left else 1)
+        classes = 'aln-row aln-read'
+        if row.selected:
+            classes += ' is-selected'
+        if row.spans_both_ends:
+            classes += ' is-both'
+
+        lines.append(
+            f'<div class="{classes}"{meta}>'
+            f'<span class="aln-label">{marks}{escape(label)}</span>'
+            f'<span class="aln-seq" style="padding-left:{row.lead}ch">{body}</span>'
+            '</div>'
+        )
 
     hidden = panel.total_reads - len(panel.rows)
     note = (
         f'<p class="note">Showing the {len(panel.rows)} reads contributing most '
-        f'sequence, of {panel.total_reads}. '
-        f'{hidden} not shown.</p>'
+        f'sequence, of {panel.total_reads}. {hidden} not shown.</p>'
         if hidden > 0
         else ''
     )
 
-    flag = (
-        '<span class="chip chip-flag" title="Overhang depth far above the rest '
-        'of the assembly">&#9888; anomalous depth</span>'
-        if panel.flagged
-        else ''
-    )
+    chips = f'<span class="chip chip-end">{panel.end} end</span>'
+    if panel.flagged:
+        chips += (
+            '<span class="chip chip-flag" title="Overhang depth far above the '
+            'rest of the assembly">&#9888; anomalous depth</span>'
+        )
+    if any(r.spans_both_ends for r in panel.rows):
+        chips += (
+            '<span class="chip chip-both" title="At least one read hangs off '
+            'both ends of this contig">&#8646; spans both ends</span>'
+        )
 
     return f"""
 <section class="panel {'end-left' if is_left else 'end-right'}">
-  <h4>{escape(panel.contig)} <span class="chip chip-end">{panel.end} end</span> {flag}</h4>
+  <h4>{escape(panel.contig)} {chips}</h4>
   <div class="aln-scroll">
-    <div class="aln" style="--terminus:{terminus_col}ch">
+    <div class="aln" style="--terminus:{panel.terminus_col}ch">
       <div class="terminus" aria-hidden="true"></div>
       {''.join(lines)}
     </div>
@@ -355,6 +480,104 @@ def _render_panel(panel: EndPanel, motif_pattern: Optional[re.Pattern]) -> str:
   {note}
 </section>
 """
+
+
+def render_contig_panels(
+    contig: str,
+    stats: ContigStats,
+    terminal_sequences: Tuple[str, str],
+    selected_reads: Dict[str, Optional[str]],
+    flagged_left: bool,
+    flagged_right: bool,
+    motifs: Sequence[str] = (),
+    max_reads: int = 25,
+    max_overhang: int = 300,
+    min_window: int = 500,
+    window_cap: int = 1000,
+) -> List[str]:
+    """
+    Render both alignment blocks for one contig.
+
+    Exposed separately so the caller can render while a contig's read sequences
+    are still in memory and drop them immediately after, rather than retaining
+    them for the whole assembly.
+
+    Parameters
+    ----------
+    contig : str
+        Contig name.
+    stats : ContigStats
+        Overhang statistics for the contig.
+    terminal_sequences : tuple of str
+        ``(left_window, right_window)`` of the original contig.
+    selected_reads : dict
+        ``{'left': read, 'right': read}`` for applied extensions.
+    flagged_left : bool
+        Whether the 5' end was flagged for anomalous coverage.
+    flagged_right : bool
+        Whether the 3' end was flagged.
+    motifs : sequence of str, optional
+        Motifs to highlight.
+    max_reads : int, optional
+        Maximum reads rendered per end (default: 25).
+    max_overhang : int, optional
+        Maximum clipped bases rendered per read (default: 300).
+    min_window : int, optional
+        Minimum anchored reference bases shown (default: 500).
+    window_cap : int, optional
+        Maximum anchored reference bases shown (default: 1000).
+
+    Returns
+    -------
+    list of str
+        Rendered HTML blocks, one per end that had overhangs.
+    """
+    pattern = _motif_pattern(motifs)
+    left_window, right_window = terminal_sequences
+
+    blocks: List[str] = []
+    for end, overhangs, window, flagged in (
+        ('left', stats.left_overhangs, left_window, flagged_left),
+        ('right', stats.right_overhangs, right_window, flagged_right),
+    ):
+        panel = build_end_panel(
+            contig=contig,
+            end=end,
+            stats=stats,
+            overhangs=overhangs,
+            terminal_sequence=window,
+            selected_read=(selected_reads or {}).get(end),
+            max_reads=max_reads,
+            max_overhang=max_overhang,
+            flagged=flagged,
+            min_window=min_window,
+            window_cap=window_cap,
+        )
+        if panel is not None:
+            blocks.append(_render_panel(panel, pattern))
+    return blocks
+
+
+def _motif_pattern(motifs: Sequence[str]) -> Optional[re.Pattern]:
+    """
+    Compile the motif alternation used for highlighting.
+
+    Parameters
+    ----------
+    motifs : sequence of str
+        Motif strings.
+
+    Returns
+    -------
+    Optional[re.Pattern]
+        Compiled pattern, or None when no motifs were requested.
+    """
+    if not motifs:
+        return None
+    return re.compile(
+        '|'.join(re.escape(m) for m in sorted(set(motifs), key=len, reverse=True)),
+        re.IGNORECASE,
+    )
 
 
 def _coverage_chart(
@@ -476,12 +699,14 @@ def _coverage_chart(
     for i, name, end, count, is_flagged in points:
         cx, cy = x_of(i, end), y_of(count)
         classes = f'pt pt-{end}' + (' pt-flag' if is_flagged else '')
-        tip = f'{name} — {end} end — {_fmt(count)} overhang reads' + (
-            ' — anomalous depth' if is_flagged else ''
-        )
         # A generous transparent hit target sits under the visible mark.
         svg.append(
-            f'<g class="{classes}"><title>{escape(tip)}</title>'
+            f'<g class="{classes}" tabindex="0" role="listitem"'
+            f' data-contig="{escape(name)}" data-end="{end}"'
+            f' data-depth="{_fmt(count)}"'
+            f' data-flagged="{"yes" if is_flagged else "no"}"'
+            f' data-x="{cx:.1f}" data-y="{cy:.1f}">'
+            f'<title>{escape(name)} — {end} end — {_fmt(count)} reads</title>'
             f'<circle class="hit" cx="{cx:.1f}" cy="{cy:.1f}" r="12"/>'
             f'<circle class="dot" cx="{cx:.1f}" cy="{cy:.1f}" r="4.5"/>'
             + (
@@ -689,6 +914,38 @@ svg .pt:hover .dot {{ r: 6; }}
 .aln-ref .aln-label {{ color: var(--ink); }}
 .ref {{ color: var(--ink); }}
 .anchor {{ color: var(--muted); }}
+.gap {{ color: var(--axis); }}
+.aln-ruler {{ position: relative; height: 1.45em; }}
+.aln-ruler .aln-seq {{ position: relative; display: inline-block; }}
+.ruler .tick {{
+  /* No font-size here: `left` is expressed in `ch`, which must resolve
+     against the 12px monospace grid the sequences use. Shrinking the tick
+     would shrink its `ch` and drift the scale off the bases. */
+  position: absolute; top: 0; white-space: nowrap;
+  border-left: 1px solid var(--axis); padding-left: 2px;
+}}
+.ruler .tick i {{ font-style: normal; font-size: 10px; color: var(--muted); }}
+.aln-read {{ cursor: default; }}
+.aln-read:hover {{ background: color-mix(in srgb, var(--left) 10%, transparent); }}
+.both {{ color: var(--critical); margin-right: .25rem; }}
+.chip-both {{ color: var(--critical); border: 1px solid var(--critical); }}
+.is-both .aln-label {{ color: var(--critical); }}
+
+#tip {{
+  position: fixed; z-index: 50; pointer-events: none; opacity: 0;
+  transition: opacity .08s; background: var(--surface); color: var(--ink);
+  border: 1px solid var(--axis); border-radius: 8px; padding: .5rem .6rem;
+  box-shadow: 0 6px 24px rgba(0,0,0,.18); font-size: .78rem; max-width: 32rem;
+}}
+#tip.show {{ opacity: 1; }}
+#tip table {{ border-collapse: collapse; width: auto; font-size: .78rem; }}
+#tip td {{ border: 0; padding: .1rem .5rem .1rem 0; vertical-align: top; }}
+#tip td.k {{ color: var(--ink2); white-space: nowrap; }}
+#tip td.v {{ font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  word-break: break-all; }}
+#tip .tip-head {{ font-weight: 600; margin-bottom: .3rem; word-break: break-all; }}
+svg .pt {{ cursor: pointer; }}
+svg .pt-pin {{ fill: var(--ink2); font-size: 11px; font-weight: 600; }}
 .end-left .clip {{ color: var(--left); font-weight: 600; }}
 .end-right .clip {{ color: var(--right); font-weight: 600; }}
 mark {{ background: var(--motif); color: inherit; border-radius: 2px; }}
@@ -708,8 +965,7 @@ def render_html_report(
     anomalous: Dict[str, List[str]],
     excluded_contigs: Sequence[str],
     warnings: Sequence[str],
-    terminal_sequences: Dict[str, Tuple[str, str]],
-    selected_reads: Dict[str, Dict[str, Optional[str]]],
+    panels: Sequence[str],
     total_contigs: int,
     dry_run: bool,
     motifs: Sequence[str] = (),
@@ -734,10 +990,8 @@ def render_html_report(
         Contigs the user excluded.
     warnings : Sequence[str]
         Accumulated warnings.
-    terminal_sequences : Dict[str, Tuple[str, str]]
-        ``contig -> (left_window, right_window)`` of the original assembly.
-    selected_reads : Dict[str, Dict[str, Optional[str]]]
-        ``contig -> {'left': read, 'right': read}`` for applied extensions.
+    panels : Sequence[str]
+        Alignment blocks already rendered by :func:`render_contig_panels`.
     total_contigs : int
         Contigs in the assembly.
     dry_run : bool
@@ -758,12 +1012,7 @@ def render_html_report(
     str
         A complete, self-contained HTML document.
     """
-    motif_pattern = None
-    if motifs:
-        motif_pattern = re.compile(
-            '|'.join(re.escape(m) for m in sorted(set(motifs), key=len, reverse=True)),
-            re.IGNORECASE,
-        )
+    motif_pattern = _motif_pattern(motifs)
 
     # --- Summary -------------------------------------------------------------
     ends_extended = 0
@@ -871,32 +1120,6 @@ def render_html_report(
     )
 
     # --- Alignment panels ----------------------------------------------------
-    left_flags = set(anomalous.get('left_outliers', []))
-    right_flags = set(anomalous.get('right_outliers', []))
-
-    panels = []
-    for contig in sorted(stats_dict):
-        stats = stats_dict[contig]
-        left_win, right_win = terminal_sequences.get(contig, ('', ''))
-        picks = selected_reads.get(contig, {})
-        for end, overhangs, window, flags in (
-            ('left', stats.left_overhangs, left_win, left_flags),
-            ('right', stats.right_overhangs, right_win, right_flags),
-        ):
-            panel = build_end_panel(
-                contig=contig,
-                end=end,
-                stats=stats,
-                overhangs=overhangs,
-                terminal_sequence=window,
-                selected_read=picks.get(end),
-                max_reads=max_reads,
-                max_overhang=max_overhang,
-                flagged=contig in flags,
-            )
-            if panel is not None:
-                panels.append(_render_panel(panel, motif_pattern))
-
     panels_html = ''.join(panels) or (
         '<p class="note">No overhang reads were retained.</p>'
     )
@@ -991,20 +1214,97 @@ unmodified.</p><ul>{items}</ul></div>
 
   <footer>{footer}</footer>
 </main>
+<div id="tip" role="tooltip" aria-hidden="true"></div>
 <script>
-// Open each alignment on the contig/overhang junction rather than at the far
-// end of the longest clip, which is what a left-aligned scroll box would show.
-// Inline and dependency-free; without JavaScript the blocks simply start at
-// their left edge and can still be scrolled by hand.
-for (const box of document.querySelectorAll('.aln-scroll')) {{
-  const rule = box.querySelector('.terminus');
-  if (!rule) continue;
-  const label = box.querySelector('.aln-label');
-  const gutter = label ? label.getBoundingClientRect().width : 0;
-  // Leave the junction a little right of the gutter so the contig side of it
-  // is visible too.
-  box.scrollLeft = rule.offsetLeft - gutter - (box.clientWidth - gutter) * 0.55;
-}}
+// Everything below is progressive enhancement. Without JavaScript the report
+// still renders: the blocks simply start at their left edge, and every row and
+// data point keeps a native title attribute.
+(function () {{
+  // Open each alignment on the contig/overhang junction rather than at the far
+  // end of the longest clip, which is what a left-aligned scroll box shows.
+  for (const box of document.querySelectorAll('.aln-scroll')) {{
+    const rule = box.querySelector('.terminus');
+    if (!rule) continue;
+    const label = box.querySelector('.aln-label');
+    const gutter = label ? label.getBoundingClientRect().width : 0;
+    box.scrollLeft = rule.offsetLeft - gutter - (box.clientWidth - gutter) * 0.55;
+  }}
+
+  const tip = document.getElementById('tip');
+  const esc = (v) => String(v).replace(/[&<>"]/g, (c) => (
+    {{'&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;'}}[c]));
+  const table = (rows) => '<table>' + rows.map(
+    ([k, v]) => '<tr><td class="k">' + esc(k) + '</td><td class="v">' +
+                esc(v) + '</td></tr>').join('') + '</table>';
+
+  function show(html, x, y) {{
+    tip.innerHTML = html;
+    tip.classList.add('show');
+    tip.setAttribute('aria-hidden', 'false');
+    const r = tip.getBoundingClientRect();
+    // Keep the tooltip on screen near the cursor.
+    const left = Math.min(Math.max(8, x + 14), window.innerWidth - r.width - 8);
+    const top = y + r.height + 24 > window.innerHeight ? y - r.height - 12 : y + 18;
+    tip.style.left = left + 'px';
+    tip.style.top = Math.max(8, top) + 'px';
+  }}
+  function hide() {{
+    tip.classList.remove('show');
+    tip.setAttribute('aria-hidden', 'true');
+  }}
+
+  // Read rows: a table of the SAM record and what the read contributes.
+  for (const row of document.querySelectorAll('.aln-read')) {{
+    const d = row.dataset;
+    const rows = [
+      ['End', d.end],
+      ['Alignment', d.span],
+      ['CIGAR', d.cigar],
+      ['FLAG', d.flag],
+      ['MAPQ', d.mapq],
+      ['Anchor', d.anchor + ' bp'],
+      ['Soft clip', d.clip + ' bp'],
+      ['Contig gains', d.gain + ' bp'],
+      ['Contig trimmed', d.trim + ' bp'],
+    ];
+    if (d.both === 'yes') rows.push(['Note', 'overhangs both ends of this contig']);
+    if (d.selected === 'yes') rows.push(['Note', 'used for this extension']);
+    const html = '<div class="tip-head">' + esc(d.read) + '</div>' + table(rows);
+    row.addEventListener('mousemove', (e) => show(html, e.clientX, e.clientY));
+    row.addEventListener('mouseleave', hide);
+  }}
+
+  // Chart points: contig name on hover, and on click, pinned as a label so it
+  // survives moving the mouse away.
+  const svg = document.querySelector('.chart-scroll svg');
+  for (const pt of document.querySelectorAll('svg g.pt')) {{
+    const d = pt.dataset;
+    const rows = [['Contig', d.contig], ['End', d.end],
+                  ['Overhang reads', d.depth]];
+    if (d.flagged === 'yes') rows.push(['Depth', 'anomalous']);
+    const html = table(rows);
+    pt.addEventListener('mousemove', (e) => show(html, e.clientX, e.clientY));
+    pt.addEventListener('mouseleave', hide);
+    pt.addEventListener('focus', () => {{
+      const r = pt.getBoundingClientRect();
+      show(html, r.right, r.top);
+    }});
+    pt.addEventListener('blur', hide);
+    pt.addEventListener('click', () => {{
+      const existing = pt.querySelector('.pt-pin');
+      if (existing) {{ existing.remove(); return; }}
+      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+      t.setAttribute('class', 'pt-pin');
+      t.setAttribute('x', d.x);
+      t.setAttribute('y', String(parseFloat(d.y) - 13));
+      t.setAttribute('text-anchor', 'middle');
+      t.textContent = d.contig;
+      pt.appendChild(t);
+    }});
+  }}
+  if (svg) svg.addEventListener('mouseleave', hide);
+  window.addEventListener('scroll', hide, {{passive: true}});
+}})();
 </script>
 </body>
 </html>

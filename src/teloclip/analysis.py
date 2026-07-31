@@ -29,9 +29,20 @@ class OverhangInfo:
     # See teloclip.overhang for the full coordinate convention.
     net_gain: int = 0
     # Aligned read bases immediately adjacent to the clip, retained only when
-    # the HTML report is requested so an overhang can be shown in the context
-    # of the alignment supporting it. Bounded; empty by default.
-    anchor_seq: str = ''
+    # the HTML report is requested, so the read can be laid out against the
+    # contig by walking its CIGAR. Bounded to the end abutting the terminus;
+    # read_seq_offset records how many bases were dropped from the front so
+    # CIGAR positions still resolve. Cleared once the panel is rendered.
+    read_seq: str = ''
+    read_seq_offset: int = 0
+    # SAM record fields kept for display and for CIGAR-aware layout in the HTML
+    # report. None of these affect selection.
+    cigar: str = ''
+    mapq: int = -1
+    flag: int = 0
+    # True when the same read is an accepted overhang at *both* ends of this
+    # contig, i.e. it spans the whole contig and hangs off each side.
+    spans_both_ends: bool = False
 
 
 @dataclass

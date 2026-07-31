@@ -70,14 +70,26 @@ def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
                     ) from e
 
 
-# Aligned read bases retained either side of a clip for the HTML alignment view,
-# and the matching window of original contig sequence shown as the reference row.
-# Both are bounded so the report stays a sane size on a whole assembly.
-HTML_ANCHOR_CONTEXT = 120
-HTML_CONTIG_CONTEXT = 120
+# The HTML alignment view walks each read's CIGAR against the contig, so it
+# needs real read bases rather than a pre-extracted anchor. These bound how much
+# is retained and rendered; read slices are dropped as soon as a contig's panels
+# are built, so nothing accumulates across the assembly.
+#
+# The rendered anchor window is at least HTML_MIN_WINDOW, or the longest anchor
+# among the reads at that end if longer, capped at HTML_WINDOW_CAP and never
+# more than the contig itself.
+HTML_MIN_WINDOW = 500
+# Generous enough to cover a typical long-read anchor whole; a pathological
+# 50 kb anchor would otherwise render 50 kb of columns.
+HTML_WINDOW_CAP = 2000
+HTML_CONTIG_CONTEXT = HTML_WINDOW_CAP
 
-# Clipped bases rendered per read in the HTML alignment view. Long telomeric
-# overhangs run to kilobases, which no one reads base by base.
+# Read bases retained per overhang: enough for the widest window plus the clip
+# and slack for insertions.
+HTML_READ_CONTEXT = HTML_WINDOW_CAP + 1500
+
+# Clipped bases rendered per read. Long telomeric overhangs run to kilobases,
+# which no one reads base by base.
 HTML_MAX_OVERHANG = 300
 
 
@@ -94,6 +106,33 @@ OVERHANG_LOG_HEADER = (
     'overhang_length',
     'anchor_length',
 )
+
+
+def _prune_read_slices(contig_stats: ContigStats, keep: int) -> None:
+    """
+    Drop retained read sequence from overhangs that will not be rendered.
+
+    The HTML report shows at most ``keep`` reads per contig end, chosen by net
+    gain. Every other overhang's slice is dead weight, and holding all of them
+    across an assembly is what would make the report expensive on a real
+    genome.
+
+    Parameters
+    ----------
+    contig_stats : ContigStats
+        Statistics for one contig. Modified in place.
+    keep : int
+        Reads per end whose sequence is retained.
+    """
+    for overhangs in (contig_stats.left_overhangs, contig_stats.right_overhangs):
+        if len(overhangs) <= keep:
+            continue
+        ranked = sorted(
+            overhangs, key=lambda oh: (oh.net_gain, oh.length), reverse=True
+        )
+        for oh in ranked[keep:]:
+            oh.read_seq = ''
+            oh.read_seq_offset = 0
 
 
 def _write_overhang_log_rows(handle, contig_stats: ContigStats) -> None:
@@ -1315,6 +1354,7 @@ def extend(
             # Only populated when --html-report is requested.
             terminal_sequences = {}
             selected_reads = {}
+            html_panels = []
 
             # Collect statistics for contigs that meet extension criteria
             extension_results = {}  # Store ExtensionResult objects for writing phase
@@ -1325,7 +1365,7 @@ def extend(
                 max_break=max_break,
                 min_clip=min_clip,
                 min_anchor=min_anchor,
-                anchor_context=HTML_ANCHOR_CONTEXT if html_report else 0,
+                anchor_context=HTML_READ_CONTEXT if html_report else 0,
             ):
                 all_stats[contig_name] = contig_stats
                 logging.info(
@@ -1356,7 +1396,7 @@ def extend(
                     continue
 
                 if html_report:
-                    # Keep only the terminal windows; the full sequence is far
+                    # Keep only the terminal windows; the whole sequence is far
                     # too large to hold for every contig in an assembly.
                     window = min(HTML_CONTIG_CONTEXT, len(original_sequence))
                     terminal_sequences[contig_name] = (
@@ -1375,6 +1415,13 @@ def extend(
                     dry_run=dry_run,
                     terminal_length=screen_terminal_bases,
                 )
+
+                if html_report:
+                    # Only the reads that will actually be rendered need their
+                    # sequence kept. Pruning here bounds peak memory at roughly
+                    # max_reads per end rather than every overhang in the
+                    # assembly.
+                    _prune_read_slices(contig_stats, max(1, html_max_reads))
 
                 if extension_result:
                     # Store the complete ExtensionResult for later use
@@ -1476,6 +1523,37 @@ def extend(
                     + ', '.join(flagged)
                 )
 
+            if html_report:
+                from ..html_report import render_contig_panels
+
+                left_flags = set(anomalous['left_outliers'])
+                right_flags = set(anomalous['right_outliers'])
+                motif_list = sorted(motif_patterns) if motif_patterns else ()
+
+                for contig_name, contig_stats in all_stats.items():
+                    html_panels.extend(
+                        render_contig_panels(
+                            contig=contig_name,
+                            stats=contig_stats,
+                            terminal_sequences=terminal_sequences.get(
+                                contig_name, ('', '')
+                            ),
+                            selected_reads=selected_reads.get(contig_name, {}),
+                            flagged_left=contig_name in left_flags,
+                            flagged_right=contig_name in right_flags,
+                            motifs=motif_list,
+                            max_reads=max(1, html_max_reads),
+                            max_overhang=HTML_MAX_OVERHANG,
+                            min_window=HTML_MIN_WINDOW,
+                            window_cap=HTML_WINDOW_CAP,
+                        )
+                    )
+                    # The rendered blocks are all that is needed from here on.
+                    for oh in (
+                        contig_stats.left_overhangs + contig_stats.right_overhangs
+                    ):
+                        oh.read_seq = ''
+
             # Write extended sequences
             if not dry_run:
                 if output_fasta:
@@ -1564,8 +1642,7 @@ def extend(
                     anomalous=anomalous,
                     excluded_contigs=excluded_contigs,
                     warnings=warnings,
-                    terminal_sequences=terminal_sequences,
-                    selected_reads=selected_reads,
+                    panels=html_panels,
                     total_contigs=len(contig_dict),
                     dry_run=dry_run,
                     motifs=sorted(motif_patterns) if motif_patterns else (),

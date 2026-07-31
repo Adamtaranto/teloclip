@@ -453,8 +453,11 @@ class TestAdapters:
 
             reference_start = 10  # 0-based; equivalent to POS 11
             cigartuples = [(4, 10), (0, 100), (4, 20)]  # 10S100M20S
+            cigarstring = '10S100M20S'
             query_name = 'read1'
             query_sequence = 'A' * 130
+            mapping_quality = 60
+            flag = 0
 
         ends = ends_from_aligned_segment(FakeSegment(), CONTIG_LEN, 'contig1')
 
@@ -485,8 +488,11 @@ class TestAdapters:
 
             reference_start = 10
             cigartuples = [(4, 10), (0, 100), (4, 20)]
+            cigarstring = '10S100M20S'
             query_name = 'read1'
             query_sequence = 'A' * 130
+            mapping_quality = 60
+            flag = 0
 
         assert ends_from_sam_fields(fields, CONTIG_LEN) == ends_from_aligned_segment(
             FakeSegment(), CONTIG_LEN, 'contig1'
