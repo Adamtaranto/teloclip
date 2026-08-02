@@ -38,7 +38,7 @@ jobs:
           fi
       - name: Run benchmarks
         if: steps.codspeed.outputs.configured == 'true'
-        uses: CodSpeedHQ/action@v4
+        uses: CodSpeedHQ/action@v5
         with:
           token: ${{ secrets.CODSPEED_TOKEN }}
           # Simulation mode: deterministic CPU measurement, which suits this
