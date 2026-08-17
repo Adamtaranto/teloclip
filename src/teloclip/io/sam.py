@@ -167,15 +167,24 @@ def processSamlines(
         # A blank line is not a record and not an error: a trailing newline at
         # end of file is normal, and neither counting nor warning about it
         # would tell the user anything.
-        if not line.strip():
+        #
+        # Tested with isspace() rather than strip(), which would allocate a
+        # copy of the whole line — and a SAM line carries the full read
+        # sequence, so on long reads that is kilobytes per record. isspace()
+        # allocates nothing and returns at the first non-space character,
+        # which for a real record is the first one.
+        if not line or line.isspace():
             continue
 
         # Write headers to stdout
-        if line.startswith('@'):
+        if line[0] == '@':
             sys.stdout.write(line)
             continue
         samlineCount += 1
-        samline = line.rstrip('\n').split('\t')
+        # Split without stripping the newline first, for the same reason. The
+        # trailing newline stays on the final field, which no field index used
+        # here refers to.
+        samline = line.split('\t')
 
         # A truncated or non-SAM line is skipped rather than fatal. A run
         # killed by one bad record part way through a large alignment file
