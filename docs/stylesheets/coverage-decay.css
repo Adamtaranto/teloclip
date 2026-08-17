@@ -1,0 +1,122 @@
+/* Interactive coverage-decay explorer.
+ *
+ * The palette mirrors src/teloclip/report/css.py (_LIGHT/_DARK) so the
+ * explorer matches the extend report figures. The Material theme toggle sets
+ * data-md-color-scheme on <body>; only custom properties switch, so the SVG
+ * needs no theme-handling JavaScript.
+ */
+
+#coverage-decay-app {
+  --cd-ink: #0b0b0b;
+  --cd-ink2: #52514e;
+  --cd-muted: #898781;
+  --cd-grid: #e1e0d9;
+  --cd-axis: #c3c2b7;
+  --cd-left: #2a78d6;
+  --cd-critical: #d03b3b;
+  --cd-plane: #f9f9f7;
+  display: block;
+  margin: 1em 0 1.5em;
+}
+
+[data-md-color-scheme='slate'] #coverage-decay-app {
+  --cd-ink: #ffffff;
+  --cd-ink2: #c3c2b7;
+  --cd-muted: #898781;
+  --cd-grid: #2c2c2a;
+  --cd-axis: #383835;
+  --cd-left: #3987e5;
+  --cd-critical: #d03b3b;
+  --cd-plane: #0d0d0d;
+}
+
+#coverage-decay-app .cd-controls {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.4rem 1.2rem;
+  margin-bottom: 0.8rem;
+  font-size: 0.72rem;
+}
+
+#coverage-decay-app .cd-control {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 0 0.5rem;
+  color: var(--cd-ink2);
+}
+
+#coverage-decay-app .cd-control-name {
+  font-weight: 600;
+}
+
+#coverage-decay-app .cd-control-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--cd-ink);
+  text-align: right;
+}
+
+#coverage-decay-app .cd-control input[type='range'],
+#coverage-decay-app .cd-control select {
+  grid-column: 1 / -1;
+  width: 100%;
+  accent-color: var(--cd-left);
+}
+
+#coverage-decay-app .cd-disabled {
+  opacity: 0.45;
+}
+
+#coverage-decay-app .cd-chart {
+  width: 100%;
+  height: auto;
+  background: var(--cd-plane);
+  border-radius: 4px;
+}
+
+#coverage-decay-app .cd-grid {
+  stroke: var(--cd-grid);
+  stroke-width: 1;
+}
+
+#coverage-decay-app .cd-axis {
+  stroke: var(--cd-axis);
+  stroke-width: 1;
+}
+
+#coverage-decay-app .cd-tick {
+  fill: var(--cd-muted);
+  font-size: 11px;
+}
+
+#coverage-decay-app .cd-label {
+  fill: var(--cd-ink2);
+  font-size: 12px;
+}
+
+#coverage-decay-app .cd-ref {
+  stroke: var(--cd-muted);
+  stroke-width: 1;
+  stroke-dasharray: 2 4;
+}
+
+#coverage-decay-app .cd-ref-label {
+  fill: var(--cd-muted);
+  font-size: 11px;
+}
+
+#coverage-decay-app .cd-curve {
+  stroke: var(--cd-left);
+  stroke-width: 2;
+}
+
+#coverage-decay-app .cd-warning {
+  fill: var(--cd-critical);
+  font-size: 13px;
+}
+
+#coverage-decay-app .cd-summary {
+  font-size: 0.72rem;
+  color: var(--cd-ink2);
+  margin-top: 0.6rem;
+}

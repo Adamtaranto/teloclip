@@ -12,7 +12,10 @@ Copyright &copy; 2026 Adam Taranto &mdash; GPL-3.0-or-later
 extra_javascript = [
   "javascripts/mathjax.js",
   "https://unpkg.com/mathjax@3/es5/tex-mml-chtml.js",
+  "javascripts/coverage-decay.js",
 ]
+
+extra_css = ["stylesheets/coverage-decay.css"]
 
 nav = [
   { "Home" = "index.md" },
