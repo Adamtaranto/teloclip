@@ -15,9 +15,11 @@ import pytest
 
 from teloclip.core.analysis import ContigStats, OverhangInfo
 from teloclip.report.charts import (
+    LABEL_LINE_HEIGHT,
     MIN_READS_FOR_DENSITY,
     _density_profile,
     _flag_note,
+    _place_labels,
     _quantile,
     coverage_chart,
     depth_vs_length_chart,
@@ -532,3 +534,157 @@ class TestSharedContract:
 
         assert markup
         assert table
+
+
+class TestFlaggedLabelling:
+    """
+    Direct labels are per contig, not per contig end.
+
+    A contig flagged at both ends is the common case — a high-copy circular
+    element is deep at both — and labelling each end drew the same name twice
+    a few pixels apart, where the two copies overlapped each other and the
+    marks they belonged to.
+    """
+
+    def spec(self):
+        """
+        Build an assembly with one contig flagged at both ends.
+
+        Returns
+        -------
+        dict
+            Contig name to ContigStats.
+        """
+        spec = {f'contig{i}': ([10, 20, 30, 40], [10, 20, 30, 40]) for i in range(9)}
+        spec['plasmid'] = ([50] * 80, [50] * 80)
+        return make_stats(spec)
+
+    def test_coverage_chart_labels_a_contig_once(self):
+        """Both ends flagged yields one label, not two."""
+        chart, _ = coverage_chart(self.spec(), ['plasmid'], ['plasmid'])
+
+        assert chart.count('>plasmid</text>') == 1
+
+    def test_scatter_labels_a_contig_once(self):
+        """Same for the scatter, where both ends are separate points."""
+        chart, _ = depth_vs_length_chart(self.spec(), ['plasmid'], ['plasmid'])
+
+        assert chart.count('>plasmid</text>') == 1
+
+    def test_distinct_flagged_contigs_are_each_labelled(self):
+        """De-duplicating by contig must not collapse different contigs."""
+        chart, _ = coverage_chart(self.spec(), ['plasmid', 'contig3'], [])
+
+        assert chart.count('>plasmid</text>') == 1
+        assert chart.count('>contig3</text>') == 1
+
+    def test_both_ends_still_marked_even_though_labelled_once(self):
+        """
+        Only the label is de-duplicated; both marks keep their flag ring.
+
+        The label is a convenience; the ring is the actual signal, and
+        suppressing it on one end would understate the problem.
+        """
+        chart, _ = coverage_chart(self.spec(), ['plasmid'], ['plasmid'])
+
+        assert chart.count('class="ring"') == 2
+
+
+class TestLabelPlacement:
+    """
+    Direct labels are stacked so they never overlap.
+
+    Contig names are long and flagged contigs cluster together, so two labels
+    placed at their marks routinely collided and rendered as one unreadable
+    run of characters.
+    """
+
+    def test_isolated_labels_do_not_move(self):
+        """A label with nothing near it stays exactly where it was put."""
+        entries = [(100.0, 50.0, 'a'), (800.0, 50.0, 'b')]
+
+        assert _place_labels(entries) == [(100.0, 50.0, 'a'), (800.0, 50.0, 'b')]
+
+    def test_overlapping_labels_are_separated(self):
+        """Two labels at the same spot end up on different lines."""
+        entries = [(100.0, 50.0, 'chr7_rdna_array'), (110.0, 50.0, 'chr8_telomere')]
+
+        placed = _place_labels(entries)
+        tops = sorted(y for _, y, _ in placed)
+
+        assert len(set(tops)) == 2
+        assert tops[1] - tops[0] >= LABEL_LINE_HEIGHT
+
+    def test_labels_far_apart_vertically_do_not_move(self):
+        """Sharing an x is fine when the labels are already on different rows."""
+        entries = [(100.0, 50.0, 'alpha'), (100.0, 200.0, 'beta')]
+
+        assert _place_labels(entries) == entries
+
+    def test_three_crowded_labels_all_separate(self):
+        """A run of collisions stacks rather than piling up on one line."""
+        entries = [
+            (100.0, 50.0, 'aaaaaaaaaa'),
+            (105.0, 50.0, 'bbbbbbbbbb'),
+            (110.0, 50.0, 'cccccccccc'),
+        ]
+
+        tops = [y for _, y, _ in _place_labels(entries)]
+
+        assert len(set(tops)) == 3
+
+    def test_labels_only_move_upward(self):
+        """
+        Labels move up, never down.
+
+        Down would take them over the mark they belong to, which is the one
+        place they must stay clear of.
+        """
+        entries = [(100.0, 50.0, 'alpha'), (105.0, 50.0, 'beta')]
+
+        assert all(y <= 50.0 for _, y, _ in _place_labels(entries))
+
+    def test_crowded_flagged_contigs_render_without_collision(self):
+        """
+        End to end: adjacent flagged contigs with long names get distinct rows.
+
+        This is the case that produced an unreadable overlap in a real report.
+        """
+        spec = {f'contig{i}': ([10, 20, 30, 40], []) for i in range(9)}
+        spec['chr7_rdna_array_collapsed'] = ([3000] * 6, [])
+        spec['chr8_long_telomere_unfinished'] = ([3100] * 6, [])
+        stats = make_stats(spec, contig_length=100_000)
+
+        chart, _ = overhang_length_chart(
+            stats,
+            ['chr7_rdna_array_collapsed', 'chr8_long_telomere_unfinished'],
+            [],
+        )
+
+        ys = re.findall(r'<text class="pt-label" x="[\d.]+" y="([-\d.]+)"', chart)
+        assert len(ys) == 2
+        assert len(set(ys)) == 2
+
+    def test_stacked_labels_stay_inside_the_violin_chart(self):
+        """
+        The top padding leaves room for the rows the stacking can produce.
+
+        A label pushed above the viewBox is cropped by the card edge, which is
+        worse than the overlap it was avoiding.
+        """
+        spec = {f'contig{i}': ([10, 20, 30, 40], []) for i in range(9)}
+        spec['chr7_rdna_array_collapsed'] = ([3000] * 6, [])
+        spec['chr8_long_telomere_unfinished'] = ([3100] * 6, [])
+        stats = make_stats(spec, contig_length=100_000)
+
+        chart, _ = overhang_length_chart(
+            stats,
+            ['chr7_rdna_array_collapsed', 'chr8_long_telomere_unfinished'],
+            [],
+        )
+
+        ys = [
+            float(y)
+            for y in re.findall(r'class="pt-label" x="[\d.]+" y="([-\d.]+)"', chart)
+        ]
+        assert all(y > 0 for y in ys), f'label above the top of the chart: {ys}'

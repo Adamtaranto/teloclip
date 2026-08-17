@@ -253,6 +253,61 @@ After manually extending contigs the revised assembly should be re-polished usin
 
 The final telomere-extended assembly should be re-polished using available long and short read data to correct indels (i.e. with `NextPolish2` and `Pypolca`) in the raw long-read extensions.
 
+### Reading the HTML report
+
+`--html-report` writes a single self-contained file — no CDN, no web fonts, no
+separate stylesheet — so it survives being emailed, copied onto a cluster, or
+opened years later. The figures below come from the demo assembly built by
+`scripts/testdata/generate_demo_assembly.py`, so you can reproduce them
+yourself. See [Reading the report](https://adamtaranto.github.io/teloclip/guide/reports/)
+for the full walkthrough.
+
+**How much evidence supports each contig end?**
+
+<img src="https://raw.githubusercontent.com/Adamtaranto/teloclip/main/docs/images/report-overhang-depth.png" alt="Strip plot of overhang read depth for each contig end, with three anomalous ends ringed and labelled" />
+
+One point per contig end, blue for left and orange for right, against a median
+reference line. A healthy assembly is a flat band near the median. Here
+`rdna_plasmid` and `chr7_rdna_array` sit far above it and are ringed as
+anomalous.
+
+**How far past the end do those reads reach?**
+
+<img src="https://raw.githubusercontent.com/Adamtaranto/teloclip/main/docs/images/report-overhang-length.png" alt="Split violin plot of overhang length distributions per contig" />
+
+Depth alone will not tell you how much sequence an extension can recover. Each
+contig is one shape split at its centre line — left end on the left half, right
+end on the right — with the median tick and interquartile range drawn over the
+distribution. Eight contigs carry ordinary few-hundred-base overhangs; two run
+into kilobases.
+
+**Which kind of end is it?**
+
+<img src="https://raw.githubusercontent.com/Adamtaranto/teloclip/main/docs/images/report-depth-vs-length.png" alt="Scatter plot of overhang depth against median overhang length, with each corner labelled" />
+
+Plotting the two measures against each other separates cases that either one
+alone would conflate. Each corner means something different:
+
+| Position | Reading |
+|---|---|
+| Top right — deep **and** long | A collapsed repeat or rDNA array at the terminus (`chr7_rdna_array`). Extending from a single read is rarely meaningful. |
+| Top left — deep but short | Reads drawn in from elsewhere, as a high-copy circular element does (`rdna_plasmid`). |
+| Bottom right — long but shallow | A telomere the assembly stopped short of (`chr8_long_telomere`). This is the case extension exists to serve. |
+| Bottom left — shallow and short | Little evidence either way. Not an anomaly, just a quiet end. |
+
+Clicking any mark selects that contig in all three charts at once, so an end
+that looks unremarkable in one view can be followed to where it is not.
+
+**Should I believe this extension?**
+
+<img src="https://raw.githubusercontent.com/Adamtaranto/teloclip/main/docs/images/report-alignments.png" alt="Per-read alignment panel showing overhang reads laid out against a contig terminus" />
+
+Every supporting read laid out against the contig terminus, marked by the
+vertical rule. Grey is the anchored portion of the read, colour is the soft
+clip, and highlighted bases are motif matches. This is what lets you judge an
+extension rather than take it on trust.
+
+
 ### Optional Quality Control
 
 **Additional filters**

@@ -137,6 +137,8 @@ hovering.
 
 ### Overhang depth across contigs
 
+![Strip plot of overhang read depth for each contig end, with anomalous ends ringed and labelled](../images/report-overhang-depth.png)
+
 A strip plot with one point per contig end against a median reference line.
 
 The shape is the message: a healthy assembly is a flat band near the median.
@@ -149,6 +151,8 @@ Depth says how many reads support an end. This says how far they reach past it,
 which is what determines how much sequence an extension can actually recover — a
 tight distribution at a few hundred bases reads very differently from a broad one
 running into kilobases, and neither is visible in a count.
+
+![Split violin plot of overhang length distributions per contig](../images/report-overhang-length.png)
 
 Each contig is one shape, split at its centre line: the left half is the left end,
 the right half the right end. Width is the proportion of reads at that length, the
@@ -165,6 +169,8 @@ Two things are worth knowing about how it is drawn:
   figure you are looking for is never hidden by the clip.
 
 ### Overhang depth against length
+
+![Scatter plot of overhang depth against median overhang length](../images/report-depth-vs-length.png)
 
 One point per contig end, depth against median overhang length. This is where the
 two preceding charts are reconciled, and where the corner a point lands in tells

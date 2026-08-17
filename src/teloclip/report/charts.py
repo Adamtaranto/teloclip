@@ -38,6 +38,76 @@ DENSITY_BINS = 14
 LENGTH_CLIP_QUANTILE = 0.99
 
 
+# Vertical step used when a direct label has to move clear of another, and the
+# approximate width of one character at the label font size. Both are used only
+# to keep labels from overlapping, so an estimate is enough.
+LABEL_LINE_HEIGHT = 13
+LABEL_CHAR_WIDTH = 3.5
+
+
+def _place_labels(
+    entries: List[Tuple[float, float, str]],
+) -> List[Tuple[float, float, str]]:
+    """
+    Stack direct labels so that none overlaps another.
+
+    Contig names are long and flagged contigs cluster, so two labels placed at
+    their marks routinely collide and render as one unreadable string. Each
+    label is moved straight up in whole line steps until it is clear of every
+    label already placed; a label with nothing near it does not move at all.
+
+    Parameters
+    ----------
+    entries : List[Tuple[float, float, str]]
+        One ``(x, y, text)`` per label, at its preferred position.
+
+    Returns
+    -------
+    List[Tuple[float, float, str]]
+        The same labels with ``y`` adjusted where needed.
+    """
+    placed: List[Tuple[float, float, str]] = []
+    boxes: List[Tuple[float, float, float]] = []
+
+    # Left to right, so that a run of crowded labels stacks in reading order.
+    for x, y, text in sorted(entries, key=lambda entry: entry[0]):
+        half = LABEL_CHAR_WIDTH * len(text)
+        left, right = x - half, x + half
+        top = y
+
+        def collides(top: float, left: float = left, right: float = right) -> bool:
+            """
+            Whether a label at this height would touch one already placed.
+
+            Parameters
+            ----------
+            top : float
+                Candidate baseline.
+            left : float
+                Left edge of the candidate label.
+            right : float
+                Right edge of the candidate label.
+
+            Returns
+            -------
+            bool
+                True if the candidate overlaps an existing label.
+            """
+            return any(
+                not (right < box_left or left > box_right)
+                and abs(top - box_top) < LABEL_LINE_HEIGHT
+                for box_left, box_right, box_top in boxes
+            )
+
+        while collides(top):
+            top -= LABEL_LINE_HEIGHT
+
+        boxes.append((left, right, top))
+        placed.append((x, top, text))
+
+    return placed
+
+
 def coverage_chart(
     stats_dict: Dict[str, ContigStats],
     flagged_left: Sequence[str],
@@ -175,17 +245,30 @@ def coverage_chart(
             + '</g>'
         )
 
-    # Direct-label only the flagged points; everything else is on hover.
+    # Direct-label only the flagged points; everything else is on hover. One
+    # label per contig, not per end: a contig flagged at both ends would
+    # otherwise have its name drawn twice a few pixels apart, and the two
+    # copies overlap each other and the marks. The label goes on the deeper of
+    # the two ends, which is the one drawing attention in the first place.
+    deepest_flagged = {}
     for i, name, end, count, is_flagged in points:
         if not is_flagged:
             continue
+        if name not in deepest_flagged or count > deepest_flagged[name][2]:
+            deepest_flagged[name] = (i, end, count)
+
+    label_entries = []
+    for name, (i, end, count) in deepest_flagged.items():
         # Keep the label inside the plot: a flagged contig at either extreme
         # would otherwise have its name cropped by the card edge.
-        half = 3.5 * len(name)
+        half = LABEL_CHAR_WIDTH * len(name)
         lx = min(max(x_of(i, end), pad_l + half), pad_l + plot_w - half)
+        label_entries.append((lx, y_of(count) - LABEL_LINE_HEIGHT, name))
+
+    for lx, ly, name in _place_labels(label_entries):
         svg.append(
             f'<text class="pt-label" x="{lx:.1f}" '
-            f'y="{y_of(count) - 13:.1f}" text-anchor="middle">{escape(name)}</text>'
+            f'y="{ly:.1f}" text-anchor="middle">{escape(name)}</text>'
         )
 
     svg.append(
@@ -372,8 +455,12 @@ def overhang_length_chart(
 
     step = max(24, TARGET_W // max(1, len(names)))
     plot_w = max(TARGET_W, step * max(1, len(names)))
+    # Flagged names all sit on one line above the plot here, rather than at
+    # their marks as in the other two charts, so crowded labels stack upward.
+    # The top pad leaves room for two rows of them before anything is cropped.
+    pad_t = PAD_T + 2 * LABEL_LINE_HEIGHT
     width = plot_w + PAD_L + PAD_R
-    height = PLOT_H + PAD_T + PAD_B
+    height = PLOT_H + pad_t + PAD_B
 
     # Half-width of a violin at full density, leaving a gap between neighbours.
     half_w = step * 0.38
@@ -409,7 +496,7 @@ def overhang_length_chart(
             Y coordinate, clamped to the plotting area.
         """
         fraction = min(length / hi, 1.0) if hi else 0.0
-        return PAD_T + PLOT_H - fraction * PLOT_H
+        return pad_t + PLOT_H - fraction * PLOT_H
 
     svg: List[str] = []
 
@@ -494,7 +581,7 @@ def overhang_length_chart(
                     float
                         Y coordinate of the bin's centre.
                     """
-                    return PAD_T + PLOT_H - (b + 0.5) * band
+                    return pad_t + PLOT_H - (b + 0.5) * band
 
                 outer = [
                     f'{centre + direction * profile[b] * half_w:.1f},{y_of_bin(b):.1f}'
@@ -529,25 +616,31 @@ def overhang_length_chart(
             # not have to be landed on precisely.
             group.append(
                 f'<rect class="hit" x="{min(centre, centre + direction * half_w):.1f}" '
-                f'y="{PAD_T}" width="{half_w:.1f}" height="{PLOT_H}"/>'
+                f'y="{pad_t}" width="{half_w:.1f}" height="{PLOT_H}"/>'
             )
             group.append('</g>')
             svg.append(''.join(group))
 
-    # Direct-label only the flagged ends, as the depth chart does.
+    # Direct-label only the flagged ends, as the depth chart does. These all
+    # sit on one line above the plot, so adjacent flagged contigs with long
+    # names collide unless they are stacked.
+    label_entries = []
     for i, name in enumerate(names):
         if name not in left_flags and name not in right_flags:
             continue
-        half_label = 3.5 * len(name)
+        half_label = LABEL_CHAR_WIDTH * len(name)
         lx = min(max(x_of(i), PAD_L + half_label), PAD_L + plot_w - half_label)
+        label_entries.append((lx, pad_t - 8, name))
+
+    for lx, ly, name in _place_labels(label_entries):
         svg.append(
-            f'<text class="pt-label" x="{lx:.1f}" y="{PAD_T - 8}" '
+            f'<text class="pt-label" x="{lx:.1f}" y="{ly:.1f}" '
             f'text-anchor="middle">{escape(name)}</text>'
         )
 
     svg.append(
-        f'<line class="axis" x1="{PAD_L}" y1="{PAD_T + PLOT_H}" '
-        f'x2="{PAD_L + plot_w}" y2="{PAD_T + PLOT_H}"/>'
+        f'<line class="axis" x1="{PAD_L}" y1="{pad_t + PLOT_H}" '
+        f'x2="{PAD_L + plot_w}" y2="{pad_t + PLOT_H}"/>'
     )
     axis_note = (
         f'{len(names)} contigs with overhangs, in assembly order. Overhang length in bp'
@@ -812,19 +905,34 @@ def depth_vs_length_chart(
             + '</g>'
         )
 
+    # One label per flagged contig rather than per end, on the deeper of its
+    # two points. Both ends of a contig are often flagged together, and two
+    # copies of the same name a few pixels apart obscure each other and the
+    # marks they belong to.
+    deepest_flagged = {}
     for point in points:
         if not (point['depth_flagged'] or point['length_flagged']):
             continue
         name = point['contig']
-        half_label = 3.5 * len(name)
+        if (
+            name not in deepest_flagged
+            or point['depth'] > deepest_flagged[name]['depth']
+        ):
+            deepest_flagged[name] = point
+
+    label_entries = []
+    for name, point in deepest_flagged.items():
+        half_label = LABEL_CHAR_WIDTH * len(name)
         lx = min(
             max(x_of(point['median']), PAD_L + half_label),
             PAD_L + plot_w - half_label,
         )
+        label_entries.append((lx, y_of(point['depth']) - LABEL_LINE_HEIGHT, name))
+
+    for lx, ly, name in _place_labels(label_entries):
         svg.append(
             f'<text class="pt-label" x="{lx:.1f}" '
-            f'y="{y_of(point["depth"]) - 13:.1f}" '
-            f'text-anchor="middle">{escape(name)}</text>'
+            f'y="{ly:.1f}" text-anchor="middle">{escape(name)}</text>'
         )
 
     svg.append(
