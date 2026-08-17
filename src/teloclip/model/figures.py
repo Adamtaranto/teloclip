@@ -6,11 +6,10 @@ These produce the static images embedded in the documentation
 plotting calls so that importing :mod:`teloclip.model` for the analytic maths
 never drags a plotting stack in.
 
-Colour follows the palette of the ``teloclip extend`` HTML report
-(``teloclip.report.css``): blue and orange are the only categorical hues, and
-the ordered size-selection cutoffs use a sequential blue ramp (light to dark
-with increasing cutoff) with every line labelled directly, so identity never
-rides on colour alone.
+Colour anchors on the palette of the ``teloclip extend`` HTML report
+(``teloclip.report.css``): blue and orange are its categorical hues, extended
+here with a purple and a green (CVD-validated as a set) so each size-selection
+cutoff in the family plot gets its own legend-keyed colour.
 """
 
 from contextlib import contextmanager
@@ -35,10 +34,11 @@ INK = '#0b0b0b'
 MUTED = '#898781'
 GRID = '#e1e0d9'
 
-# Sequential ramp for the ordered cutoff parameter, light to dark with
-# increasing cutoff. Monotone in lightness; the pale end is relieved by a
-# direct label on every line.
-BLUE_RAMP = ('#7fb0e8', '#4d90dd', '#2a78d6', '#1a5aa8')
+# Categorical colours for the cutoff family: blue and orange from the report
+# palette plus a purple and a green stepped to keep every adjacent pair
+# distinguishable under colour-vision deficiency (validated worst-pair
+# ΔE 15.3 in this order).
+CUTOFF_COLORS = ('#2a78d6', '#eb6834', '#8a5cc2', '#2f8f6b')
 
 # Nature-style figure defaults: sans-serif, small type, thin open axes.
 # 89 mm is the single-column width; 183 mm the double column.
@@ -121,25 +121,14 @@ def plot_decay_families(out_path: str) -> None:
             1, 2, figsize=(DOUBLE_COL_IN, 2.4), sharey=True
         )
 
-        # Panel a: one distribution, ordered cutoffs on the sequential ramp.
-        # Each curve carries a direct label anchored where it has pulled away
-        # from its neighbours (harsher cutoffs separate further out), placed
-        # below the line so the labels stack down the family diagonal.
+        # Panel a: one distribution, one distinctly coloured curve per
+        # cutoff, identified through the legend.
         cutoffs = (0.0, 5000.0, 10_000.0, 20_000.0)
-        label_at_kb = (3.0, 7.0, 11.0, 17.0)
-        for cutoff, color, at_kb in zip(cutoffs, BLUE_RAMP, label_at_kb):
+        for cutoff, color in zip(cutoffs, CUTOFF_COLORS):
             c = expected_relative_coverage(x, profile, min_length=cutoff)
-            ax_a.plot(xk, c, color=color)
-            label = 'no cutoff' if cutoff == 0 else f'≥{cutoff / 1000:g} kb'
-            xi = int(np.searchsorted(xk, at_kb))
-            ax_a.annotate(
-                label,
-                (xk[xi], float(c[xi])),
-                xytext=(3, -8),
-                textcoords='offset points',
-                fontsize=6,
-                color=INK,
-            )
+            label = 'no cutoff' if cutoff == 0 else f'cutoff ≥{cutoff / 1000:g} kb'
+            ax_a.plot(xk, c, color=color, label=label)
+        ax_a.legend(loc='lower right')
         ax_a.set_xlabel('Distance from contig end (kb)')
         ax_a.set_ylabel('Relative coverage $c(x)$')
         ax_a.set_title(
@@ -252,6 +241,12 @@ def plot_decay_with_ci(
         ax.set_ylabel('Coverage (reads)')
         ax.set_xlim(0, window / 1000.0)
         ax.set_ylim(0, None)
+        ax.set_title(
+            f'Lognormal fragments {profile.mean / 1000:g} ± {profile.sd / 1000:g} kb'
+            f' · cutoff ≥{cutoff / 1000:g} kb · depth {depth:g}×',
+            loc='left',
+            fontweight='bold',
+        )
         ax.legend(loc='lower right')
 
         fig.savefig(out_path)

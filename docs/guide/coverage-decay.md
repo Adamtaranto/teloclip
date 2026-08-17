@@ -89,10 +89,11 @@ Two things to take away:
   fragments that would have covered the terminus are the ones discarded.
 
 Simulation confirms the analytic curve. Each simulation fragments a 1 Mb
-molecule, applies the cutoff, and tallies terminal coverage; the band spans
-the central 95% of 200 independent runs:
+molecule with lognormal fragment lengths (mean 8 kb, sd 4 kb), applies a
+2.5 kb size-selection cutoff at 30× interior depth, and tallies terminal
+coverage; the band spans the central 95% of 200 independent runs:
 
-![Simulated terminal coverage at thirty-fold depth with a 95 percent bootstrap band, overlaid with the analytic expectation, which tracks the simulated mean closely across the whole decay region.](../images/coverage-decay-bootstrap.png)
+![Simulated terminal coverage for lognormal fragment lengths with mean 8 kb and standard deviation 4 kb under a 2.5 kb size-selection cutoff at thirty-fold interior depth, with a 95 percent bootstrap band from 200 simulations, overlaid with the analytic expectation, which tracks the simulated mean closely across the whole decay region.](../images/coverage-decay-bootstrap.png)
 
 !!! note "Reproducing these figures"
 
