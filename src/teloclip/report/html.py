@@ -20,7 +20,12 @@ from html import escape
 from typing import Dict, List, Sequence
 
 from ..core.analysis import ContigStats
-from .charts import coverage_chart
+from .charts import (
+    MIN_READS_FOR_DENSITY,
+    coverage_chart,
+    depth_vs_length_chart,
+    overhang_length_chart,
+)
 from .css import build_css
 from .panels import motif_pattern
 from .text import fmt_delta_html, fmt_int
@@ -183,11 +188,22 @@ def render_html_report(
         else '<p class="note">No contigs were extended.</p>'
     )
 
-    # --- Coverage chart ------------------------------------------------------
-    chart, chart_table = coverage_chart(
-        stats_dict,
+    # --- Charts --------------------------------------------------------------
+    # Three views of the same per-end data, in the order a reader needs them:
+    # how much evidence there is, how far it reaches, and how the two relate.
+    depth_flags = (
         anomalous.get('left_outliers', []),
         anomalous.get('right_outliers', []),
+    )
+    length_flags = (
+        anomalous.get('left_length_outliers', []),
+        anomalous.get('right_length_outliers', []),
+    )
+
+    chart, chart_table = coverage_chart(stats_dict, *depth_flags)
+    length_chart, length_table = overhang_length_chart(stats_dict, *length_flags)
+    scatter_chart, scatter_table = depth_vs_length_chart(
+        stats_dict, *depth_flags, *length_flags
     )
 
     # --- Alignment panels ----------------------------------------------------
@@ -235,7 +251,45 @@ unmodified.</p><ul>{items}</ul></div>
 <div class="legend">
   <span><span class="sw sw-left"></span>left end</span>
   <span><span class="sw sw-right"></span>right end</span>
-  <span><span class="sw sw-flag"></span>&#9888; anomalous depth</span>
+  <span><span class="sw sw-flag"></span>&#9888; anomalous</span>
+</div>
+"""
+
+    # Both new charts are omitted rather than drawn empty when nothing has an
+    # overhang: an axis with no marks says less than no section at all.
+    length_section = ''
+    if length_chart:
+        length_section = f"""
+<h2>Overhang length distribution</h2>
+<div class="card">
+  {length_chart}
+  {legend}
+  <p class="note">Each shape is one contig, split at its centre line: the left
+  half is the left end, the right half the right end. Width is the proportion of
+  reads at that length, the dark tick is the median and the short rule is the
+  interquartile range. Ends with fewer than
+  {MIN_READS_FOR_DENSITY} reads are drawn as individual points, since a
+  distribution through that few reads would describe the estimator rather than
+  the data.</p>
+  {length_table}
+</div>
+"""
+
+    scatter_section = ''
+    if scatter_chart:
+        scatter_section = f"""
+<h2>Overhang depth against length</h2>
+<div class="card">
+  {scatter_chart}
+  {legend}
+  <p class="note">Where the two measures disagree is informative. Deep but
+  short (top left) suggests reads drawn in from elsewhere, as an organellar
+  contig or a collapsed repeat does. Long but shallow (bottom right) is the
+  ordinary shape of a telomere the assembly stopped short of. High on both
+  (top right) is the signature of a collapsed array at the terminus. Hover for
+  the full figures; click to highlight both ends of that contig in every
+  chart.</p>
+  {scatter_table}
 </div>
 """
 
@@ -284,9 +338,14 @@ unmodified.</p><ul>{items}</ul></div>
     {chart}
     {legend}
     <p class="note">Each point is one contig end. Hover for the contig name and
-    depth. Points far above the median are worth investigating.</p>
+    depth; click to follow the same contig through the charts below. Points far
+    above the median are worth investigating.</p>
     {chart_table}
   </div>
+
+  {length_section}
+
+  {scatter_section}
 
   <h2>Overhang alignments</h2>
   <p class="note">Reads are laid out against the contig terminus, marked by the
@@ -361,35 +420,96 @@ unmodified.</p><ul>{items}</ul></div>
     row.addEventListener('mouseleave', hide);
   }}
 
-  // Chart points: contig name on hover, and on click, pinned as a label so it
-  // survives moving the mouse away.
-  const svg = document.querySelector('.chart-scroll svg');
-  for (const pt of document.querySelectorAll('svg g.pt')) {{
-    const d = pt.dataset;
-    const rows = [['Contig', d.contig], ['End', d.end],
-                  ['Overhang reads', d.depth]];
-    if (d.flagged === 'yes') rows.push(['Depth', 'anomalous']);
-    const html = table(rows);
-    pt.addEventListener('mousemove', (e) => show(html, e.clientX, e.clientY));
-    pt.addEventListener('mouseleave', hide);
-    pt.addEventListener('focus', () => {{
-      const r = pt.getBoundingClientRect();
+  // Chart marks. Every mark in every chart carries a data-contig, so one
+  // handler covers the strip plot, the violins and the scatter. Selecting a
+  // contig in any of them marks both of its ends in all three: an end that
+  // looks unremarkable on depth may not be on length, and following it between
+  // views is the whole reason the charts sit on one page.
+  const marks = document.querySelectorAll('svg g.pt, svg g.vio');
+  let selected = null;
+
+  // Only rows whose value is present, so each chart shows what it knows
+  // without a handler per chart.
+  const rowsFor = (d) => {{
+    const candidates = [
+      ['End', d.end],
+      ['Contig length', d.contiglength ? d.contiglength + ' bp' : ''],
+      ['Overhang reads', d.depth],
+      ['Median length', d.median ? d.median + ' bp' : ''],
+      ['Longest', d.longest ? d.longest + ' bp' : ''],
+      ['Best gain', d.gain ? d.gain + ' bp' : ''],
+    ];
+    const rows = candidates.filter(([, value]) => value);
+    if (d.note && d.note !== '\\u2013') rows.push(['Flagged', d.note]);
+    else if (d.flagged === 'yes') rows.push(['Flagged', 'anomalous']);
+    return rows;
+  }};
+
+  const applySelection = () => {{
+    for (const mark of marks) {{
+      const on = selected !== null && mark.dataset.contig === selected;
+      mark.classList.toggle('is-selected', on);
+      mark.setAttribute('aria-pressed', on ? 'true' : 'false');
+
+      // The name is pinned onto selected points so the selection is readable
+      // without the tooltip. Violins have no single anchor point, and are
+      // already labelled by position, so they get the highlight only.
+      const pin = mark.querySelector('.pt-pin');
+      if (on && !pin && mark.dataset.x) {{
+        const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+        t.setAttribute('class', 'pt-pin');
+        t.setAttribute('x', mark.dataset.x);
+        t.setAttribute('y', String(parseFloat(mark.dataset.y) - 13));
+        t.setAttribute('text-anchor', 'middle');
+        t.textContent = mark.dataset.contig;
+        mark.appendChild(t);
+      }} else if (!on && pin) {{
+        pin.remove();
+      }}
+    }}
+    for (const chart of document.querySelectorAll('.chart-scroll svg')) {{
+      chart.classList.toggle('has-selection', selected !== null);
+    }}
+  }};
+
+  const toggle = (contig) => {{
+    selected = selected === contig ? null : contig;
+    applySelection();
+  }};
+
+  for (const mark of marks) {{
+    const html = table(rowsFor(mark.dataset));
+    mark.addEventListener('mousemove', (e) => show(html, e.clientX, e.clientY));
+    mark.addEventListener('mouseleave', hide);
+    mark.addEventListener('focus', () => {{
+      const r = mark.getBoundingClientRect();
       show(html, r.right, r.top);
     }});
-    pt.addEventListener('blur', hide);
-    pt.addEventListener('click', () => {{
-      const existing = pt.querySelector('.pt-pin');
-      if (existing) {{ existing.remove(); return; }}
-      const t = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-      t.setAttribute('class', 'pt-pin');
-      t.setAttribute('x', d.x);
-      t.setAttribute('y', String(parseFloat(d.y) - 13));
-      t.setAttribute('text-anchor', 'middle');
-      t.textContent = d.contig;
-      pt.appendChild(t);
+    mark.addEventListener('blur', hide);
+    mark.addEventListener('click', () => toggle(mark.dataset.contig));
+    // Marks are focusable, so they must also be operable from the keyboard.
+    mark.addEventListener('keydown', (e) => {{
+      if (e.key === 'Enter' || e.key === ' ') {{
+        e.preventDefault();
+        toggle(mark.dataset.contig);
+      }}
+    }});
+    mark.setAttribute('aria-pressed', 'false');
+  }}
+
+  // Clicking the background of a chart clears the selection, and so does
+  // Escape, so there is always a way out that does not require finding the
+  // originally clicked mark again.
+  for (const chart of document.querySelectorAll('.chart-scroll svg')) {{
+    chart.addEventListener('mouseleave', hide);
+    chart.addEventListener('click', (e) => {{
+      if (!e.target.closest('g.pt, g.vio')) {{ selected = null; applySelection(); }}
     }});
   }}
-  if (svg) svg.addEventListener('mouseleave', hide);
+  document.addEventListener('keydown', (e) => {{
+    if (e.key === 'Escape' && selected !== null) {{ selected = null; applySelection(); }}
+  }});
+
   window.addEventListener('scroll', hide, {{passive: true}});
 }})();
 </script>

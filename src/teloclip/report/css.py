@@ -144,6 +144,36 @@ svg .pt-right .dot {{ fill: var(--right); }}
 svg .ring {{ fill: none; stroke: var(--critical); stroke-width: 2; }}
 svg .pt:hover .dot {{ r: 6; }}
 
+/* Violins. Identity is carried by the outline at full strength; the fill is
+   held well back so that two halves meeting at the centre line read as one
+   shape rather than as a solid block. */
+svg .vio-body {{ stroke-width: 1.5; }}
+svg .vio-left .vio-body {{ fill: color-mix(in srgb, var(--left) 22%, transparent);
+  stroke: var(--left); }}
+svg .vio-right .vio-body {{ fill: color-mix(in srgb, var(--right) 22%, transparent);
+  stroke: var(--right); }}
+svg .vio-left .vio-dot {{ fill: var(--left); stroke: var(--surface); stroke-width: 2; }}
+svg .vio-right .vio-dot {{ fill: var(--right); stroke: var(--surface); stroke-width: 2; }}
+/* The interquartile rule and the median tick sit over the density, and have to
+   hold their own against the fill beneath them. */
+svg .vio-iqr {{ stroke: var(--ink2); stroke-width: 3; stroke-linecap: round; }}
+svg .vio-median {{ stroke: var(--ink); stroke-width: 2; stroke-linecap: round; }}
+svg .vio-flag .vio-body {{ stroke: var(--critical); }}
+svg .vio {{ cursor: pointer; }}
+svg .vio:hover .vio-body {{ stroke-width: 2.5; }}
+
+/* Cross-chart selection. Clicking a contig in any chart marks both of its ends
+   in all three, so an end that looks unremarkable in one view can be found in
+   the others. Everything unselected recedes rather than disappearing: the
+   distribution it belongs to is still the context for the selection. */
+svg.has-selection .pt:not(.is-selected),
+svg.has-selection .vio:not(.is-selected) {{ opacity: .25; }}
+svg .pt.is-selected .dot {{ r: 6.5; }}
+svg .is-selected .sel-ring {{
+  fill: none; stroke: var(--ink); stroke-width: 2;
+}}
+svg .vio.is-selected .vio-body {{ stroke-width: 2.5; }}
+
 .legend {{ display: flex; gap: 1.1rem; flex-wrap: wrap;
   margin: .75rem 0 0; font-size: .82rem; color: var(--ink2); }}
 .legend span.sw {{ display: inline-block; width: 10px; height: 10px;
