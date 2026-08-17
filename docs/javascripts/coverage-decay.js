@@ -172,7 +172,7 @@
       el(
         'text',
         { x: PAD_L + plotW / 2, y: H - 8, class: 'cd-label', 'text-anchor': 'middle' },
-        'Distance from contig end (kb)'
+        'Distance from contig end (Kbp)'
       )
     );
     var yLabel = el(
@@ -224,13 +224,13 @@
   // --- controls ----------------------------------------------------------
 
   // Defaults mirror the PacBio HiFi-like library used in the static figures:
-  // lognormal 15 +/- 3 kb with a strict 10 kb lower-bound cutoff.
+  // lognormal 15 +/- 3 Kbp with a strict 10 Kbp lower-bound cutoff.
   var SLIDERS = [
     { key: 'depth', label: 'Interior depth', min: 5, max: 100, step: 1, value: 30, unit: '×' },
-    { key: 'mean', label: 'Mean fragment length', min: 1000, max: 30000, step: 500, value: 15000, unit: 'kb', kb: true },
-    { key: 'sd', label: 'Fragment length sd', min: 500, max: 15000, step: 250, value: 3000, unit: 'kb', kb: true },
-    { key: 'cutoff', label: 'Lower-bound cutoff (discard shorter)', min: 0, max: 25000, step: 500, value: 10000, unit: 'kb', kb: true },
-    { key: 'window', label: 'x-axis range', min: 10000, max: 100000, step: 5000, value: 35000, unit: 'kb', kb: true },
+    { key: 'mean', label: 'Mean fragment length', min: 1000, max: 30000, step: 500, value: 15000, unit: 'Kbp', kb: true },
+    { key: 'sd', label: 'Fragment length sd', min: 500, max: 15000, step: 250, value: 3000, unit: 'Kbp', kb: true },
+    { key: 'cutoff', label: 'Lower-bound cutoff (discard shorter)', min: 0, max: 25000, step: 500, value: 10000, unit: 'Kbp', kb: true },
+    { key: 'window', label: 'x-axis range', min: 10000, max: 100000, step: 5000, value: 35000, unit: 'Kbp', kb: true },
   ];
 
   function fmt(spec, value) {
@@ -315,7 +315,7 @@
         var at1kb = params.depth * curve(1000);
         summary.textContent =
           'Expected reads spanning the outermost base: ' + atEnd.toFixed(2) +
-          ' • covering 1 kb in: ' + at1kb.toFixed(1) +
+          ' • covering 1 Kbp in: ' + at1kb.toFixed(1) +
           ' • interior: ' + params.depth + '. ' +
           'Overhang candidates can only come from that first number.';
       } else {

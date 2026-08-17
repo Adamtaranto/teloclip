@@ -101,11 +101,13 @@ def plot_decay_families(out_path: str) -> None:
     """
     Plot analytic decay curves across cutoffs and length distributions.
 
-    Two panels around a PacBio HiFi-like library (lognormal, mean 15 kb,
-    sd 3 kb, strict 10 kb lower-bound size selection): (a) that profile under
-    increasingly harsh cutoffs — fragments below the cutoff are discarded —
-    and (b) different fragment-length distributions under the 10 kb cutoff,
-    showing how distribution shape moves the decay.
+    Three panels around a PacBio HiFi-like library (lognormal, mean 15 Kbp,
+    sd 3 Kbp, strict 10 Kbp lower-bound size selection; fragments below the
+    cutoff are discarded): (a) coverage relative to the *selected* library's
+    own interior depth, which isolates the shape of the decay; (b) the same
+    curves renormalised to the *unselected* library's interior depth, which
+    adds back the yield lost to size selection; (c) different fragment-length
+    distributions under the 10 Kbp cutoff.
 
     Parameters
     ----------
@@ -117,51 +119,72 @@ def plot_decay_families(out_path: str) -> None:
     profile = LognormalLengths(mean=15_000.0, sd=3000.0)
     x = np.linspace(0.0, 35_000.0, 700)
     xk = x / 1000.0
+    cutoffs = (0.0, 10_000.0, 13_000.0, 17_000.0)
 
     with nature_style():
-        fig, (ax_a, ax_b) = plt.subplots(
-            1, 2, figsize=(DOUBLE_COL_IN, 2.4), sharey=True
+        fig, (ax_a, ax_b, ax_c) = plt.subplots(
+            1, 3, figsize=(DOUBLE_COL_IN, 2.1), sharey=True
         )
 
-        # Panel a: one distribution, one distinctly coloured curve per
-        # cutoff, identified through the legend.
-        cutoffs = (0.0, 10_000.0, 15_000.0, 20_000.0)
+        # Panels a and b: one distribution, one distinctly coloured curve per
+        # cutoff, identified through the shared legend. Panel a normalises to
+        # the selected library's interior depth (c(x), which always reaches 1
+        # in the interior); panel b rescales each curve by the fraction of
+        # sequenced bases the cutoff retains, S(Lmin) * E[l|trunc] / E[l], so
+        # the interior plateau shows the yield cost at equal sequencing
+        # effort.
         for cutoff, color in zip(cutoffs, CUTOFF_COLORS):
             c = expected_relative_coverage(x, profile, min_length=cutoff)
-            label = 'no cutoff' if cutoff == 0 else f'discard ≤{cutoff / 1000:g} kb'
+            label = 'no cutoff' if cutoff == 0 else f'discard ≤{cutoff / 1000:g} Kbp'
             ax_a.plot(xk, c, color=color, label=label)
+            if cutoff > 0:
+                surv = float(profile.survival(np.array([cutoff]))[0])
+                retained = surv * profile.truncated_mean(cutoff) / profile.mean
+            else:
+                retained = 1.0
+            ax_b.plot(xk, retained * c, color=color)
         ax_a.legend(loc='lower right')
-        ax_a.set_xlabel('Distance from contig end (kb)')
-        ax_a.set_ylabel('Relative coverage $c(x)$')
+        ax_a.set_ylabel('Relative coverage')
         ax_a.set_title(
-            'a  Size-selection cutoff (lognormal 15 ± 3 kb)',
+            'a  vs selected interior depth',
+            loc='left',
+            fontweight='bold',
+        )
+        ax_b.set_title(
+            'b  vs unselected interior depth',
             loc='left',
             fontweight='bold',
         )
 
-        # Panel b: one cutoff, distribution identity in the two categorical
-        # hues plus line style, each directly labelled.
+        # Panel c: one cutoff, distribution identity in the two categorical
+        # hues plus line style.
         cutoff = 10_000.0
         series = (
-            (profile, BLUE, '-', 'lognormal, sd 3 kb (HiFi)'),
+            (profile, BLUE, '-', 'lognormal, sd 3 Kbp (HiFi)'),
             (
                 LognormalLengths(mean=15_000.0, sd=6000.0),
                 BLUE,
                 '--',
-                'lognormal, sd 6 kb',
+                'lognormal, sd 6 Kbp',
             ),
-            (FixedLength(15_000.0), ORANGE, '-', 'fixed 15 kb'),
+            (FixedLength(15_000.0), ORANGE, '-', 'fixed 15 Kbp'),
         )
         for dist, color, style, label in series:
             c = expected_relative_coverage(x, dist, min_length=cutoff)
-            ax_b.plot(xk, c, color=color, linestyle=style, label=label)
-        ax_b.set_xlabel('Distance from contig end (kb)')
-        ax_b.set_title(
-            'b  Fragment lengths (discard ≤10 kb)', loc='left', fontweight='bold'
+            ax_c.plot(xk, c, color=color, linestyle=style, label=label)
+        ax_c.set_title(
+            'c  Fragment lengths (discard ≤10 Kbp)', loc='left', fontweight='bold'
         )
-        ax_b.legend(loc='lower right')
+        ax_c.legend(loc='lower right')
 
-        for ax in (ax_a, ax_b):
+        fig.suptitle(
+            'Size-selection cutoffs on lognormal 15 ± 3 Kbp fragments (a, b)'
+            ' and alternative length distributions (c)',
+            y=1.04,
+            fontsize=8,
+        )
+        for ax in (ax_a, ax_b, ax_c):
+            ax.set_xlabel('Distance from contig end (Kbp)')
             ax.set_xlim(0, 35)
             ax.set_ylim(0, 1.05)
 
@@ -239,13 +262,13 @@ def plot_decay_with_ci(
             color=MUTED,
         )
 
-        ax.set_xlabel('Distance from contig end (kb)')
+        ax.set_xlabel('Distance from contig end (Kbp)')
         ax.set_ylabel('Coverage (reads)')
         ax.set_xlim(0, window / 1000.0)
         ax.set_ylim(0, None)
         ax.set_title(
-            f'Lognormal fragments {profile.mean / 1000:g} ± {profile.sd / 1000:g} kb'
-            f' · discard ≤{cutoff / 1000:g} kb · depth {depth:g}×',
+            f'Lognormal fragments {profile.mean / 1000:g} ± {profile.sd / 1000:g} Kbp'
+            f' · discard ≤{cutoff / 1000:g} Kbp · depth {depth:g}×',
             loc='left',
             fontweight='bold',
         )
