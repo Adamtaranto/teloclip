@@ -11,3 +11,7 @@ updates:
     directory: "/"
     schedule:
       interval: "monthly" # Check for updates every month
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    schedule:
+      interval: "weekly" # Choose daily, weekly, or monthly
