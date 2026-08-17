@@ -10,6 +10,7 @@ major release.
 
 from teloclip.report.text import (
     fmt_delta,
+    fmt_delta_html,
     fmt_float,
     fmt_int,
     histogram,
@@ -19,6 +20,7 @@ from teloclip.report.text import (
 
 __all__ = [
     'fmt_delta',
+    'fmt_delta_html',
     'fmt_float',
     'fmt_int',
     'histogram',

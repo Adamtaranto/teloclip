@@ -1,25 +1,29 @@
 """
-Backwards-compatible alias for :mod:`teloclip.report.html`.
+Backwards-compatible alias for the HTML report modules.
 
-This module moved to ``teloclip.report.html`` when the package was reorganised
-into ``core``/``io``/``report`` subpackages. The names below are re-exported so
-existing imports of ``teloclip.html_report`` keep working. New code should import
-from ``teloclip.report.html`` directly; this shim may be removed in a future
-major release.
+``teloclip.html_report`` was split when the package was reorganised: document
+assembly moved to :mod:`teloclip.report.html`, the per-read alignment panels to
+:mod:`teloclip.report.panels`, the inline SVG charts to
+:mod:`teloclip.report.charts` and the stylesheet to :mod:`teloclip.report.css`.
+The names below are re-exported so existing imports of ``teloclip.html_report``
+keep working. New code should import from the specific module; this shim may be
+removed in a future major release.
 """
 
-from teloclip.report.html import (
+from teloclip.report.html import render_html_report
+from teloclip.report.panels import (
     EndPanel,
     ReadRow,
     build_end_panel,
+    motif_pattern,
     render_contig_panels,
-    render_html_report,
 )
 
 __all__ = [
     'EndPanel',
     'ReadRow',
     'build_end_panel',
+    'motif_pattern',
     'render_contig_panels',
     'render_html_report',
 ]

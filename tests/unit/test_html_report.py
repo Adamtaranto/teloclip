@@ -9,7 +9,8 @@ alignment, so the offsets are pinned explicitly here.
 import re
 
 from teloclip.core.analysis import ContigStats, OverhangInfo
-from teloclip.report.html import render_contig_panels, render_html_report
+from teloclip.report.html import render_html_report
+from teloclip.report.panels import render_contig_panels
 
 CONTIG_LEN = 1000
 

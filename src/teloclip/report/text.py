@@ -34,9 +34,38 @@ def fmt_int(value: int) -> str:
     return f'{value:,}'
 
 
-def fmt_delta(value: int) -> str:
+def fmt_delta(value: int, zero: str = '-') -> str:
     """
     Format a signed change in length.
+
+    Parameters
+    ----------
+    value : int
+        Change in length, in base pairs.
+    zero : str, optional
+        Rendering for no change (default: ``'-'``). Unchanged ends are shown as
+        a placeholder rather than ``+0`` so they stay visually quiet. The HTML
+        report passes a typographic en dash here; the plain-text and Markdown
+        reports keep the ASCII hyphen so they survive a non-UTF-8 terminal.
+
+    Returns
+    -------
+    str
+        A signed, comma-separated string such as ``'+180'`` or ``'-12'``, or
+        ``zero`` when the value is exactly zero.
+    """
+    if value == 0:
+        return zero
+    return f'{value:+,}'
+
+
+def fmt_delta_html(value: int) -> str:
+    """
+    Format a signed change for HTML output.
+
+    Identical to :func:`fmt_delta` except that no change is shown as a
+    typographic en dash. Named rather than inlined so the HTML report renders
+    zero the same way everywhere it appears.
 
     Parameters
     ----------
@@ -46,12 +75,9 @@ def fmt_delta(value: int) -> str:
     Returns
     -------
     str
-        A signed, comma-separated string such as ``'+180'`` or ``'-12'``.
-        Zero is rendered as ``'-'`` so that unchanged ends are visually quiet.
+        A signed, comma-separated string, or an en dash when the value is zero.
     """
-    if value == 0:
-        return '-'
-    return f'{value:+,}'
+    return fmt_delta(value, zero='–')
 
 
 def fmt_float(value: float, dp: int = 1) -> str:
