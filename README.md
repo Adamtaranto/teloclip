@@ -210,7 +210,9 @@ Note: Circular genomes (i.e. mitochondria, chloroplasts, and nitroplasts) will a
 
 Teloclip also reports contigs whose overhang coverage is far above the rest of the assembly, which is the usual signature of a collapsed repeat, an rDNA array, or an organellar contig attracting reads from elsewhere. These appear in the stats report under **Contigs With Anomalous Overhang Coverage**. They are *not* excluded automatically: whether extension is appropriate is a judgement about your assembly. Review them and re-run with `--exclude-contigs` if you agree.
 
-> `--exclude-outliers` is deprecated and now does nothing. It previously dropped such contigs silently, and the exclusions were never reported anywhere.
+Teloclip flags overhang *length* separately from depth. An end that is anomalous on both is the signature of a collapsed array at the terminus; anomalous depth alone more often means an organellar contig or a repeat pulling in reads from elsewhere, and anomalous length alone is often a genuine long telomere that the assembly stopped short of — exactly the case extension exists to serve.
+
+> `--exclude-outliers` has been removed. It previously dropped such contigs silently and the exclusions were never reported anywhere; it was then accepted-but-ignored for a release. Use `--exclude-contigs`.
 
 ```bash
 # Create required indices (one-time setup)
@@ -330,11 +332,6 @@ Usage: teloclip extend [OPTIONS] BAM_FILE REFERENCE_FASTA
 Options:
   --output-fasta PATH             Extended FASTA output file
   --stats-report PATH             Statistics report output file
-  --exclude-outliers              DEPRECATED and ignored. Contigs with
-                                  anomalous overhang coverage are now reported
-                                  for review rather than silently dropped;
-                                  exclude them with --exclude-contigs if you
-                                  agree with the assessment.
   --outlier-threshold FLOAT       Modified z-score above which a contig end is
                                   reported as having anomalous overhang
                                   coverage (default: 3.5)

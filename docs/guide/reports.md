@@ -123,20 +123,63 @@ FASTA. Worth reading even when the run succeeds.
 stylesheet, nothing fetched at open time. It can be emailed, copied off a
 cluster, or archived and still render years later.
 
-It repeats the summary and extensions table, then adds two things the Markdown
-report cannot express.
+It repeats the summary and extensions table, then adds things the Markdown
+report cannot express: three charts and the read-level alignments.
+
+All three charts share a convention. Blue is the left end of a contig, orange
+the right. Marks are keyboard-focusable and show the same detail on focus as on
+hover. **Clicking any mark selects that contig in all three charts at once**, so
+an end that looks unremarkable in one view can be found in the others; the rest
+recede rather than disappearing, because the distribution is the context for the
+selection. Press <kbd>Escape</kbd>, or click the background of any chart, to
+clear. Every chart has a table view below it, so no value is reachable only by
+hovering.
 
 ### Overhang depth across contigs
 
-A strip plot with one point per contig end, blue for left and orange for right,
-against a median reference line. Hover any point for a table of the contig name,
-end and depth; click a point to pin its name to the chart, and click again to
-remove it. Points are keyboard-focusable and show the same detail on focus.
+A strip plot with one point per contig end against a median reference line.
 
 The shape is the message: a healthy assembly is a flat band near the median.
 Points far above it are ringed, labelled with the contig name, and listed in the
-anomalous-coverage section. A table view below carries the same numbers, so
-nothing is reachable only by hovering.
+anomalous-coverage section.
+
+### Overhang length distribution
+
+Depth says how many reads support an end. This says how far they reach past it,
+which is what determines how much sequence an extension can actually recover — a
+tight distribution at a few hundred bases reads very differently from a broad one
+running into kilobases, and neither is visible in a count.
+
+Each contig is one shape, split at its centre line: the left half is the left end,
+the right half the right end. Width is the proportion of reads at that length, the
+dark tick is the median, and the short rule beside it is the interquartile range.
+
+Two things are worth knowing about how it is drawn:
+
+- **Ends with fewer than four reads are drawn as individual points**, not as a
+  curve. A distribution estimated from three reads describes the estimator rather
+  than the data.
+- **The length axis is clipped at the 99th percentile** so that a single read
+  running far past a contig end cannot flatten every other shape into a line. When
+  that happens the caption says so and names the true longest overhang, so the
+  figure you are looking for is never hidden by the clip.
+
+### Overhang depth against length
+
+One point per contig end, depth against median overhang length. This is where the
+two preceding charts are reconciled, and where the corner a point lands in tells
+you what kind of end it is:
+
+| Position | Reading |
+|---|---|
+| Top right — deep and long | A collapsed repeat or rDNA array at the terminus. Extending from a single read here is rarely meaningful. |
+| Top left — deep but short | Reads drawn in from elsewhere, as an organellar contig or a collapsed repeat does. |
+| Bottom right — long but shallow | The ordinary shape of a telomere the assembly stopped short of. This is the case extension exists to serve. |
+| Bottom left — shallow and short | Little evidence either way. Not an anomaly, just a quiet end. |
+
+Hovering a point gives the full figures for that end: contig length, depth,
+median and longest overhang, the best net gain available, and which anomaly
+flags apply.
 
 ### Overhang alignments
 

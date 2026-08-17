@@ -83,10 +83,12 @@ rejected, and the next best is tried.
 Unknown `--exclude-contigs` names are an error, not a warning — a typo will not
 silently leave a contig in.
 
-!!! note "`--exclude-outliers` is deprecated"
+!!! note "`--exclude-outliers` has been removed"
 
-    It is accepted but does nothing. Contigs with anomalous overhang coverage
-    are now reported for review instead of being dropped silently. See
+    It spent a release accepted but ignored, which was worse than absent: a
+    command line carrying it looked like it was excluding contigs and was not.
+    Contigs with anomalous overhang coverage are reported for review; exclude
+    the ones you agree with by name. See
     [Reading the report](../guide/reports.md).
 
 ## The HTML report
