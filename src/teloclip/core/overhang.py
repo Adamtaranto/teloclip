@@ -57,6 +57,8 @@ from dataclasses import dataclass
 import re
 from typing import Iterable, List, Optional, Sequence, Tuple
 
+from .analysis import OverhangInfo
+
 # CIGAR operations that advance the position on the reference sequence.
 REF_CONSUMING = frozenset({'M', 'D', 'N', '=', 'X'})
 
@@ -190,9 +192,8 @@ def clip_lengths(ops: CigarOps) -> Tuple[int, int]:
     Returns
     -------
     tuple of int
-        ``(left_clip, right_clip)``. Unlike
-        :func:`teloclip.io.sam.checkClips`, absent clips are reported as ``0``
-        rather than ``None``, so callers can do arithmetic without guarding.
+        ``(left_clip, right_clip)``. An absent clip is reported as ``0`` rather
+        than ``None``, so callers can do arithmetic without guarding.
 
     Examples
     --------
@@ -611,7 +612,7 @@ def classify(
 
 def overhang_info_from_call(
     ends: AlignmentEnds, call: OverhangCall, anchor_context: int = 0
-) -> 'OverhangInfo':  # noqa: F821
+) -> OverhangInfo:
     """
     Adapt an accepted call to the :class:`teloclip.core.analysis.OverhangInfo` record.
 
@@ -631,9 +632,6 @@ def overhang_info_from_call(
         Populated overhang record, carrying the canonical inclusive
         ``alignment_end`` and the pre-computed ``net_gain``.
     """
-    # Imported lazily: analysis imports samops, which imports this module.
-    from .analysis import OverhangInfo
-
     _slice = call.read_slice(ends, anchor_context)
 
     return OverhangInfo(

@@ -14,6 +14,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   not. Use `--exclude-contigs` with the names the report flags. Click suggests it for you.
 - **Python 3.8 and 3.9 support.** `requires-python` moves to `>=3.10`, matching the ruff and
   mypy targets the project already configured. Both versions are past end of life.
+- **The flat top-level module paths.** `teloclip.analysis`, `teloclip.samops`,
+  `teloclip.html_report` and the other nine modules moved into the `core`, `io` and `report`
+  subpackages, and no aliases are left behind at the old paths. Code importing teloclip as a
+  library must update its imports:
+
+  | Was | Now |
+  |---|---|
+  | `teloclip.overhang` | `teloclip.core.overhang` |
+  | `teloclip.analysis` | `teloclip.core.analysis` |
+  | `teloclip.extension` | `teloclip.core.extension` |
+  | `teloclip.motifs` | `teloclip.core.motifs` |
+  | `teloclip.seqops` | `teloclip.core.seqops` |
+  | `teloclip.streaming_analysis` | `teloclip.core.streaming_analysis` |
+  | `teloclip.samops` | `teloclip.io.sam` |
+  | `teloclip.streaming_io` | `teloclip.io.streaming` |
+  | `teloclip.extract_io` | `teloclip.io.extract` |
+  | `teloclip.reporting` | `teloclip.report.text` |
+  | `teloclip.alignment_layout` | `teloclip.report.layout` |
+  | `teloclip.html_report` | `teloclip.report.html` (document assembly) and `teloclip.report.panels` (read panels) |
+
+  The command-line interface is unaffected.
 
 ### Fixed
 
@@ -46,7 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 Each sub-command carried its own copy of the "is this soft clip a valid terminal overhang?"
 test, and the three copies disagreed. They are now a single shared implementation
-(`teloclip.overhang`) using 1-based inclusive coordinates. This changes which reads are
+(`teloclip.core.overhang`) using 1-based inclusive coordinates. This changes which reads are
 accepted:
 
 - **`alignment_end` is now inclusive everywhere.** `filter` and `extract` computed it as
@@ -130,9 +151,7 @@ accepted:
 
 - **Package reorganised into `core`, `io` and `report` subpackages.** Twenty-one flat modules
   gave no signal about which layer a name belonged to; the grouping makes the dependency
-  direction (`core` <- `io` <- `report` <- `commands`) visible. Every module keeps a shim at its
-  old top-level path re-exporting the same objects, so `from teloclip.analysis import
-  ContigStats` and the like keep working. The shims are covered by their own tests.
+  direction (`core` <- `io` <- `report` <- `commands`) visible.
 - **The two oversized modules are split.** `commands/extend.py` (1714 lines) and the HTML report
   (1349) held a third of the package between them; the largest module is now 840 lines.
 - **Unreachable code removed**, including a second copy of `StreamingGenomeProcessor` and

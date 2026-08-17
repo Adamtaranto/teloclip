@@ -1,8 +1,8 @@
 """
-Unit tests for enhanced extract functionality.
+Unit tests for teloclip.io.extract.
 
-Tests the new extract_io module with efficient FASTA/FASTQ writing,
-statistics tracking, and motif integration.
+Covers FASTA/FASTQ writing, statistics tracking and motif integration for the
+per-contig-end output written by ``teloclip extract``.
 """
 
 from pathlib import Path
