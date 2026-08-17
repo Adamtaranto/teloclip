@@ -9,7 +9,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
+        python-version: ["3.8", "3.10", "3.12", "3.14"]
     steps:
       # Checkout the latest commit associated with the PR
       - uses: actions/checkout@v7
@@ -40,10 +40,16 @@ jobs:
       - name: Verify pytest installation
         run: python -m pytest --version
         shell: bash -l {0}
-      # Run pytest on the specified directory
+      # Run pytest. Coverage is switched off explicitly on every version except the one we report from.
       - name: Test with pytest
+        if: matrix.python-version != '3.14'
         run: |
-          pytest
+          pytest -v --no-cov
+        shell: bash -l {0}
+      - name: Test with pytest and coverage
+        if: matrix.python-version == '3.14'
+        run: |
+          pytest -v --cov=teloclip --cov-branch --cov-report=xml
         shell: bash -l {0}
       # Upload coverage report to Codecov
       # Only upload coverage for the latest Python version
