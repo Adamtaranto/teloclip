@@ -5,6 +5,8 @@ Tests for overhang statistics collection, outlier detection,
 and homopolymer analysis functionality.
 """
 
+import logging
+
 import pytest
 
 from teloclip.core.analysis import (
@@ -232,6 +234,194 @@ class TestFlagAnomalousOverhangCoverage:
 
         assert result['left_outliers'] == []
         assert result['right_outliers'] == []
+
+    def test_skipping_a_small_assembly_is_logged(self, caplog):
+        """
+        Declining to judge is announced rather than silent.
+
+        An assembly too small to judge and one with nothing to report used to
+        look identical in the output, so a user could reasonably conclude their
+        assembly was clean when it had simply never been assessed.
+
+        Parameters
+        ----------
+        caplog : pytest.LogCaptureFixture
+            Pytest log capture fixture.
+        """
+        stats = make_stats({f'contig{i}': (3, 3) for i in range(4)})
+
+        with caplog.at_level(logging.INFO):
+            flag_anomalous_overhang_coverage(stats)
+
+        assert 'skipped' in caplog.text
+        assert '4 contig' in caplog.text
+
+
+def make_length_stats(spec):
+    """
+    Build a stats mapping from per-contig overhang length lists.
+
+    Parameters
+    ----------
+    spec : dict
+        Mapping of contig name to a ``(left_lengths, right_lengths)`` tuple,
+        each a sequence of overhang lengths in bases.
+
+    Returns
+    -------
+    dict
+        Mapping of contig name to a populated ContigStats.
+    """
+    stats_dict = {}
+    for name, (left_lengths, right_lengths) in spec.items():
+        stats = ContigStats(name, 10_000)
+        stats.left_overhangs = [
+            OverhangInfo('A' * n, n, 1, 100, f'l{i}', True, n, 96, name, n)
+            for i, n in enumerate(left_lengths)
+        ]
+        stats.right_overhangs = [
+            OverhangInfo('T' * n, n, 9_900, 10_000, f'r{i}', False, n, 96, name, n)
+            for i, n in enumerate(right_lengths)
+        ]
+        stats_dict[name] = stats
+    return stats_dict
+
+
+class TestContigStatsLengthSummaries:
+    """The per-end length summaries the length flagging and charts read."""
+
+    def test_median_length_uses_the_median_not_the_mean(self):
+        """
+        One very long read must not drag the summary with it.
+
+        Overhang length distributions are strongly right-skewed, which is
+        exactly the case where the mean misrepresents the typical read.
+        """
+        stats = make_length_stats({'c': ([10, 12, 14, 5_000], [])})['c']
+
+        assert stats.left_median_length == 13
+        assert stats.left_max_length == 5_000
+
+    def test_empty_end_summarises_to_zero(self):
+        """An end with no overhangs reports zero rather than raising."""
+        stats = make_length_stats({'c': ([], [])})['c']
+
+        assert stats.left_median_length == 0.0
+        assert stats.right_median_length == 0.0
+        assert stats.left_max_length == 0
+        assert stats.right_max_length == 0
+
+    def test_single_overhang_end(self):
+        """A single read is its own median and maximum."""
+        stats = make_length_stats({'c': ([250], [])})['c']
+
+        assert stats.left_median_length == 250
+        assert stats.left_max_length == 250
+
+
+class TestFlagAnomalousOverhangLength:
+    """Length is scored separately from depth, and both are reported."""
+
+    def test_uniform_lengths_flag_nothing(self):
+        """An assembly with even overhang lengths produces no length flags."""
+        stats = make_length_stats({f'contig{i}': ([100, 110], []) for i in range(10)})
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert result['left_length_outliers'] == []
+        assert result['right_length_outliers'] == []
+
+    def test_long_overhangs_are_flagged(self):
+        """An end whose reads run far past the contig end is flagged."""
+        spec = {f'contig{i}': ([100, 110], []) for i in range(10)}
+        spec['long_telomere'] = ([9_000, 9_500], [])
+        stats = make_length_stats(spec)
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert result['left_length_outliers'] == ['long_telomere']
+
+    def test_short_overhangs_are_not_flagged(self):
+        """
+        The low tail is not an anomaly on length either.
+
+        A short overhang is weak evidence, not a warning sign, and is never a
+        reason to withhold a contig from extension.
+        """
+        spec = {f'contig{i}': ([900, 1_000], []) for i in range(10)}
+        spec['stubby'] = ([2, 3], [])
+        stats = make_length_stats(spec)
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert 'stubby' not in result['left_length_outliers']
+
+    def test_depth_and_length_are_independent(self):
+        """
+        A contig anomalous on one measure is not flagged on the other.
+
+        Keeping them separate is what lets a reader tell a genuine long
+        telomere (long only) from a collapsed array (long and deep).
+        """
+        spec = {f'contig{i}': ([100, 110], []) for i in range(10)}
+        # Typical depth, atypical length.
+        spec['long_only'] = ([9_000, 9_500], [])
+        # Typical length, atypical depth.
+        spec['deep_only'] = ([100] * 300, [])
+        stats = make_length_stats(spec)
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert 'long_only' in result['left_length_outliers']
+        assert 'long_only' not in result['left_outliers']
+
+        assert 'deep_only' in result['left_outliers']
+        assert 'deep_only' not in result['left_length_outliers']
+
+    def test_collapsed_array_is_flagged_on_both(self):
+        """
+        The diagnostic case shows up in both sets.
+
+        Many reads, each running a long way past the contig end, is the
+        signature of a collapsed rDNA array at a terminus.
+        """
+        spec = {f'contig{i}': ([100, 110], []) for i in range(10)}
+        spec['rdna_array'] = ([9_000] * 300, [])
+        stats = make_length_stats(spec)
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert 'rdna_array' in result['left_outliers']
+        assert 'rdna_array' in result['left_length_outliers']
+
+    def test_count_keys_are_unchanged_by_the_addition(self):
+        """
+        The original two keys keep their meaning and their contents.
+
+        Callers reading left_outliers/right_outliers must be unaffected by the
+        length keys arriving alongside them.
+        """
+        counts = {f'contig{i}': (3, 3) for i in range(10)}
+        counts['rdna_array'] = (400, 3)
+        stats = make_stats(counts)
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert result['left_outliers'] == ['rdna_array']
+        assert result['right_outliers'] == []
+
+    def test_small_assembly_returns_all_four_keys_empty(self):
+        """Declining to judge declines on both measures."""
+        stats = make_length_stats({f'c{i}': ([100], [100]) for i in range(3)})
+
+        result = flag_anomalous_overhang_coverage(stats)
+
+        assert result == {
+            'left_outliers': [],
+            'right_outliers': [],
+            'left_length_outliers': [],
+            'right_length_outliers': [],
+        }
 
 
 class TestRankOverhangsByGain:

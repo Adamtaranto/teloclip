@@ -397,8 +397,19 @@ class TestExtendCommand:
 
         assert result.exit_code == 0
 
-    def test_deprecated_exclude_outliers_still_runs(self, runner):
-        """Test that the deprecated flag is accepted rather than breaking."""
+    def test_removed_exclude_outliers_is_rejected(self, runner):
+        """
+        The removed --exclude-outliers flag is now a usage error.
+
+        It spent a release deprecated and ignored, which is worse than absent:
+        a command line carrying it looked like it was excluding contigs and was
+        not. Failing outright is the honest outcome.
+
+        Parameters
+        ----------
+        runner : click.testing.CliRunner
+            Click test runner fixture.
+        """
         if not TEST_BAM.exists():
             pytest.skip('tests/data/test.bam not available')
 
@@ -407,4 +418,5 @@ class TestExtendCommand:
             [str(TEST_BAM), str(REF_FASTA), '--dry-run', '--exclude-outliers'],
         )
 
-        assert result.exit_code == 0
+        assert result.exit_code != 0
+        assert 'no such option' in result.output.lower()

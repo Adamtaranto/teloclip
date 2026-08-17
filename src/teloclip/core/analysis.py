@@ -116,6 +116,81 @@ class ContigStats:
         """
         return sum(oh.length for oh in self.right_overhangs)
 
+    @property
+    def left_median_length(self) -> float:
+        """
+        Median overhang length at the left end.
+
+        The median rather than the mean, because overhang length distributions
+        are strongly right-skewed: one read running far past the contig end
+        would drag a mean well away from what the reads typically show.
+
+        Returns
+        -------
+        float
+            Median length in bases, or 0.0 when there are no left overhangs.
+        """
+        return _median_length(self.left_overhangs)
+
+    @property
+    def right_median_length(self) -> float:
+        """
+        Median overhang length at the right end.
+
+        Returns
+        -------
+        float
+            Median length in bases, or 0.0 when there are no right overhangs.
+        """
+        return _median_length(self.right_overhangs)
+
+    @property
+    def left_max_length(self) -> int:
+        """
+        Longest overhang at the left end.
+
+        Returns
+        -------
+        int
+            Length in bases of the longest left overhang, or 0 when there are
+            none.
+        """
+        return max((oh.length for oh in self.left_overhangs), default=0)
+
+    @property
+    def right_max_length(self) -> int:
+        """
+        Longest overhang at the right end.
+
+        Returns
+        -------
+        int
+            Length in bases of the longest right overhang, or 0 when there are
+            none.
+        """
+        return max((oh.length for oh in self.right_overhangs), default=0)
+
+
+def _median_length(overhangs: List[OverhangInfo]) -> float:
+    """
+    Median of the ``length`` attribute across a list of overhangs.
+
+    Parameters
+    ----------
+    overhangs : List[OverhangInfo]
+        Overhangs to summarise. May be empty.
+
+    Returns
+    -------
+    float
+        The median length, or 0.0 for an empty list. An empty end carries no
+        evidence rather than a length of zero, but callers treat the two the
+        same way and returning a float keeps the property total.
+    """
+    if not overhangs:
+        return 0.0
+    return float(statistics.median(oh.length for oh in overhangs))
+
 
 def calculate_overhang_statistics(
     stats_dict: Dict[str, ContigStats],
@@ -255,16 +330,17 @@ def flag_anomalous_overhang_coverage(
     min_contigs: int = MIN_CONTIGS_FOR_ANOMALY_FLAGGING,
 ) -> Dict[str, List[str]]:
     """
-    Flag contigs whose overhang counts are unusually high.
+    Flag contig ends whose overhang depth or length is unusually high.
 
     A contig accumulating far more clipped reads at an end than its peers is
     worth a look: it often marks a collapsed repeat, a rDNA array, or an
     organellar contig pulling in reads from across the assembly. Extending such
-    a contig from a single read is rarely meaningful.
+    a contig from a single read is rarely meaningful. The same is true of an
+    end whose overhangs are far longer than the rest of the assembly's.
 
-    Only the high tail is flagged. A contig with unusually *few* overhangs is
-    simply one with little evidence, which is not an anomaly and never a reason
-    to withhold it from extension.
+    Only the high tail is flagged, on both measures. A contig with unusually
+    *few* or unusually *short* overhangs is simply one with little evidence,
+    which is not an anomaly and never a reason to withhold it from extension.
 
     This reports; it does not exclude. Whether a flagged contig should be left
     out is a judgement about the assembly that belongs to the user, who can act
@@ -284,27 +360,69 @@ def flag_anomalous_overhang_coverage(
     Returns
     -------
     Dict[str, List[str]]
-        Contig names under the keys ``left_outliers`` and ``right_outliers``.
-        Both are empty when there are too few contigs to judge.
+        Contig names under four keys. ``left_outliers`` and ``right_outliers``
+        hold ends with anomalous overhang *counts*; ``left_length_outliers``
+        and ``right_length_outliers`` hold ends whose median overhang *length*
+        is anomalous. All are empty when there are too few contigs to judge.
+
+    Notes
+    -----
+    Depth and length are scored separately because they are only partly
+    correlated, and the combination is diagnostic. A collapsed rDNA array
+    typically shows both: many reads, each running a long way past the contig
+    end. Anomalous depth alone more often means an organellar contig or a
+    repeat attracting reads from elsewhere. Anomalous length alone can mean a
+    genuine long telomere that the assembly stopped short of, which is the one
+    case where extension is exactly what is wanted — so reporting the two
+    separately lets a reader tell them apart, which a combined score could not.
     """
+    empty = {
+        'left_outliers': [],
+        'right_outliers': [],
+        'left_length_outliers': [],
+        'right_length_outliers': [],
+    }
+
     contig_names = list(stats_dict)
 
     if len(contig_names) < min_contigs:
-        return {'left_outliers': [], 'right_outliers': []}
+        # Say so rather than returning quietly. An assembly with too few
+        # contigs to judge and one with nothing to report look identical in
+        # the report otherwise, and the difference matters.
+        logging.info(
+            f'Anomalous coverage flagging skipped: {len(contig_names)} contig(s) '
+            f'is below the minimum of {min_contigs}. With this few contigs the '
+            f'spread of overhang depth carries too little information to call '
+            f'anything anomalous.'
+        )
+        return empty
 
-    left_counts = [stats_dict[name].left_count for name in contig_names]
-    right_counts = [stats_dict[name].right_count for name in contig_names]
+    def flag(values: List[float]) -> List[str]:
+        """
+        Return contigs scoring above the threshold on the high side.
 
-    left_scores = _modified_z_scores(left_counts)
-    right_scores = _modified_z_scores(right_counts)
+        Parameters
+        ----------
+        values : List[float]
+            One value per contig, in ``contig_names`` order.
+
+        Returns
+        -------
+        List[str]
+            Contig names whose modified z-score exceeds the threshold.
+        """
+        scores = _modified_z_scores(values)
+        return [name for name, score in zip(contig_names, scores) if score > threshold]
 
     return {
-        'left_outliers': [
-            name for name, score in zip(contig_names, left_scores) if score > threshold
-        ],
-        'right_outliers': [
-            name for name, score in zip(contig_names, right_scores) if score > threshold
-        ],
+        'left_outliers': flag([stats_dict[n].left_count for n in contig_names]),
+        'right_outliers': flag([stats_dict[n].right_count for n in contig_names]),
+        'left_length_outliers': flag(
+            [stats_dict[n].left_median_length for n in contig_names]
+        ),
+        'right_length_outliers': flag(
+            [stats_dict[n].right_median_length for n in contig_names]
+        ),
     }
 
 

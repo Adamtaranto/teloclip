@@ -175,13 +175,6 @@ def count_terminal_motifs(
     help='Statistics report output file',
 )
 @click.option(
-    '--exclude-outliers',
-    is_flag=True,
-    help='DEPRECATED and ignored. Contigs with anomalous overhang coverage are '
-    'now reported for review rather than silently dropped; exclude them with '
-    '--exclude-contigs if you agree with the assessment.',
-)
-@click.option(
     '--outlier-threshold',
     type=float,
     default=3.5,
@@ -297,7 +290,6 @@ def extend(
     reference_fasta,
     output_fasta,
     stats_report,
-    exclude_outliers,
     outlier_threshold,
     min_overhangs,
     max_homopolymer,
@@ -337,9 +329,6 @@ def extend(
         Path for output extended FASTA file.
     stats_report : str
         Path for output statistics report.
-    exclude_outliers : bool
-        Deprecated and ignored. Retained so existing command lines keep working;
-        emits a warning pointing at --exclude-contigs.
     outlier_threshold : float
         Modified z-score above which a contig end is reported as having
         anomalous overhang coverage.
@@ -396,14 +385,6 @@ def extend(
             'A clip that stops short of the contig end would shorten it.'
         )
         min_clip = 1
-
-    if exclude_outliers:
-        logging.warning(
-            '--exclude-outliers is deprecated and no longer excludes anything. '
-            'Contigs with anomalous overhang coverage are reported in the '
-            'stats report; exclude them with --exclude-contigs if you agree '
-            'with the assessment.'
-        )
 
     # Bound before the try so the finally clause can always close it.
     overhang_log_handle = None
@@ -650,6 +631,30 @@ def extend(
                     '--exclude-contigs if extension is not appropriate: '
                     + ', '.join(flagged)
                 )
+
+            # Length is scored separately from depth. Reported at info rather
+            # than warning level: unusually long overhangs on their own often
+            # mean a genuine long telomere the assembly stopped short of, which
+            # is the case extension exists to handle. It is the overlap with
+            # the depth flags above that suggests a collapsed array.
+            length_flagged = sorted(
+                set(anomalous['left_length_outliers'])
+                | set(anomalous['right_length_outliers'])
+            )
+            if length_flagged:
+                also_deep = sorted(set(length_flagged) & set(flagged))
+                logging.info(
+                    f'{len(length_flagged)} contig end(s) have unusually long '
+                    'overhangs relative to the rest of the assembly: '
+                    + ', '.join(length_flagged)
+                )
+                if also_deep:
+                    logging.warning(
+                        'These contigs are anomalous in both overhang depth and '
+                        'overhang length, the pattern typical of a collapsed '
+                        'repeat or rDNA array at the contig end: '
+                        + ', '.join(also_deep)
+                    )
 
             if html_report:
                 from ..report.panels import render_contig_panels
