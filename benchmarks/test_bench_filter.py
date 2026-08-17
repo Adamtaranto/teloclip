@@ -12,8 +12,8 @@ import os
 
 import pytest
 
-from teloclip.motifs import make_fuzzy_motif_regex, make_motif_regex
-from teloclip.samops import EnhancedStreamingSamFilter, processSamlines
+from teloclip.core.motifs import make_fuzzy_motif_regex, make_motif_regex
+from teloclip.io.sam import EnhancedStreamingSamFilter, processSamlines
 
 
 @contextlib.contextmanager

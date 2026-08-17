@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "teloclip"
 description = "A tool for the recovery of unassembled telomeres from raw long-reads using soft-clipped read alignments."
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=3.10"
 license = { text = "GPL-3.0-or-later" }
 authors = [{ name = "Adam Taranto" }]
 
@@ -47,16 +47,26 @@ repository = "https://github.com/adamtaranto/teloclip"
 [project.scripts]
 teloclip = "teloclip.cli:main"
 
-[tool.hatch.build]
-source = "src"
+# The wheel carries the importable package and nothing else. Listing the package
+# explicitly avoids relying on hatchling inferring it from the project name.
+[tool.hatch.build.targets.wheel]
+packages = ["src/teloclip"]
 
-exclude = [
-    "environment.yml",
-    ".github",
-    ".vscode",
+# The sdist is the reproducible-build artefact, so it carries the tests and
+# benchmarks needed to verify a build from source. This is an allowlist rather
+# than an exclude list: built docs (site/), planning notes (.plans/) and tool
+# caches (.codspeed/, .cache/) would otherwise be swept in by default.
+[tool.hatch.build.targets.sdist]
+include = [
+    "src/teloclip",
     "tests",
-    "scripts",
-    "examples",
+    "benchmarks",
+    "docs",
+    "pyproject.toml",
+    "README.md",
+    "LICENSE",
+    "CHANGELOG.md",
+    "CITATION.cff",
 ]
 
 [tool.hatch.version]

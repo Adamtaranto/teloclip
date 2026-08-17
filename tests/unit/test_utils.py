@@ -4,15 +4,13 @@ Tests utility functions.
 """
 
 from pathlib import Path
-import sys
 import tempfile
-from unittest.mock import Mock, patch
+from unittest.mock import patch
 
 import click
 import pytest
 
 from teloclip.commands.extend import validate_output_directories
-from teloclip.extract_io import create_fasta_index
 from teloclip.utils import isfile
 
 
@@ -109,69 +107,3 @@ class TestValidateOutputDirectories:
             with pytest.raises(click.ClickException) as exc_info:
                 validate_output_directories(invalid_path, None)
         assert 'Cannot create output directory' in str(exc_info.value)
-
-
-class TestCreateFastaIndex:
-    """Test FASTA index creation."""
-
-    def test_create_fasta_index_already_exists(self):
-        """Test when index already exists."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            fasta_file = temp_path / 'test.fasta'
-            index_file = temp_path / 'test.fasta.fai'
-
-            # Create both files
-            fasta_file.touch()
-            index_file.touch()
-
-            # Mock pysam module that gets imported within the function
-            with patch.dict('sys.modules', {'pysam': Mock()}):
-                with patch('pysam.faidx') as mock_faidx:
-                    result = create_fasta_index(fasta_file)
-
-                    # Should return existing index path without calling pysam.faidx
-                    assert result == index_file
-                    mock_faidx.assert_not_called()
-
-    def test_create_fasta_index_needs_creation(self):
-        """Test creating index when it doesn't exist."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            fasta_file = temp_path / 'test.fasta'
-            index_file = temp_path / 'test.fasta.fai'
-
-            # Create only FASTA file
-            fasta_file.touch()
-            assert not index_file.exists()
-
-            with patch.dict('sys.modules', {'pysam': Mock()}):
-                with patch('pysam.faidx') as mock_faidx:
-                    with patch('builtins.print'):  # Suppress print output
-                        result = create_fasta_index(fasta_file)
-
-                    # Should call pysam.faidx and return index path
-                    assert result == index_file
-                    mock_faidx.assert_called_once_with(str(fasta_file))
-
-    def test_create_fasta_index_prints_message(self):
-        """Test that appropriate message is printed when creating index."""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            temp_path = Path(temp_dir)
-            fasta_file = temp_path / 'test.fasta'
-            index_file = temp_path / 'test.fasta.fai'
-
-            fasta_file.touch()
-
-            with patch.dict('sys.modules', {'pysam': Mock()}):
-                with patch('pysam.faidx'):
-                    with patch('builtins.print') as mock_print:
-                        create_fasta_index(fasta_file)
-
-                        # Should print message about creating index
-                        mock_print.assert_called_once()
-                        args = mock_print.call_args[0]
-                        assert 'Creating FASTA index' in args[0]
-                        assert str(index_file) in args[0]
-                        # Check that it prints to stderr
-                        assert mock_print.call_args[1]['file'] == sys.stderr

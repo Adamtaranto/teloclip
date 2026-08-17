@@ -128,11 +128,6 @@ Usage: teloclip extend [OPTIONS] BAM_FILE REFERENCE_FASTA
 Options:
   --output-fasta PATH             Extended FASTA output file
   --stats-report PATH             Statistics report output file
-  --exclude-outliers              DEPRECATED and ignored. Contigs with
-                                  anomalous overhang coverage are now reported
-                                  for review rather than silently dropped;
-                                  exclude them with --exclude-contigs if you
-                                  agree with the assessment.
   --outlier-threshold FLOAT       Modified z-score above which a contig end is
                                   reported as having anomalous overhang
                                   coverage (default: 3.5)

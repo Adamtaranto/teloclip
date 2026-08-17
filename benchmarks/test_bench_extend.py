@@ -10,14 +10,14 @@ changing how the regex is applied.
 import pysam
 import pytest
 
-from teloclip.analysis import ContigStats, rank_overhangs_by_gain
 from teloclip.commands.extend import count_terminal_motifs, get_motif_regex
-from teloclip.overhang import (
+from teloclip.core.analysis import ContigStats, rank_overhangs_by_gain
+from teloclip.core.overhang import (
     AlignmentEnds,
     classify_end,
     overhang_info_from_call,
 )
-from teloclip.streaming_analysis import collect_contig_overhangs_streaming
+from teloclip.core.streaming_analysis import collect_contig_overhangs_streaming
 
 
 @pytest.mark.benchmark

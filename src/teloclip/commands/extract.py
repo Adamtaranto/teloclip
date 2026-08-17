@@ -6,14 +6,15 @@ from typing import Dict
 
 import click
 
-from ..extract_io import ExtractionStats
-from ..logs import init_logging
-from ..motifs import make_fuzzy_motif_regex, make_motif_regex
-from ..samops import (
+from ..core.motifs import make_fuzzy_motif_regex, make_motif_regex
+from ..core.seqops import read_fai, revComp
+from ..io.extract import ExtractionStats
+from ..io.formats import InputFormatError, ensure_text_sam
+from ..io.sam import (
     EnhancedStreamingSamFilter,
     enhanced_streaming_split_by_contig,
 )
-from ..seqops import read_fai, revComp
+from ..logs import init_logging
 
 
 @click.command(
@@ -203,6 +204,14 @@ def extract_cmd(
     """
     # Initialize logging for this command
     init_logging(log_level, logfile)
+
+    # Reject binary input before any work is done, so that a BAM supplied where
+    # SAM was expected produces an actionable message rather than a decoding
+    # traceback from inside the parser.
+    try:
+        ensure_text_sam(samfile, command='extract')
+    except InputFormatError as error:
+        raise click.UsageError(str(error)) from error
 
     try:
         # Load reference contig info

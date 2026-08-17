@@ -9,10 +9,11 @@ from pathlib import Path
 
 import click
 
+from teloclip.core.motifs import make_fuzzy_motif_regex, make_motif_regex
+from teloclip.core.seqops import addRevComplement, read_fai
+from teloclip.io.formats import InputFormatError, ensure_text_sam
+from teloclip.io.sam import processSamlines
 from teloclip.logs import init_logging
-from teloclip.motifs import make_fuzzy_motif_regex, make_motif_regex
-from teloclip.samops import processSamlines
-from teloclip.seqops import addRevComplement, read_fai
 
 
 @click.command(
@@ -166,6 +167,14 @@ def filter_cmd(
     # Initialize logging
     init_logging(log_level, logfile)
 
+    # Reject binary input before any work is done. Checking here rather than
+    # letting the parser trip over it turns a UnicodeDecodeError traceback into
+    # a message naming the samtools command that fixes it.
+    try:
+        ensure_text_sam(samfile, command='filter')
+    except InputFormatError as error:
+        raise click.UsageError(str(error)) from error
+
     # Fetch contig lengths
     contig_dict = read_fai(ref_idx)
 
@@ -196,15 +205,19 @@ def filter_cmd(
 
     exclude_secondary = not keep_secondary
 
-    # Process SAM lines
-    processSamlines(
-        samfile,
-        contig_dict,
-        motif_list,
-        match_anywhere=match_anywhere,
-        max_break=max_break,
-        min_clip=min_clip,
-        min_repeats=min_repeats,
-        min_anchor=min_anchor,
-        exclude_secondary=exclude_secondary,
-    )
+    # Process SAM lines. The format check above cannot inspect every kind of
+    # stream, so binary input may still surface here as a decoding failure.
+    try:
+        processSamlines(
+            samfile,
+            contig_dict,
+            motif_list,
+            match_anywhere=match_anywhere,
+            max_break=max_break,
+            min_clip=min_clip,
+            min_repeats=min_repeats,
+            min_anchor=min_anchor,
+            exclude_secondary=exclude_secondary,
+        )
+    except InputFormatError as error:
+        raise click.UsageError(str(error)) from error

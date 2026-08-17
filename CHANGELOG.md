@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Removed
+
+- **`teloclip extend --exclude-outliers`.** It spent a release deprecated and ignored, which is
+  worse than absent: a command line carrying it looked like it was excluding contigs and was
+  not. Use `--exclude-contigs` with the names the report flags. Click suggests it for you.
+- **Python 3.8 and 3.9 support.** `requires-python` moves to `>=3.10`, matching the ruff and
+  mypy targets the project already configured. Both versions are past end of life.
+- **The flat top-level module paths.** `teloclip.analysis`, `teloclip.samops`,
+  `teloclip.html_report` and the other nine modules moved into the `core`, `io` and `report`
+  subpackages, and no aliases are left behind at the old paths. Code importing teloclip as a
+  library must update its imports:
+
+  | Was | Now |
+  |---|---|
+  | `teloclip.overhang` | `teloclip.core.overhang` |
+  | `teloclip.analysis` | `teloclip.core.analysis` |
+  | `teloclip.extension` | `teloclip.core.extension` |
+  | `teloclip.motifs` | `teloclip.core.motifs` |
+  | `teloclip.seqops` | `teloclip.core.seqops` |
+  | `teloclip.streaming_analysis` | `teloclip.core.streaming_analysis` |
+  | `teloclip.samops` | `teloclip.io.sam` |
+  | `teloclip.streaming_io` | `teloclip.io.streaming` |
+  | `teloclip.extract_io` | `teloclip.io.extract` |
+  | `teloclip.reporting` | `teloclip.report.text` |
+  | `teloclip.alignment_layout` | `teloclip.report.layout` |
+  | `teloclip.html_report` | `teloclip.report.html` (document assembly) and `teloclip.report.panels` (read panels) |
+
+  The command-line interface is unaffected.
+
 ### Fixed
 
 - **Contig shortening**: `teloclip extend` could silently make a contig *shorter*. Extending an
@@ -20,12 +49,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   input. Only inputs already stripped of secondary alignments ran to completion.
 - **`teloclip extract` motif filtering**: a read whose left clip contained no motif skipped the
   whole record, so its right clip was never examined. Each end is now judged independently.
+- **Malformed SAM records no longer abort `filter` with a traceback.** A truncated line, a
+  non-numeric FLAG or an unparseable POS raised `ValueError`/`IndexError` from inside the parse
+  loop, discarding every record already processed — and a truncated final record is the ordinary
+  result of an interrupted upstream process. Bad records are now skipped, warned about (capped at
+  five listings so a broken file cannot bury the log) and counted in the exclusion summary. An
+  input where *no* record parses is still an error, since "kept 0 alignments" is also what a
+  clean file with no overhangs produces. `extract` already behaved this way.
+- **SAM and BAM supplied the wrong way round now fail with an actionable message.** A BAM piped
+  into `filter` or `extract` surfaced as a bare `UnicodeDecodeError` traceback from inside the
+  read loop. A SAM passed to `extend` was reported as a missing `.bai`, advising the user to run
+  `samtools index` on a file that cannot be indexed. Both now name the samtools invocation that
+  converts one to the other. CRAM is detected separately, since its conversion needs
+  `-T reference.fasta`.
 
 ### Changed
 
 Each sub-command carried its own copy of the "is this soft clip a valid terminal overhang?"
 test, and the three copies disagreed. They are now a single shared implementation
-(`teloclip.overhang`) using 1-based inclusive coordinates. This changes which reads are
+(`teloclip.core.overhang`) using 1-based inclusive coordinates. This changes which reads are
 accepted:
 
 - **`alignment_end` is now inclusive everywhere.** `filter` and `extract` computed it as
@@ -62,8 +104,16 @@ accepted:
   exclusion was invisible. Detection also used mean and standard deviation (both inflated by
   the outliers being sought), flagged both tails, and could not fire at all on small
   assemblies. It now uses median/MAD on the high tail with a minimum-contig floor, and only
-  advises. `--exclude-outliers` is accepted but ignored, with a warning; `--outlier-threshold`
-  now sets flagging sensitivity and defaults to 3.5.
+  advises. `--outlier-threshold` now sets flagging sensitivity and defaults to 3.5.
+- **Anomaly detection now scores overhang length as well as depth.** The two are only partly
+  correlated and the combination is what is diagnostic: a collapsed rDNA array at a terminus
+  shows both, many reads each running a long way past the contig end. Anomalous depth alone
+  more often means an organellar contig or a repeat pulling in reads from elsewhere; anomalous
+  length alone often means a genuine long telomere the assembly stopped short of, which is the
+  case extension exists to serve. Length flags are logged at info level; a warning is raised
+  only where the two overlap.
+- **Flagging now says when it declines to judge.** Below the eight-contig floor it returned
+  empty lists silently, so an assembly too small to assess looked exactly like a clean one.
 - **Unknown `--exclude-contigs` names are now an error.** A misspelled name previously matched
   nothing and the run continued, extending a contig the user believed was held back.
 - **`filter` exclusion counts now reconcile.** Reads with no usable soft clip fell through every
@@ -87,6 +137,31 @@ accepted:
   read marked, and read details on hover. Plus a strip plot of overhang depth across contigs
   with a median reference line and flagged ends ringed and labelled, backed by a table view.
   `--html-max-reads` (default 25) caps the rows rendered per contig end.
+- **Two further charts in the HTML report.** An overhang *length* distribution, drawn as a split
+  violin per contig with the left end on the left half and the right end on the right, so the
+  two ends of a contig stay adjacent for comparison. Ends with fewer than four reads fall back
+  to individual points rather than a density curve through too little data, and the shared
+  length axis is clipped at the 99th percentile so one very long read cannot flatten every other
+  shape — the caption discloses the clip and names the true maximum whenever it applies. And a
+  scatter of overhang depth against median overhang length, which separates the cases the
+  one-dimensional charts cannot: deep but short, long but shallow, or high on both. Clicking any
+  mark selects that contig in all three charts. Both ship the usual table view.
+
+### Internal
+
+- **Package reorganised into `core`, `io` and `report` subpackages.** Twenty-one flat modules
+  gave no signal about which layer a name belonged to; the grouping makes the dependency
+  direction (`core` <- `io` <- `report` <- `commands`) visible.
+- **The two oversized modules are split.** `commands/extend.py` (1714 lines) and the HTML report
+  (1349) held a third of the package between them; the largest module is now 840 lines.
+- **Unreachable code removed**, including a second copy of `StreamingGenomeProcessor` and
+  `BufferedContigWriter` with a divergent API, and a parallel hand-rolled CIGAR implementation
+  that had no production caller — the filter path resolves clips and anchors through the shared
+  overhang module exclusively. The CIGAR test cases were ported onto that module rather than
+  dropped.
+- **Wheel and sdist build targets are now configured separately**, so `tests/` and `benchmarks/`
+  ship in the source distribution (making it verifiable from source) but not in the wheel. Built
+  docs, planning notes and tool caches no longer leak into the sdist.
 
   Reads are placed by walking their CIGAR, so indels shift them against the
   reference as the aligner recorded: a deletion gaps the read where the contig
