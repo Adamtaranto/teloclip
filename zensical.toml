@@ -27,7 +27,6 @@ nav = [
   ] },
   { "Reference" = [
     "reference/cli.md",
-    "reference/wasm-feasibility.md",
   ] },
 ]
 

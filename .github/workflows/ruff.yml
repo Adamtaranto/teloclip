@@ -16,11 +16,11 @@ jobs:
       # Run check --fix before format so that any fixes it applies get formatted.
       - uses: astral-sh/ruff-action@v3
         with:
-          src: "./src/teloclip ./tests"
+          src: "./src/teloclip ./tests ./benchmarks"
           args: "check --fix"
       - uses: astral-sh/ruff-action@v3
         with:
-          src: "./src/teloclip ./tests"
+          src: "./src/teloclip ./tests ./benchmarks"
           args: "format"
       - uses: isort/isort-action@v1
         with:
