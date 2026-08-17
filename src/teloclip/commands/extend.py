@@ -816,57 +816,6 @@ def read_excluded_contigs_file(exclude_file: Path) -> List[str]:
         ) from e
 
 
-def parse_excluded_contigs(
-    exclude_contigs_str: str, contig_dict: Dict[str, int]
-) -> set:
-    """
-    Parse and validate excluded contig names.
-
-    Parameters
-    ----------
-    exclude_contigs_str : str
-        Comma-delimited string of contig names to exclude.
-    contig_dict : Dict[str, int]
-        Dictionary mapping contig names to their lengths.
-
-    Returns
-    -------
-    set
-        Set of valid contig names to exclude.
-    """
-    excluded_set = set()
-
-    if not exclude_contigs_str:
-        return excluded_set
-
-    # Parse comma-delimited contig names
-    raw_contigs = [
-        contig.strip() for contig in exclude_contigs_str.split(',') if contig.strip()
-    ]
-
-    if not raw_contigs:
-        return excluded_set
-
-    logging.info(f'Processing exclusion list: {", ".join(raw_contigs)}')
-
-    # Validate each contig name
-    for contig_name in raw_contigs:
-        if contig_name in contig_dict:
-            excluded_set.add(contig_name)
-            logging.info(f'Contig "{contig_name}" will be excluded from extension')
-        else:
-            logging.warning(
-                f'Excluded contig "{contig_name}" not found in reference FASTA index'
-            )
-
-    if excluded_set:
-        logging.info(f'Total contigs excluded: {len(excluded_set)}')
-    else:
-        logging.warning('No valid contigs found in exclusion list')
-
-    return excluded_set
-
-
 def combine_excluded_contigs(
     exclude_contigs_str: str,
     exclude_contigs_file: Path,

@@ -546,3 +546,159 @@ class TestOverhangInfoAdapter:
         assert info.read_name == 'read1'
         assert info.is_left is True
         assert info.net_gain == 2
+
+
+class TestCigarArithmeticEdgeCases:
+    """
+    Exhaustive operation-by-operation checks of the CIGAR arithmetic.
+
+    These cases were carried over from the tests for the hand-rolled CIGAR
+    helpers that used to live alongside the SAM filter. Those helpers were
+    one-line delegations to the functions below and have been removed, but the
+    cases they pinned are the ones that actually matter: which operations count
+    toward the anchor, which consume reference, and which do neither. Getting
+    P, N or H wrong silently changes what passes ``--min-anchor``.
+    """
+
+    @pytest.mark.parametrize(
+        'cigar,expected',
+        [
+            # Only M, = and X are aligned bases.
+            ('100M', 100),
+            ('50=', 50),
+            ('25X', 25),
+            ('30=20X', 50),
+            ('30M20=10X', 60),
+            # Soft clips are read bases but not aligned ones.
+            ('20S100M', 100),
+            ('100M30S', 100),
+            ('10S50M20S', 50),
+            # Insertions consume read, deletions consume reference; neither is
+            # an aligned base.
+            ('50M10I40M', 90),
+            ('50M5D40M', 90),
+            ('30M10I5D20M', 50),
+            # Hard clips are not in the read at all.
+            ('15H100M', 100),
+            ('100M25H', 100),
+            ('10H50M15H', 50),
+            # Padding and splicing likewise contribute nothing.
+            ('50M10P40M', 90),
+            ('50M20N40M', 90),
+            # Everything at once: 30M + 25M.
+            ('20S30M10I5D25M15S', 55),
+            # 40M + 30= + 20X.
+            ('10H5S40M20I10D30=20X5S10H', 90),
+            # Alignments with no aligned bases at all.
+            ('50S', 0),
+            ('20H30S', 0),
+            ('10S20I30S', 0),
+            ('100I', 0),
+        ],
+    )
+    def test_anchor_length_counts_only_aligned_bases(self, cigar, expected):
+        """
+        Only M, = and X contribute to the anchor.
+
+        Parameters
+        ----------
+        cigar : str
+            CIGAR string under test.
+        expected : int
+            Expected anchor length in bases.
+        """
+        assert anchor_length(cigar_ops_from_string(cigar)) == expected
+
+    def test_anchor_is_never_more_than_reference_span(self):
+        """Deletions extend the reference span without adding anchor bases."""
+        ops = cigar_ops_from_string('50M10D40M')
+
+        assert anchor_length(ops) == 90
+        assert reference_span(ops) == 100
+        assert anchor_length(ops) < reference_span(ops)
+
+    def test_anchor_equals_reference_span_for_pure_matches(self):
+        """With no indels the two measures coincide."""
+        ops = cigar_ops_from_string('100M')
+
+        assert anchor_length(ops) == reference_span(ops) == 100
+
+    @pytest.mark.parametrize(
+        'cigar,expected',
+        [
+            ('50S100M', (50, 0)),
+            ('100M50S', (0, 50)),
+            ('20S80M30S', (20, 30)),
+            ('100M', (0, 0)),
+        ],
+    )
+    def test_clip_lengths_matches_terminal_soft_clips(self, cigar, expected):
+        """
+        Clip detection reports the terminal soft clips, zero where absent.
+
+        Parameters
+        ----------
+        cigar : str
+            CIGAR string under test.
+        expected : tuple of int
+            Expected ``(left, right)`` soft-clip lengths.
+        """
+        assert clip_lengths(cigar_ops_from_string(cigar)) == expected
+
+    @pytest.mark.parametrize(
+        'cigar',
+        ['100M', '50M50S', '20S80M', '30M10I20D40M', '10H20S50M30=20X40S15H'],
+    )
+    def test_anchor_never_counts_clipped_bases(self, cigar):
+        """
+        Soft-clipped bases are excluded from the anchor for any CIGAR.
+
+        Parameters
+        ----------
+        cigar : str
+            CIGAR string under test.
+        """
+        ops = cigar_ops_from_string(cigar)
+        left_clip, right_clip = clip_lengths(ops)
+        total = sum(length for length, _ in ops)
+
+        assert anchor_length(ops) <= total - left_clip - right_clip
+
+    @pytest.mark.parametrize(
+        'cigar,min_anchor,passes',
+        [
+            # Clipped bases must not help an alignment clear the threshold.
+            ('100S50M', 50, True),
+            ('100S50M', 51, False),
+            ('50M100S', 50, True),
+            ('20S30M40S', 30, True),
+            # Nor may inserted or deleted bases.
+            ('30M10I20M', 50, True),
+            ('30M10I20M', 51, False),
+            ('30M5D20M', 50, True),
+            # Real-world shapes: a long anchor with a terminal telomeric clip.
+            ('600M50S', 500, True),
+            ('600M50S', 650, False),
+            ('50S600M', 500, True),
+            ('50S400M', 500, False),
+            ('50S500M100S', 400, True),
+            ('50S500M100S', 600, False),
+            # A zero threshold admits everything, including clip-only reads.
+            ('100S', 0, True),
+            ('50S50M', 0, True),
+        ],
+    )
+    def test_min_anchor_threshold_behaviour(self, cigar, min_anchor, passes):
+        """
+        The anchor threshold is applied to aligned bases alone.
+
+        Parameters
+        ----------
+        cigar : str
+            CIGAR string under test.
+        min_anchor : int
+            Threshold being applied.
+        passes : bool
+            Whether the alignment is expected to clear the threshold.
+        """
+        assert (anchor_length(cigar_ops_from_string(cigar)) >= min_anchor) is passes

@@ -12,8 +12,6 @@ from teloclip.core.motifs import (
     check_sequence_for_patterns,
     construct_regex_pattern,
     count_continuous_runs,
-    count_regex_patterns_in_sequence,
-    format_pattern_counts,
     make_fuzzy_motif_regex,
     make_motif_regex,
 )
@@ -22,8 +20,6 @@ __all__ = [
     'check_sequence_for_patterns',
     'construct_regex_pattern',
     'count_continuous_runs',
-    'count_regex_patterns_in_sequence',
-    'format_pattern_counts',
     'make_fuzzy_motif_regex',
     'make_motif_regex',
 ]

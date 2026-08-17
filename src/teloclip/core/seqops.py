@@ -10,58 +10,6 @@ from teloclip.core.motifs import check_sequence_for_patterns
 from teloclip.utils import isfile
 
 
-def makeMask(killIdx, listlen):
-    """
-    Create a binary mask list with specified indices set to 0.
-
-    Parameters
-    ----------
-    killIdx : list of int
-        List of indices to set to 0 in the mask.
-    listlen : int
-        Length of the mask list to create.
-
-    Returns
-    -------
-    list of int
-        Binary mask list where specified indices are 0 and others are 1.
-
-    Examples
-    --------
-    >>> makeMask([0,9], 10)
-    [0, 1, 1, 1, 1, 1, 1, 1, 1, 0]
-    """
-    mask = [1 for i in range(listlen)]
-    for x in killIdx:
-        mask[x] = 0
-    return mask
-
-
-def filterList(data, exclude):
-    """
-    Filter a list by excluding elements at specified indices.
-
-    Parameters
-    ----------
-    data : list
-        Input data list to filter.
-    exclude : list of int
-        List of indices to exclude from the output.
-
-    Returns
-    -------
-    generator
-        Generator yielding elements from data excluding those at specified indices.
-
-    Examples
-    --------
-    >>> list(filterList([1,2,3,4,5,6,7,8,9,10], [0,9]))
-    [2, 3, 4, 5, 6, 7, 8, 9]
-    """
-    mask = makeMask(exclude, len(data))
-    return (d for d, s in zip(data, mask) if s)
-
-
 def revComp(seq):
     """
     Generate reverse complement of a DNA sequence.

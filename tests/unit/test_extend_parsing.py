@@ -14,7 +14,6 @@ import pytest
 from teloclip.commands.extend import (
     combine_excluded_contigs,
     get_motif_regex,
-    parse_excluded_contigs,
     read_excluded_contigs_file,
 )
 
@@ -111,70 +110,6 @@ class TestReadExcludedContigsFile:
                 assert 'Error reading exclusion file' in str(exc_info.value)
         finally:
             temp_path.unlink()
-
-
-class TestParseExcludedContigs:
-    """Test parsing excluded contig names from command line string."""
-
-    def test_parse_excluded_contigs_basic(self):
-        """Test basic contig parsing."""
-        contig_dict = {'contig1': 1000, 'contig2': 2000, 'contig3': 3000}
-        exclude_str = 'contig1,contig2'
-
-        result = parse_excluded_contigs(exclude_str, contig_dict)
-        assert result == {'contig1', 'contig2'}
-
-    def test_parse_excluded_contigs_with_whitespace(self):
-        """Test parsing with extra whitespace."""
-        contig_dict = {'contig1': 1000, 'contig2': 2000, 'contig3': 3000}
-        exclude_str = ' contig1 , contig2 ,  contig3  '
-
-        result = parse_excluded_contigs(exclude_str, contig_dict)
-        assert result == {'contig1', 'contig2', 'contig3'}
-
-    def test_parse_excluded_contigs_empty_string(self):
-        """Test parsing empty string."""
-        contig_dict = {'contig1': 1000}
-        exclude_str = ''
-
-        result = parse_excluded_contigs(exclude_str, contig_dict)
-        assert result == set()
-
-    def test_parse_excluded_contigs_none_string(self):
-        """Test parsing None string."""
-        contig_dict = {'contig1': 1000}
-        exclude_str = None
-
-        result = parse_excluded_contigs(exclude_str, contig_dict)
-        assert result == set()
-
-    def test_parse_excluded_contigs_invalid_names(self):
-        """Test parsing with invalid contig names."""
-        contig_dict = {'contig1': 1000, 'contig2': 2000}
-        exclude_str = 'contig1,invalid_contig,contig2'
-
-        with patch('logging.warning') as mock_warning:
-            result = parse_excluded_contigs(exclude_str, contig_dict)
-            assert result == {'contig1', 'contig2'}
-            mock_warning.assert_called()
-
-    def test_parse_excluded_contigs_all_invalid(self):
-        """Test parsing with all invalid contig names."""
-        contig_dict = {'contig1': 1000, 'contig2': 2000}
-        exclude_str = 'invalid1,invalid2'
-
-        with patch('logging.warning') as mock_warning:
-            result = parse_excluded_contigs(exclude_str, contig_dict)
-            assert result == set()
-            mock_warning.assert_called()
-
-    def test_parse_excluded_contigs_empty_items(self):
-        """Test parsing with empty items in comma-separated list."""
-        contig_dict = {'contig1': 1000, 'contig2': 2000}
-        exclude_str = 'contig1,,contig2,,'
-
-        result = parse_excluded_contigs(exclude_str, contig_dict)
-        assert result == {'contig1', 'contig2'}
 
 
 class TestCombineExcludedContigs:

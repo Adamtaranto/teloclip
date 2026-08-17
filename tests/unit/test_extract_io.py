@@ -5,15 +5,10 @@ Tests the new extract_io module with efficient FASTA/FASTQ writing,
 statistics tracking, and motif integration.
 """
 
-from io import StringIO
 from pathlib import Path
 import tempfile
-from unittest.mock import patch
-
-import pytest
 
 from teloclip.io.extract import (
-    EfficientSequenceWriter,
     ExtractionStats,
     MultiFileSequenceWriter,
 )
@@ -89,89 +84,6 @@ class TestExtractionStats:
         assert 'Total alignments processed: 3' in report
         assert 'Left overhangs: 2' in report
         assert 'Right overhangs: 1' in report
-
-
-class TestEfficientSequenceWriter:
-    """Test EfficientSequenceWriter functionality."""
-
-    def test_writer_initialization(self):
-        """Test writer initialization."""
-        with tempfile.NamedTemporaryFile(mode='w', delete=False) as tmp:
-            writer = EfficientSequenceWriter(tmp.name, 'fasta', 100)
-            assert writer.output_path == Path(tmp.name)
-            assert writer.output_format == 'fasta'
-            assert writer.buffer_size == 100
-            assert len(writer.buffer) == 0
-            assert writer.sequences_written == 0
-
-    def test_writer_invalid_format(self):
-        """Test writer with invalid format."""
-        with pytest.raises(ValueError, match='Unsupported output format'):
-            EfficientSequenceWriter(output_format='invalid')
-
-    def test_write_fasta_to_file(self):
-        """Test writing FASTA sequences to file."""
-        with tempfile.NamedTemporaryFile(
-            mode='w', delete=False, suffix='.fasta'
-        ) as tmp:
-            tmp_path = tmp.name
-
-        with EfficientSequenceWriter(tmp_path, 'fasta', buffer_size=2) as writer:
-            # Write some sequences
-            writer.write_sequence('seq1', 'ATCG', 'test sequence 1')
-            writer.write_sequence('seq2', 'GCTA', 'test sequence 2')
-            # Should flush automatically when buffer fills
-            writer.write_sequence('seq3', 'TTTT', 'test sequence 3')
-
-        # Read back and verify
-        with open(tmp_path, 'r') as f:
-            content = f.read()
-
-        assert '>seq1 test sequence 1' in content
-        assert '>seq2 test sequence 2' in content
-        assert '>seq3 test sequence 3' in content
-        assert 'ATCG' in content
-        assert 'GCTA' in content
-        assert 'TTTT' in content
-
-    def test_write_with_stats(self):
-        """Test writing sequences with statistics in headers."""
-        with tempfile.NamedTemporaryFile(
-            mode='w', delete=False, suffix='.fasta'
-        ) as tmp:
-            tmp_path = tmp.name
-
-        stats = {
-            'mapq': 30,
-            'clip_length': 25,
-            'overhang_length': 25,
-            'motif_counts': {'TTAGGG': 2, 'CCCTAA': 1},
-        }
-
-        with EfficientSequenceWriter(tmp_path, 'fasta', buffer_size=1) as writer:
-            writer.write_sequence(
-                'test_read', 'ATCGATCG', 'overhang sequence', stats=stats
-            )
-
-        with open(tmp_path, 'r') as f:
-            content = f.read()
-
-        assert 'mapq=30' in content
-        assert 'clip_len=25' in content
-        assert 'overhang_len=25' in content
-        assert 'motifs=TTAGGG:2,CCCTAA:1' in content
-
-    @patch('sys.stdout', new_callable=StringIO)
-    def test_write_to_stdout(self, mock_stdout):
-        """Test writing to stdout."""
-        with EfficientSequenceWriter(
-            output_path=None, output_format='fasta', buffer_size=1
-        ) as writer:
-            writer.write_sequence('seq1', 'ATCG', 'test sequence')
-
-        output = mock_stdout.getvalue()
-        assert '>seq1 test sequence' in output
-        assert 'ATCG' in output
 
 
 class TestMultiFileSequenceWriter:

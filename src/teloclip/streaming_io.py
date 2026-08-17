@@ -11,13 +11,11 @@ major release.
 from teloclip.io.streaming import (
     BufferedContigWriter,
     StreamingGenomeProcessor,
-    stream_sam_lines_for_contig,
     validate_indexed_files,
 )
 
 __all__ = [
     'BufferedContigWriter',
     'StreamingGenomeProcessor',
-    'stream_sam_lines_for_contig',
     'validate_indexed_files',
 ]

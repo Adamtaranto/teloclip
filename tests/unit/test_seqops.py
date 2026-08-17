@@ -8,76 +8,10 @@ from unittest.mock import mock_open, patch
 
 from teloclip.core.seqops import (
     addRevComplement,
-    filterList,
     isMotifInClip,
-    makeMask,
     read_fai,
     revComp,
 )
-
-
-class TestMakeMask:
-    """Test mask creation function."""
-
-    def test_make_mask_single_index(self):
-        """Test creating mask with single kill index."""
-        result = makeMask([2], 5)
-        expected = [True, True, False, True, True]
-        assert result == expected
-
-    def test_make_mask_multiple_indices(self):
-        """Test creating mask with multiple kill indices."""
-        result = makeMask([1, 3], 5)
-        expected = [True, False, True, False, True]
-        assert result == expected
-
-    def test_make_mask_empty_indices(self):
-        """Test creating mask with no kill indices."""
-        result = makeMask([], 4)
-        expected = [True, True, True, True]
-        assert result == expected
-
-    def test_make_mask_all_indices(self):
-        """Test creating mask killing all indices."""
-        result = makeMask([0, 1, 2], 3)
-        expected = [False, False, False]
-        assert result == expected
-
-
-class TestFilterList:
-    """Test filtering lists with mask."""
-
-    def test_filter_list_simple(self):
-        """Test filtering with simple exclude indices."""
-        data = ['a', 'b', 'c', 'd']
-        exclude = [1, 3]  # Exclude indices 1 and 3 (b and d)
-        result = list(filterList(data, exclude))
-        expected = ['a', 'c']
-        assert result == expected
-
-    def test_filter_list_none_excluded(self):
-        """Test filtering with no exclusions."""
-        data = ['a', 'b', 'c']
-        exclude = []  # No exclusions
-        result = list(filterList(data, exclude))
-        expected = ['a', 'b', 'c']
-        assert result == expected
-
-    def test_filter_list_all_excluded(self):
-        """Test filtering with all excluded."""
-        data = ['a', 'b', 'c']
-        exclude = [0, 1, 2]  # Exclude all indices
-        result = list(filterList(data, exclude))
-        expected = []
-        assert result == expected
-
-    def test_filter_list_empty(self):
-        """Test filtering empty list."""
-        data = []
-        exclude = []
-        result = list(filterList(data, exclude))
-        expected = []
-        assert result == expected
 
 
 class TestRevComp:
@@ -359,33 +293,3 @@ class TestIsMotifInClip:
         )
 
         assert result is False
-
-
-class TestSeqopsIntegration:
-    """Test integration between sequence operation functions."""
-
-    def test_rev_comp_and_add_rev_complement(self):
-        """Test reverse complement function consistency."""
-        original_motifs = ['TTAGGG', 'ATCGAT']
-
-        # Add reverse complements
-        expanded_motifs = addRevComplement(original_motifs)
-
-        # Manually compute reverse complements
-        manual_rev_comps = [revComp(motif) for motif in original_motifs]
-
-        # All manual reverse complements should be in expanded list
-        for rev_comp in manual_rev_comps:
-            assert rev_comp in expanded_motifs
-
-    def test_mask_and_filter_integration(self):
-        """Test mask creation and filtering integration."""
-        data = ['seq1', 'seq2', 'seq3', 'seq4', 'seq5']
-        kill_indices = [1, 3]  # Remove seq2 and seq4
-
-        # Filter data using kill indices
-        filtered_data = list(filterList(data, kill_indices))
-
-        # Should have removed the specified indices
-        expected = ['seq1', 'seq3', 'seq5']
-        assert filtered_data == expected

@@ -250,41 +250,6 @@ class BufferedContigWriter:
             self.current_size = 0
 
 
-def stream_sam_lines_for_contig(
-    bam_file: pysam.AlignmentFile, contig_name: str
-) -> Iterator[str]:
-    """
-    Stream SAM format lines for a specific contig.
-
-    Parameters
-    ----------
-    bam_file : pysam.AlignmentFile
-        Opened BAM file.
-    contig_name : str
-        Name of the contig to process.
-
-    Yields
-    ------
-    str
-        SAM format lines for alignments to the specified contig.
-    """
-    try:
-        for alignment in bam_file.fetch(contig_name):
-            # Skip unmapped reads
-            if alignment.is_unmapped:
-                continue
-            # Skip secondary/supplementary alignments
-            if alignment.is_secondary or alignment.is_supplementary:
-                continue
-
-            # Convert pysam alignment back to SAM line format
-            sam_line = alignment.to_string()
-            yield sam_line
-    except ValueError:
-        # Contig not found in BAM
-        return
-
-
 def validate_indexed_files(
     fasta_path: Union[str, Path], bam_path: Union[str, Path]
 ) -> Tuple[bool, str]:

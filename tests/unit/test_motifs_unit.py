@@ -7,8 +7,6 @@ from teloclip.core.motifs import (
     check_sequence_for_patterns,
     construct_regex_pattern,
     count_continuous_runs,
-    count_regex_patterns_in_sequence,
-    format_pattern_counts,
     make_fuzzy_motif_regex,
     make_motif_regex,
 )
@@ -90,79 +88,33 @@ class TestConstructRegexPattern:
         """Test constructing pattern from simple motif tuples."""
         motif_tuples = [('A', 3), ('T', 2)]
         result = construct_regex_pattern(motif_tuples)
-        # Should create a pattern allowing +/- 1 in counts
-        assert isinstance(result, str)
-        assert 'A' in result
-        assert 'T' in result
+        # Each run becomes a +/- 1 quantified range.
+        assert result == r'A{2,4}T{1,3}'
 
     def test_construct_regex_pattern_single(self):
         """Test constructing pattern from single motif tuple."""
         motif_tuples = [('G', 5)]
         result = construct_regex_pattern(motif_tuples)
-        assert isinstance(result, str)
-        assert 'G' in result
+        assert result == r'G{4,6}'
 
+    def test_construct_regex_pattern_telomeric_motif(self):
+        """A run of one stays literal, so only the real homopolymers flex."""
+        motif_tuples = count_continuous_runs('TTTAGGG')
+        assert construct_regex_pattern(motif_tuples) == r'T{2,4}AG{2,4}'
 
-class TestCountRegexPatternsInSequence:
-    """Test counting regex patterns in sequences."""
+    def test_construct_regex_pattern_no_repeated_bases(self):
+        """A motif with no runs longer than one is reproduced verbatim."""
+        motif_tuples = count_continuous_runs('ATATAT')
+        assert construct_regex_pattern(motif_tuples) == r'ATATAT'
 
-    def test_count_regex_patterns_simple(self):
-        """Test counting simple patterns."""
-        sequence = 'TTAGGGTTAGGGTTAGGG'
-        patterns = ['TTAGGG', 'CCCTAA']
+    def test_construct_regex_pattern_multiple_runs(self):
+        """Every run is quantified independently."""
+        motif_tuples = count_continuous_runs('AAAAGGGTTTCCCC')
+        assert construct_regex_pattern(motif_tuples) == r'A{3,5}G{2,4}T{2,4}C{3,5}'
 
-        result = count_regex_patterns_in_sequence(sequence, patterns)
-
-        assert isinstance(result, dict)
-        assert 'TTAGGG' in result
-        assert 'CCCTAA' in result
-        assert result['TTAGGG'] == 3  # Should find 3 occurrences
-        assert result['CCCTAA'] == 0  # Should find 0 occurrences
-
-    def test_count_regex_patterns_overlapping(self):
-        """Test counting patterns that might overlap."""
-        sequence = 'AAAAAAA'
-        patterns = ['AA', 'AAA']
-
-        result = count_regex_patterns_in_sequence(sequence, patterns)
-
-        assert isinstance(result, dict)
-        assert 'AA' in result
-        assert 'AAA' in result
-        # Results depend on regex implementation but should be reasonable
-        assert result['AA'] >= 1
-
-    def test_count_regex_patterns_no_matches(self):
-        """Test counting patterns with no matches."""
-        sequence = 'ATCGATCG'
-        patterns = ['TTAGGG', 'CCCTAA']
-
-        result = count_regex_patterns_in_sequence(sequence, patterns)
-
-        assert result['TTAGGG'] == 0
-        assert result['CCCTAA'] == 0
-
-
-class TestFormatPatternCounts:
-    """Test pattern count formatting."""
-
-    def test_format_pattern_counts_simple(self):
-        """Test formatting simple pattern counts."""
-        pattern_counts = {'TTAGGG': 5, 'CCCTAA': 2}
-        result = format_pattern_counts(pattern_counts)
-
-        assert isinstance(result, str)
-        assert 'TTAGGG' in result
-        assert 'CCCTAA' in result
-        assert '5' in result
-        assert '2' in result
-
-    def test_format_pattern_counts_empty(self):
-        """Test formatting empty pattern counts."""
-        pattern_counts = {}
-        result = format_pattern_counts(pattern_counts)
-
-        assert isinstance(result, str)
+    def test_construct_regex_pattern_empty(self):
+        """An empty motif produces an empty pattern."""
+        assert construct_regex_pattern([]) == ''
 
 
 class TestCheckSequenceForPatterns:
@@ -218,42 +170,3 @@ class TestCheckSequenceForPatterns:
         # Single character pattern
         result = check_sequence_for_patterns('AAAA', ['A'])
         assert result is True
-
-
-class TestMotifIntegration:
-    """Test integration between different motif functions."""
-
-    def test_motif_workflow(self):
-        """Test a complete motif analysis workflow."""
-        # Create some motif patterns
-        exact_pattern = make_motif_regex('TTAGGG')
-        fuzzy_pattern = make_fuzzy_motif_regex('AAATTT')
-
-        # Test sequence
-        sequence = 'TTAGGGTTAGGGAAATTTAAATTT'
-
-        # Check if patterns match
-        exact_match = check_sequence_for_patterns(sequence, [exact_pattern])
-        fuzzy_match = check_sequence_for_patterns(sequence, [fuzzy_pattern])
-
-        assert exact_match is True
-        # Fuzzy match depends on implementation but should not crash
-        assert isinstance(fuzzy_match, bool)
-
-    def test_pattern_counting_workflow(self):
-        """Test pattern counting workflow."""
-        # Generate patterns
-        patterns = [make_motif_regex('TTAGGG'), make_motif_regex('CCCTAA')]
-
-        # Test sequence
-        sequence = 'TTAGGGTTAGGGCCCTAACCCTAA'
-
-        # Count patterns
-        counts = count_regex_patterns_in_sequence(sequence, patterns)
-
-        # Format results
-        formatted = format_pattern_counts(counts)
-
-        assert isinstance(counts, dict)
-        assert isinstance(formatted, str)
-        assert len(counts) == len(patterns)

@@ -10,18 +10,14 @@ major release.
 
 from teloclip.core.seqops import (
     addRevComplement,
-    filterList,
     isMotifInClip,
-    makeMask,
     read_fai,
     revComp,
 )
 
 __all__ = [
     'addRevComplement',
-    'filterList',
     'isMotifInClip',
-    'makeMask',
     'read_fai',
     'revComp',
 ]

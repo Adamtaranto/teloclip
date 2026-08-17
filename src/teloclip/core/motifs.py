@@ -6,7 +6,7 @@ including regex pattern generation, motif counting, and analysis utilities.
 """
 
 import re
-from typing import Dict, List, Tuple
+from typing import List, Tuple
 
 
 def make_motif_regex(motif: str) -> str:
@@ -49,47 +49,6 @@ def make_fuzzy_motif_regex(motif: str) -> str:
     pattern = construct_regex_pattern(motif_tuples)
     # Return the final regex pattern allowing for the specified minimum repeats
     return rf'({pattern})'
-
-
-def count_regex_patterns_in_sequence(
-    dna_sequence: str, regex_patterns: List[str]
-) -> Dict[str, int]:
-    """
-    Count occurrences of regular expression patterns in a DNA sequence.
-
-    Parameters
-    ----------
-    dna_sequence : str
-        The input DNA sequence.
-    regex_patterns : List[str]
-        List of regular expression patterns to count.
-
-    Returns
-    -------
-    Dict[str, int]
-        Dictionary mapping pattern names to occurrence counts.
-    """
-    # Confirm that regex patterns does not end with min repeats quantifier of format {x,y} or {x,}
-    for pattern in regex_patterns:
-        if re.search(r'\{\d+,\d+\}$', pattern) or re.search(r'\{\d+,\}$', pattern):
-            raise ValueError(
-                f"Pattern '{pattern}' ends with min repeats quantifier. "
-                'Please provide patterns that do not end with min repeats quantifiers.'
-            )
-
-    pattern_counts = {}  # Initialize an empty dictionary to store counts
-
-    # Iterate through the list of regex patterns
-    for pattern in regex_patterns:
-        # Use re.findall to find all occurrences of the pattern in the DNA sequence
-        matches = re.findall(pattern, dna_sequence)
-        # Count the number of matches and store in the dictionary
-        pattern_counts[pattern] = len(matches)
-
-    # Or as a dict comprehension
-    # pattern_counts = {pattern: len(re.findall(pattern, dna_sequence)) for pattern in regex_patterns}
-
-    return pattern_counts
 
 
 def count_continuous_runs(dna_string: str) -> list:
@@ -162,30 +121,6 @@ def construct_regex_pattern(motif_tuples: List[Tuple[str, int]]) -> str:
             pattern_parts.append(rf'{re.escape(char)}{{{count - 1},{count + 1}}}')
 
     return rf'{"".join(pattern_parts)}'
-
-
-def format_pattern_counts(pattern_counts: Dict[str, int]) -> str:
-    """
-    Format a dictionary of pattern counts into a string.
-
-    Parameters
-    ----------
-    pattern_counts : Dict[str, int]
-        A dictionary where keys are regex patterns and values are counts
-        of each pattern.
-
-    Returns
-    -------
-    str
-        A formatted string representation of the pattern counts.
-    """
-    # Use a list comprehension to generate formatted pairs of pattern=count
-    formatted_pairs = [
-        f'{pattern}={count}' for pattern, count in pattern_counts.items()
-    ]
-
-    # Join the formatted pairs with ":" and return the result
-    return ':'.join(formatted_pairs)
 
 
 def check_sequence_for_patterns(

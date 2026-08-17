@@ -9,21 +9,11 @@ major release.
 """
 
 from teloclip.io.extract import (
-    BufferedContigWriter,
-    EfficientSequenceWriter,
     ExtractionStats,
     MultiFileSequenceWriter,
-    StreamingGenomeProcessor,
-    create_fasta_index,
-    write_sequences_streaming,
 )
 
 __all__ = [
-    'BufferedContigWriter',
-    'EfficientSequenceWriter',
     'ExtractionStats',
     'MultiFileSequenceWriter',
-    'StreamingGenomeProcessor',
-    'create_fasta_index',
-    'write_sequences_streaming',
 ]
