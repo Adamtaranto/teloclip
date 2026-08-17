@@ -19,7 +19,7 @@ A tool for the recovery of unassembled telomeres from raw long-reads using soft-
 
 </p>
 
-<h3>🎉🧬 Teloclip supports automatic telomere extension with <code>teloclip extend</code>!! 🧬🎉</h3>
+<h3>🎉🧬 Teloclip now supports automatic telomere extension with <code>teloclip extend</code>!! 🧬🎉</h3>
 
 📖 **[Full documentation](https://adamtaranto.github.io/teloclip/)** — tutorial,
 guidance on interpreting results, and CLI reference.
@@ -33,24 +33,20 @@ guidance on interpreting results, and CLI reference.
 - [Example Usage](#example-usage)
   - [Optional Quality Control](#optional-quality-control)
 - [Options](#options)
-  - [Main Command](#main-command)
   - [Filter Sub-command Options](#filter-sub-command-options)
-  - [Extract Sub-command Options](#extract-sub-command-options)
   - [Extend Sub-command Options](#extend-sub-command-options)
 - [Citing Teloclip](#citing-teloclip)
 - [Publications using Teloclip](#publications-using-teloclip)
-- [Issues](#issues)
-- [License](#license)
 
 ## About Teloclip
 
 In most eukaryotic species, chromosomes terminate in repetitive [telomeric](https://en.wikipedia.org/wiki/Telomere) sequences. A complete genome assembly should ideally comprise chromosome-level contigs that possess telomeric repeats at each end. However, genome assemblers frequently fail to recover these repetitive features, instead producing contigs that terminate immediately prior to telomeric repeats.
 
-Part of the reason is a sampling artefact: read coverage cannot stay flat all the way to the end of a linear chromosome. Fragmentation points are random, and library size selection discards short fragments — which are exactly the fragments produced near a molecule's end — so expected coverage decays smoothly to zero over roughly one read length. The expected coverage at distance `x` from the terminus is `E[min(x + 1, ℓ)] / E[ℓ]` over the size-selected read-length distribution `ℓ`: a terminal base is simply a smaller target for a read to land on. Assemblers see this thinning, one-sided evidence and stop short of the telomere; the few reads that do span the terminus surface as the clipped alignments teloclip collects.
+Part of the reason is a sampling artefact: read coverage cannot stay flat all the way to the end of a linear chromosome. Random fragmentation of linear chromosomes followed by filtering of short fragments causes expected coverage to decay smoothly to zero over roughly one read length. The expected coverage at distance `x` from the terminus is `E[min(x + 1, ℓ)] / E[ℓ]` over the size-selected read-length distribution `ℓ`. Assemblers see decaying coverage as lack of evidence and trim contigs short of the telomere.
 
 <img src="https://raw.githubusercontent.com/Adamtaranto/teloclip/main/docs/images/coverage-decay-bootstrap.png" alt="Simulated coverage against distance from a contig end for lognormal 15 plus or minus 3 Kbp fragments with fragments at or below 10 Kbp discarded, at thirty-fold interior depth. Coverage climbs from zero at the terminus to interior depth about 20 Kbp in, with a 95 percent band from 200 simulations around the mean and the analytic expectation tracking it closely." />
 
-Simulated terminal coverage for a PacBio HiFi-like library (lognormal fragment lengths, 15 ± 3 Kbp, fragments ≤10 Kbp discarded) at 30× interior depth: the analytic decay curve (dashed) tracks the mean of 200 simulations, with coverage reaching interior depth only ~20 Kbp in from the contig end. See [Why coverage dies at contig ends](https://adamtaranto.github.io/teloclip/guide/coverage-decay/) for the full model, an interactive parameter explorer, and what the decay means for depth planning.
+Simulated terminal coverage for a PacBio HiFi-like library (lognormal fragment lengths, 15 ± 3 Kbp, fragments ≤10 Kbp discarded) at 30× interior depth. See [Why coverage dies at contig ends](https://adamtaranto.github.io/teloclip/guide/coverage-decay/) for the full model.
 
 Teloclip is designed to scan raw long-read data for evidence that can be used to restore missing telomeres. It does this by searching alignments of raw long-read data (i.e. Pacbio or ONT reads mapped with Minimap2) for 'clipped' alignments that occur at the ends of draft contigs. A 'clipped' alignment is produced where the _end_ of a read is not part of its best alignment. This can occur when a read extends past the end of an assembled contig.
 
@@ -60,7 +56,7 @@ Optionally, teloclip can screen overhanging reads for telomere-associated motifs
 
 Once candidate telomeric sequences have be detected in alignment overhangs, teloclip can be used to automatically patch the missing sequence onto draft contigs.
 
-Teloclip is based on concepts from Torsten Seemann's excellent tool [samclip](https://github.com/tseemann/samclip). Samclip can be used to remove clipped alignments from a samfile prior to variant calling.
+> Teloclip is based on concepts from Torsten Seemann's excellent tool [samclip](https://github.com/tseemann/samclip). Samclip can be used to remove clipped alignments from a samfile prior to variant calling.
 
 ## CLI Structure
 
