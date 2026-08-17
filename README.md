@@ -70,22 +70,24 @@ Teloclip provides three sub-commands:
 
 Teloclip requires Python >= 3.8.
 
-There are 5 options available for installing Teloclip locally:
+#### Local Install
 
-1. Install from PyPi.
-   This or Bioconda will get you the latest stable release.
+Teloclip is typically used alongside `minimap2` and `samtools`.
+Use the `environment.yml` file in this repo to create a conda environment with companion tools and dependencies.
 
 ```bash
-pip install teloclip
+conda env create -f environment.yml
+conda activate teloclip
 ```
+Install `Teloclip` into the conda env with:
 
-2. Install from Bioconda.
+A. Install from Bioconda.
 
 ```bash
 conda install -c bioconda teloclip
 ```
 
-3. Pip install directly from this git repository.
+B. Pip install directly from this git repository.
 
 This is the best way to ensure you have the latest development version.
 
@@ -93,7 +95,20 @@ This is the best way to ensure you have the latest development version.
 pip install git+https://github.com/Adamtaranto/teloclip.git
 ```
 
-4. Use Docker for reproducible containerized environments.
+**Verify installation**
+
+```bash
+# Print version number and exit.
+teloclip --version
+# > teloclip, version 0.4.1
+
+# Get usage information
+teloclip --help
+```
+
+#### Run Docker Container
+
+Use Docker for reproducible containerized environments.
 
 Ideal for pipelines and reproducible workflows. No local Python installation required.
 
@@ -106,17 +121,6 @@ docker run --rm -v $(pwd):/data adamtaranto/teloclip:latest --version
 ```
 
 See [DOCKER.md](DOCKER.md) for complete Docker usage guide and [examples/nextflow/](examples/nextflow/) for Nextflow integration.
-
-**Verify installation**
-
-```bash
-# Print version number and exit.
-teloclip --version
-# > teloclip, version 0.3.5
-
-# Get usage information
-teloclip --help
-```
 
 ## Example Usage
 
@@ -144,10 +148,7 @@ minimap2 -ax map-pb ref.fa pacbio_reads.fq.gz > in.sam
 Next you will need to provide alignment records to teloclip in SAM format. These can be read directly from a SAM file like this:
 
 ```bash
-# Option 1: Read alignment input from sam file and write overhang-reads to stdout
-teloclip filter --ref-idx ref.fa.fai in.sam
-
-# Option 2: Read alignment input from stdin and write stdout to file
+# Read alignment input from stdin and write stdout to file
 teloclip filter --ref-idx ref.fa.fai < in.sam > overhangs.sam
 ```
 
@@ -195,22 +196,6 @@ To reduce off target matching you can increase the minimum required number of se
 
 ```bash
 samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --fuzzy --motifs TTAGGG --min-repeats 4 | samtools sort > overhangs.bam
-```
-
-**Extract clipped reads**
-
-`teloclip extract` will write overhanging reads to separate fasta files for each reference contig end. The clipped region of each read is masked as lowercase in output fasta files.
-
-You can inspect these reads and select candidates to manually extend contig ends.
-
-```bash
-# Find soft-clipped alignments containing motif 'TTAGGG' that overhang contig ends, write to sorted bam.
-samtools view -h in.bam | teloclip filter --ref-idx ref.fa.fai --motifs TTAGGG | samtools sort > sorted_overhangs.bam
-
-# Extract overhang reads and write to separate fasta files for each reference contig end.
-# Adds overhang stats to fasta header and writes overhang region in lowercase.
-# Note: Use sorted input to make processing more efficient.
-samtools view -h sorted_overhangs.bam | teloclip extract --ref-idx ref.fa.fai --extract-dir split_overhangs_by_contig --include-stats --count-motifs TTAGGG --report-stats
 ```
 
 **Automatically extend missing telomeres**
@@ -287,28 +272,6 @@ samtools view -h -F 0x100 input.sam | teloclip filter --ref-idx ref.fa.fai > no_
 
 ## Options
 
-The main `teloclip` command provides global options and sub-commands for specific operations.
-
-### Main Command
-
-Run `teloclip --help` to view the main command options:
-
-```code
-Usage: teloclip [OPTIONS] [COMMAND] [ARGS]...
-
-  A tool for the recovery of unassembled telomeres from soft-clipped read
-  alignments.
-
-Options:
-  --version  Show the version and exit.
-  --help     Show this message and exit.
-
-Commands:
-  extend   Extend contigs using overhang analysis from soft-clipped...
-  extract  Extract overhanging reads for each end of each reference contig.
-  filter   Filter SAM file for clipped alignments containing unassembled...
-```
-
 ### Filter Sub-command Options
 
 Run `teloclip filter --help` to view the filter command options:
@@ -349,56 +312,6 @@ Options:
   --match-anywhere                If set, motif match may occur in unclipped
                                   region of reads.
   --log-level [debug|info|warning|error]
-                                  Logging level (default: INFO).
-  --logfile PATH                  Also write log messages to this file (parent
-                                  directories are created).
-  --help                          Show this message and exit.
-```
-
-### Extract Sub-command Options
-
-Run `teloclip extract --help` to view the extract command options:
-
-```code
-Usage: teloclip extract [OPTIONS] [SAMFILE]
-
-  Extract overhanging reads for each end of each reference contig. Reads are
-  always written to output files.
-
-Options:
-  --ref-idx PATH                  Path to fai index for reference fasta. Index
-                                  fasta using `samtools faidx FASTA`
-                                  [required]
-  --prefix TEXT                   Use this prefix for output files. Default:
-                                  None.
-  --extract-dir PATH              Write extracted reads to this directory.
-                                  Default: cwd.
-  --min-clip INTEGER              Require clip to extend past ref contig end
-                                  by at least N bases. Default: 1
-  --max-break INTEGER             Tolerate max N unaligned bases before contig
-                                  end. Default: 50
-  --min-anchor INTEGER            Minimum anchored alignment length required
-                                  (default: 100).
-  --min-mapq INTEGER              Minimum mapping quality required (default:
-                                  0).
-  --keep-secondary                If set, include secondary alignments in
-                                  output. Default: Off (exclude secondary
-                                  alignments).
-  --include-stats                 Include mapping quality, clip length, and
-                                  motif counts in FASTA headers.
-  --count-motifs TEXT             Comma-delimited motif sequences to count in
-                                  overhang regions (e.g., "TTAGGG,CCCTAA").
-  --fuzzy-count                   Use fuzzy motif matching allowing ±1
-                                  character variation when counting motifs.
-  --buffer-size INTEGER           Number of sequences to buffer before writing
-                                  (default: 1000).
-  --output-format [fasta|fastq]   Output format for extracted sequences
-                                  (default: fasta).
-  --report-stats                  Write extraction statistics to file in
-                                  output directory.
-  --no-mask-overhangs             Do not convert overhang sequences to
-                                  lowercase.
-  --log-level [DEBUG|INFO|WARNING|ERROR]
                                   Logging level (default: INFO).
   --logfile PATH                  Also write log messages to this file (parent
                                   directories are created).
@@ -481,23 +394,19 @@ If you use Teloclip in your work please cite this git repo directly and note the
 
 Teloclip has been used to recover and extend telomeric sequences in a wide variety of taxa, including Algae, Plants, Insects, and Fungi.
 
-- Deng, Y., Zhou, P., Li, F., Wang, J., Xie, K., Liang, H., Wang, C., Liu, B., Zhu, Z., Zhou, W. and Dun, B., **2024**. A complete assembly of the sorghum BTx623 reference genome. Plant Communications, 5(6). 🌾
+- Li, J., Chen, Z., Li, K., Tan, J., Sun, J., Deng, X.W., Park, Y., He, H., Deng, Y. and Zhang, X., **2026**. Telomere-to-telomere genome assembly and a mutant library empower functional genomics and genetic improvement in _Cucurbita moschata_. Plant Communications, 7(5). 🌱
+
+- Liu, Y., Zhao, L., Zhang, J., Ju, Q., Fan, X., Li, Z., Zhang, X., Liang, X., Ge, F. and Chen, J., **2026**. Gapless genome assembly and evolutionary analysis of Cnidium monnieri (Apiaceae). Genomics Communications, 3(1). 🌱
 
 - He, W., Hu, D., Guo, M., Nie, B., Zhang, G., Jia, Y., Hou, Z., Shu, S., Shao, Y., Simonsen, H.T. and Twamley, A., **2025**. The telomere‐to‐telomere genome of _Sanicula chinensis_ unveils genetic underpinnings of low furanocoumarin diversity and content in one basal lineage of Apiaceae. The Plant Journal, 123(1), p.e70311. 🌱
 
 - Jaiswal, R.K., Garibo Domingo, T., Grunchec, H., Singh, K., Pirooznia, M., Elhaik, E. and Cohn, M., **2025**. Subtelomeric elements provide stability to short telomeres in telomerase-negative cells of the budding yeast _Naumovozyma castellii_. Current Genetics, 71(1), p.19. 🍄
 
-- Li, J., Chen, Z., Li, K., Tan, J., Sun, J., Deng, X.W., Park, Y., He, H., Deng, Y. and Zhang, X., **2026**. Telomere-to-telomere genome assembly and a mutant library empower functional genomics and genetic improvement in _Cucurbita moschata_. Plant Communications, 7(5). 🌱
-
 - Liu, Y., Chen, Y., Ren, Z. et al. Two haplotype-resolved telomere-to-telomere genome assemblies of _Xanthoceras sorbifolium_. Sci Data 12, 791 (**2025**). 🌿
-
-- Liu, Y., Zhao, L., Zhang, J., Ju, Q., Fan, X., Li, Z., Zhang, X., Liang, X., Ge, F. and Chen, J., **2026**. Gapless genome assembly and evolutionary analysis of Cnidium monnieri (Apiaceae). Genomics Communications, 3(1). 🌱
 
 - Loos, A., Doykova, E., Qian, J., Kümmel, F., Ibrahim, H., Kiss, L., Panstruga, R. and Kusch, S., **2025**. Saprotrophic _Arachnopeziza_ Species as New Resources to Study the Obligate Biotrophic Lifestyle of Powdery Mildew Fungi. Molecular Ecology Resources, p.e70045. 🍄
 
-- Oberti, H., Sessa, L., Oliveira‐Rizzo, C., Di Paolo, A., Sanchez‐Vallet, A., Seidl, M.F. and Abreo, E., 2025. Novel genomic features in entomopathogenic fungus _Beauveria bassiana_ ILB308: accessory genomic regions and putative virulence genes involved in the infection process of soybean pest _Piezodorus guildinii_. Pest Management Science, 81(4), pp.2323-2336. 🍄
-
-- van Westerhoven, A.C., Mehrabi, R., Talebi, R., Steentjes, M.B., Corcolon, B., Chong, P.A., Kema, G.H. and Seidl, M.F., **2024**. A chromosome-level genome assembly of _Zasmidium syzygii_ isolated from banana leaves. G3: Genes, Genomes, Genetics, 14(3), p.jkad262. 🍄
+- Oberti, H., Sessa, L., Oliveira‐Rizzo, C., Di Paolo, A., Sanchez‐Vallet, A., Seidl, M.F. and Abreo, E., **2025**. Novel genomic features in entomopathogenic fungus _Beauveria bassiana_ ILB308: accessory genomic regions and putative virulence genes involved in the infection process of soybean pest _Piezodorus guildinii_. Pest Management Science, 81(4), pp.2323-2336. 🍄
 
 - Wan, L., Deng, C., Liu, B. et al. Telomere-to-telomere genome assemblies of three silkworm strains with long-term pupal characteristics. Sci Data 12, 501 (**2025**). 🐛
 
@@ -505,15 +414,11 @@ Teloclip has been used to recover and extend telomeric sequences in a wide varie
 
 - Xu, Z., Wang, G., Zhu, X. et al. Genome assembly of two allotetraploid cotton germplasms reveals mechanisms of somatic embryogenesis and enables precise genome editing. Nat Genet 57, 2028–2039 (**2025**). 🌱
 
+- Deng, Y., Zhou, P., Li, F., Wang, J., Xie, K., Liang, H., Wang, C., Liu, B., Zhu, Z., Zhou, W. and Dun, B., **2024**. A complete assembly of the sorghum BTx623 reference genome. Plant Communications, 5(6). 🌾
+
+- van Westerhoven, A.C., Mehrabi, R., Talebi, R., Steentjes, M.B., Corcolon, B., Chong, P.A., Kema, G.H. and Seidl, M.F., **2024**. A chromosome-level genome assembly of _Zasmidium syzygii_ isolated from banana leaves. G3: Genes, Genomes, Genetics, 14(3), p.jkad262. 🍄
+
 - Yang, H.P., Wenzel, M., Hauser, D.A., Nelson, J.M., Xu, X., Eliáš, M. and Li, F.W., **2021**. _Monodopsis_ and _Vischeria_ genomes shed new light on the biology of eustigmatophyte algae. Genome biology and evolution, 13(11), p.evab233. 🦠
-
-## Issues
-
-Submit feedback to the [Issue Tracker](https://github.com/Adamtaranto/teloclip/issues)
-
-## License
-
-Software provided under GPL-3 license.
 
 ## Star History
 

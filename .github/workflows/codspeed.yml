@@ -3,8 +3,16 @@ on:
   push:
     branches: [main]
   pull_request:
+    branches: [main]
+    paths:
+      - "benchmarks/**"
+      - "src/teloclip/**"
+      - ".github/workflows/codspeed.yml"
   # Allow running on demand from the Actions tab.
   workflow_dispatch:
+concurrency:
+  group: codspeed-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   benchmarks:
     name: Run benchmarks
@@ -17,12 +25,12 @@ jobs:
       - name: Install package and benchmark dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install '.[test]'
+          pip install '.[bench]'
       # Verify the benchmarks still run even when CodSpeed is not configured,
       # so a broken benchmark is caught rather than silently skipped along with
       # the upload.
       - name: Check benchmarks execute
-        run: pytest benchmarks -p no:cacheprovider --no-cov -q
+        run: pytest benchmarks -p no:cacheprovider -q -o addopts=""
       - name: Report CodSpeed token status
         id: codspeed
         env:
@@ -47,4 +55,4 @@ jobs:
           mode: simulation
           # Coverage instrumentation would distort the measurements, so the
           # addopts from pyproject.toml are overridden here.
-          run: pytest benchmarks --codspeed -p no:cacheprovider --no-cov
+          run: pytest benchmarks --codspeed -p no:cacheprovider -o addopts=""

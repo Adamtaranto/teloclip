@@ -19,7 +19,7 @@ repos:
         args: [--pytest-test-first]
       - id: trailing-whitespace
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.0
+    rev: v0.16.3
     hooks:
       - id: ruff-check
         args: [--fix, --exit-non-zero-on-fix, --show-fixes]
@@ -40,7 +40,3 @@ repos:
     rev: v0.21.0
     hooks:
       - id: yamlfmt
-#  - repo: https://github.com/pre-commit/mirrors-prettier
-#    rev: v4.0.0-alpha.8
-#    hooks:
-#      - id: prettier

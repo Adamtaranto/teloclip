@@ -33,12 +33,11 @@ dev = [
     "ruff",
 ]
 
-docs = [
-    "zensical>=0.0.51",
-    "pymdown-extensions>=10.21.2,<11",
-]
+docs = ["zensical>=0.0.51", "pymdown-extensions>=10.21.2,<11"]
 
-test = ["pytest", "pytest-codspeed", "pytest-cov"]
+test = ["pytest", "pytest-cov"]
+
+bench = ["pytest", "pytest-codspeed"]
 
 [project.urls]
 documentation = "https://github.com/adamtaranto/teloclip"
@@ -71,7 +70,7 @@ fallback-version = "0.0.0"
 version-file = "src/teloclip/_version.py"
 
 [tool.pytest.ini_options]
-addopts = "-v --cov=teloclip --cov-branch --cov-report=xml --cov-report=term"
+addopts = "-v --ignore=benchmarks"
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 
