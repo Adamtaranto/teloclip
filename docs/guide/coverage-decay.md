@@ -77,23 +77,35 @@ curve near the terminus.
 
 ## What the curves look like
 
-![Two-panel figure of analytic coverage-decay curves. Panel a: relative coverage against distance from the contig end for a lognormal 8 kb read profile under size-selection cutoffs from none to 20 kb; harsher cutoffs push the decay region deeper into the contig. Panel b: the same curve for narrow and wide lognormal profiles and a fixed 8 kb fragment length at a 5 kb cutoff; wider length distributions stretch the decay further.](../images/coverage-decay-analytic.png)
+The figures below use a PacBio HiFi-like library: lognormal fragment lengths
+with mean 15 kb and sd 3 kb, and a strict lower-bound size-selection cutoff
+of 10 kb (every fragment shorter than the cutoff is discarded).
 
-Two things to take away:
+![Two-panel figure of analytic coverage-decay curves. Panel a: relative coverage against distance from the contig end for a lognormal read profile with mean 15 kb and sd 3 kb under lower-bound size-selection cutoffs of none, 10, 15 and 20 kb; harsher cutoffs push the decay region deeper into the contig. Panel b: the same curve at the 10 kb cutoff for the HiFi profile, a wider sd 6 kb lognormal, and a fixed 15 kb fragment length; wider length distributions stretch the decay further.](../images/coverage-decay-analytic.png)
+
+Three things to take away:
 
 - **The decay region is about one (truncated) mean fragment length deep.**
-  With an 8 kb read profile, coverage within ~5 kb of the terminus is well
-  below half the interior depth.
-- **Size selection is the aggressor.** Raising the cutoff from nothing to
-  20 kb pushes the depleted region from ~8 kb to beyond 20 kb — exactly the
-  fragments that would have covered the terminus are the ones discarded.
+  With the 15 ± 3 kb HiFi profile, coverage within 5 kb of the terminus is
+  only about a third of the interior depth, and interior depth is not
+  reached until ~20 kb in.
+- **Below the cutoff distance the curve is an exact straight line.** Every
+  surviving fragment is at least 10 kb, so for \(x < L_{\min}\) the number
+  of placements that cover \(x\) grows linearly with \(x\) regardless of the
+  length distribution — the distribution only shapes the shoulder beyond the
+  cutoff.
+- **Cutoffs bite when they reach the typical length.** The 10 kb HiFi cutoff
+  discards only ~3% of a 15 ± 3 kb library, so its curve sits almost on the
+  no-cutoff curve; pushing the cutoff to 15–20 kb (at or above the mean)
+  discards most fragments and drags the depleted region far deeper.
 
 Simulation confirms the analytic curve. Each simulation fragments a 1 Mb
-molecule with lognormal fragment lengths (mean 8 kb, sd 4 kb), applies a
-2.5 kb size-selection cutoff at 30× interior depth, and tallies terminal
-coverage; the band spans the central 95% of 200 independent runs:
+molecule with lognormal fragment lengths (mean 15 kb, sd 3 kb), discards
+fragments below the 10 kb lower-bound cutoff, places the survivors at 30×
+interior depth, and tallies terminal coverage; the band spans the central
+95% of 200 independent runs:
 
-![Simulated terminal coverage for lognormal fragment lengths with mean 8 kb and standard deviation 4 kb under a 2.5 kb size-selection cutoff at thirty-fold interior depth, with a 95 percent bootstrap band from 200 simulations, overlaid with the analytic expectation, which tracks the simulated mean closely across the whole decay region.](../images/coverage-decay-bootstrap.png)
+![Simulated terminal coverage for lognormal fragment lengths with mean 15 kb and standard deviation 3 kb under a strict 10 kb lower-bound size-selection cutoff at thirty-fold interior depth, with a 95 percent bootstrap band from 200 simulations, overlaid with the analytic expectation, which tracks the simulated mean closely across the whole decay region.](../images/coverage-decay-bootstrap.png)
 
 !!! note "Reproducing these figures"
 
@@ -119,8 +131,8 @@ browser; the readout reports expected absolute coverage near the terminus.
 
 - **Overhang reads are the survivors of this decay.** A read can only carry
   an overhang if it covers the outermost base, where coverage is at its
-  minimum — at 30× interior depth with an 8 kb profile and a 5 kb cutoff,
-  expect only a handful of reads to span any given terminus. Zero overhangs
+  minimum — at 30× interior depth with the 15 ± 3 kb HiFi profile and a
+  10 kb cutoff, expect only a handful of reads to span any given terminus. Zero overhangs
   at one contig end is often just sampling, not a structural problem.
 - **Depth for telomere recovery is set by \(D \cdot c(0^+)\), not \(D\).**
   If you want, say, ≥5 candidate overhang reads per end, work back from the

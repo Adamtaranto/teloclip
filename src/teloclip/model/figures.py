@@ -101,9 +101,11 @@ def plot_decay_families(out_path: str) -> None:
     """
     Plot analytic decay curves across cutoffs and length distributions.
 
-    Two panels: (a) a lognormal read-length profile under increasingly harsh
-    size-selection cutoffs, and (b) different fragment-length distributions
-    under one fixed cutoff, showing how distribution shape moves the decay.
+    Two panels around a PacBio HiFi-like library (lognormal, mean 15 kb,
+    sd 3 kb, strict 10 kb lower-bound size selection): (a) that profile under
+    increasingly harsh cutoffs — fragments below the cutoff are discarded —
+    and (b) different fragment-length distributions under the 10 kb cutoff,
+    showing how distribution shape moves the decay.
 
     Parameters
     ----------
@@ -112,8 +114,8 @@ def plot_decay_families(out_path: str) -> None:
     """
     import matplotlib.pyplot as plt
 
-    profile = LognormalLengths(mean=8000.0, sd=4000.0)
-    x = np.linspace(0.0, 30_000.0, 600)
+    profile = LognormalLengths(mean=15_000.0, sd=3000.0)
+    x = np.linspace(0.0, 35_000.0, 700)
     xk = x / 1000.0
 
     with nature_style():
@@ -123,7 +125,7 @@ def plot_decay_families(out_path: str) -> None:
 
         # Panel a: one distribution, one distinctly coloured curve per
         # cutoff, identified through the legend.
-        cutoffs = (0.0, 5000.0, 10_000.0, 20_000.0)
+        cutoffs = (0.0, 10_000.0, 15_000.0, 20_000.0)
         for cutoff, color in zip(cutoffs, CUTOFF_COLORS):
             c = expected_relative_coverage(x, profile, min_length=cutoff)
             label = 'no cutoff' if cutoff == 0 else f'cutoff ≥{cutoff / 1000:g} kb'
@@ -132,35 +134,35 @@ def plot_decay_families(out_path: str) -> None:
         ax_a.set_xlabel('Distance from contig end (kb)')
         ax_a.set_ylabel('Relative coverage $c(x)$')
         ax_a.set_title(
-            'a  Size-selection cutoff (lognormal 8 ± 4 kb)',
+            'a  Size-selection cutoff (lognormal 15 ± 3 kb)',
             loc='left',
             fontweight='bold',
         )
 
         # Panel b: one cutoff, distribution identity in the two categorical
         # hues plus line style, each directly labelled.
-        cutoff = 5000.0
+        cutoff = 10_000.0
         series = (
-            (LognormalLengths(mean=8000.0, sd=2000.0), BLUE, '-', 'lognormal, sd 2 kb'),
+            (profile, BLUE, '-', 'lognormal, sd 3 kb (HiFi)'),
             (
-                LognormalLengths(mean=8000.0, sd=6000.0),
+                LognormalLengths(mean=15_000.0, sd=6000.0),
                 BLUE,
                 '--',
                 'lognormal, sd 6 kb',
             ),
-            (FixedLength(8000.0), ORANGE, '-', 'fixed 8 kb'),
+            (FixedLength(15_000.0), ORANGE, '-', 'fixed 15 kb'),
         )
         for dist, color, style, label in series:
             c = expected_relative_coverage(x, dist, min_length=cutoff)
             ax_b.plot(xk, c, color=color, linestyle=style, label=label)
         ax_b.set_xlabel('Distance from contig end (kb)')
         ax_b.set_title(
-            'b  Fragment lengths (cutoff 5 kb)', loc='left', fontweight='bold'
+            'b  Fragment lengths (cutoff ≥10 kb)', loc='left', fontweight='bold'
         )
         ax_b.legend(loc='lower right')
 
         for ax in (ax_a, ax_b):
-            ax.set_xlim(0, 30)
+            ax.set_xlim(0, 35)
             ax.set_ylim(0, 1.05)
 
         fig.savefig(out_path)
@@ -190,9 +192,9 @@ def plot_decay_with_ci(
     """
     import matplotlib.pyplot as plt
 
-    profile = LognormalLengths(mean=8000.0, sd=4000.0)
-    cutoff = 2500.0
-    window = 30_000
+    profile = LognormalLengths(mean=15_000.0, sd=3000.0)
+    cutoff = 10_000.0
+    window = 35_000
     result = bootstrap_coverage(
         chrom_length=1_000_000,
         depth=depth,

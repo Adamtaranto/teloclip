@@ -223,12 +223,14 @@
 
   // --- controls ----------------------------------------------------------
 
+  // Defaults mirror the PacBio HiFi-like library used in the static figures:
+  // lognormal 15 +/- 3 kb with a strict 10 kb lower-bound cutoff.
   var SLIDERS = [
     { key: 'depth', label: 'Interior depth', min: 5, max: 100, step: 1, value: 30, unit: '×' },
-    { key: 'mean', label: 'Mean fragment length', min: 1000, max: 30000, step: 500, value: 8000, unit: 'kb', kb: true },
-    { key: 'sd', label: 'Fragment length sd', min: 500, max: 15000, step: 250, value: 4000, unit: 'kb', kb: true },
-    { key: 'cutoff', label: 'Size-selection cutoff', min: 0, max: 25000, step: 500, value: 5000, unit: 'kb', kb: true },
-    { key: 'window', label: 'x-axis range', min: 10000, max: 100000, step: 5000, value: 30000, unit: 'kb', kb: true },
+    { key: 'mean', label: 'Mean fragment length', min: 1000, max: 30000, step: 500, value: 15000, unit: 'kb', kb: true },
+    { key: 'sd', label: 'Fragment length sd', min: 500, max: 15000, step: 250, value: 3000, unit: 'kb', kb: true },
+    { key: 'cutoff', label: 'Lower-bound cutoff (discard shorter)', min: 0, max: 25000, step: 500, value: 10000, unit: 'kb', kb: true },
+    { key: 'window', label: 'x-axis range', min: 10000, max: 100000, step: 5000, value: 35000, unit: 'kb', kb: true },
   ];
 
   function fmt(spec, value) {
