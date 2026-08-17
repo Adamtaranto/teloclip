@@ -28,6 +28,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   input. Only inputs already stripped of secondary alignments ran to completion.
 - **`teloclip extract` motif filtering**: a read whose left clip contained no motif skipped the
   whole record, so its right clip was never examined. Each end is now judged independently.
+- **Malformed SAM records no longer abort `filter` with a traceback.** A truncated line, a
+  non-numeric FLAG or an unparseable POS raised `ValueError`/`IndexError` from inside the parse
+  loop, discarding every record already processed — and a truncated final record is the ordinary
+  result of an interrupted upstream process. Bad records are now skipped, warned about (capped at
+  five listings so a broken file cannot bury the log) and counted in the exclusion summary. An
+  input where *no* record parses is still an error, since "kept 0 alignments" is also what a
+  clean file with no overhangs produces. `extract` already behaved this way.
 - **SAM and BAM supplied the wrong way round now fail with an actionable message.** A BAM piped
   into `filter` or `extract` surfaced as a bare `UnicodeDecodeError` traceback from inside the
   read loop. A SAM passed to `extend` was reported as a missing `.bai`, advising the user to run

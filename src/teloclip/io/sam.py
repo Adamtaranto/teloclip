@@ -15,11 +15,44 @@ from teloclip.core.overhang import (
     ends_from_sam_fields,
 )
 from teloclip.core.seqops import isMotifInClip
-from teloclip.io.formats import iter_sam_lines
+from teloclip.io.formats import InputFormatError, iter_sam_lines
 from teloclip.report.text import histogram
 
 if TYPE_CHECKING:
     from .extract import ExtractionStats
+
+
+# Malformed records are reported individually up to this many, then only
+# counted. A systematically broken input would otherwise bury every other
+# message in the log under one warning per line.
+MAX_MALFORMED_WARNINGS = 5
+
+
+def _warn_malformed(count: int, line: str, reason: str) -> None:
+    """
+    Log a skipped SAM record, without letting a broken file flood the log.
+
+    Parameters
+    ----------
+    count : int
+        How many malformed records have been seen so far, including this one.
+    line : str
+        The offending line, truncated in the message.
+    reason : str
+        Why the line could not be parsed.
+    """
+    if count > MAX_MALFORMED_WARNINGS:
+        if count == MAX_MALFORMED_WARNINGS + 1:
+            logging.warning(
+                'Further malformed SAM records will be counted but not listed. '
+                'The total is reported in the exclusion summary.'
+            )
+        return
+
+    excerpt = line.rstrip('\n')
+    if len(excerpt) > 120:
+        excerpt = excerpt[:117] + '...'
+    logging.warning(f'Skipping malformed SAM record ({reason}): {excerpt}')
 
 
 def processSamlines(
@@ -98,6 +131,10 @@ def processSamlines(
     SAM_CIGAR = 5
     SAM_SEQ = 9
 
+    # The SAM specification defines eleven mandatory fields. Anything shorter
+    # cannot be indexed safely, whatever else it might be.
+    SAM_MIN_FIELDS = 11
+
     # Start counters
     bothCount = 0
     keepCount = 0
@@ -114,6 +151,7 @@ def processSamlines(
     excluded_min_anchor = 0
     excluded_motifs = 0
     excluded_no_clip = 0
+    excluded_malformed = 0
 
     # Per-contig-end tallies of kept overhangs, for the closing summary.
     left_by_contig: Dict[str, int] = defaultdict(int)
@@ -125,15 +163,45 @@ def processSamlines(
         keepLine = False
         leftClip = False
         rightClip = False
+
+        # A blank line is not a record and not an error: a trailing newline at
+        # end of file is normal, and neither counting nor warning about it
+        # would tell the user anything.
+        if not line.strip():
+            continue
+
         # Write headers to stdout
-        if line[0][0] == '@':
+        if line.startswith('@'):
             sys.stdout.write(line)
             continue
         samlineCount += 1
-        samline = line.split('\t')
+        samline = line.rstrip('\n').split('\t')
+
+        # A truncated or non-SAM line is skipped rather than fatal. A run
+        # killed by one bad record part way through a large alignment file
+        # loses all the work before it, and a truncated final record is the
+        # ordinary result of an interrupted upstream process. The count is
+        # reported at the end so a systematically broken input is still
+        # obvious rather than silently producing an empty result.
+        if len(samline) < SAM_MIN_FIELDS:
+            excluded_malformed += 1
+            removeCount += 1
+            _warn_malformed(excluded_malformed, line, 'too few tab-separated fields')
+            continue
+
+        try:
+            flag = int(samline[SAM_FLAG])
+        except ValueError:
+            excluded_malformed += 1
+            removeCount += 1
+            _warn_malformed(
+                excluded_malformed,
+                line,
+                f'FLAG is not an integer: {samline[SAM_FLAG]!r}',
+            )
+            continue
 
         # Check for unmapped reads (FLAG & 4)
-        flag = int(samline[SAM_FLAG])
         if flag & 4:
             excluded_unmapped += 1
             removeCount += 1
@@ -155,7 +223,16 @@ def processSamlines(
                     + str(samline[SAM_RNAME])
                 )
 
-            ends = ends_from_sam_fields(samline, ContigLen)
+            # POS and CIGAR are only parsed here, so a record with a plausible
+            # field count but unparseable coordinates surfaces at this point
+            # rather than at the top of the loop.
+            try:
+                ends = ends_from_sam_fields(samline, ContigLen)
+            except (ValueError, IndexError) as error:
+                excluded_malformed += 1
+                removeCount += 1
+                _warn_malformed(excluded_malformed, line, str(error))
+                continue
 
             # Check if alignment meets minimum anchor requirement
             if ends.anchor < min_anchor:
@@ -259,6 +336,8 @@ def processSamlines(
         summary.append(f'Output {motifCount} alignments containing motif matches.')
 
     summary.append('Exclusion summary:')
+    if excluded_malformed:
+        summary.append(f'  - Malformed records (skipped): {excluded_malformed}')
     summary.append(f'  - Unmapped reads: {excluded_unmapped}')
     summary.append(f'  - Secondary alignments: {excluded_secondary}')
     summary.append(f'  - No usable soft clip: {excluded_no_clip}')
@@ -276,6 +355,16 @@ def processSamlines(
     summary.append(f'Total discarded: {removeCount} alignments after all filtering.')
 
     logging.info('\n'.join(summary))
+
+    # Every record unparseable is not a stray bad line, it is the wrong input.
+    # Reporting "0 alignments kept" would look like a successful run that found
+    # nothing, which is the same output as a clean file with no overhangs.
+    if samlineCount and excluded_malformed == samlineCount:
+        raise InputFormatError(
+            f'None of the {samlineCount} records read could be parsed as SAM. '
+            f'Check that the input is uncompressed SAM with the eleven '
+            f'mandatory fields, for example the output of `samtools view -h`.'
+        )
 
     # Report the per-contig-end distribution of what survived. A long right
     # tail here is the signature of a collapsed repeat or an organellar contig

@@ -4,7 +4,13 @@ Tests SAM/BAM processing functions including CIGAR string parsing,
 anchor validation, soft clip detection, and terminal position analysis.
 """
 
+import logging
+
+import pytest
+
+from teloclip.io.formats import InputFormatError
 from teloclip.io.sam import (
+    MAX_MALFORMED_WARNINGS,
     EnhancedStreamingSamFilter,
     processSamlines,
 )
@@ -526,3 +532,212 @@ class TestEnhancedStreamingSamFilterSecondary:
 
         assert len(results) == 1
         assert results[0]['read_name'] == 'primary_read'
+
+
+class TestMalformedRecords:
+    """
+    Handling of SAM records that cannot be parsed.
+
+    A filter reading a stream has to decide what a bad record means. Failing
+    the whole run throws away every record already processed, and a truncated
+    final record is the ordinary result of an interrupted upstream process, so
+    individual bad records are skipped and counted. An input where *nothing*
+    parses is a different situation: that is the wrong file, and reporting
+    "kept 0" would be indistinguishable from a clean file with no overhangs.
+    """
+
+    CONTIGS = {'contig01': 1000, 'contig02': 2000, 'contig03': 1500}
+
+    def run(self, lines, **kwargs):
+        """
+        Run processSamlines over the given lines and return its counts.
+
+        Parameters
+        ----------
+        lines : list of str
+            SAM lines to process.
+        **kwargs
+            Overrides passed through to processSamlines.
+
+        Returns
+        -------
+        dict
+            Processing counts.
+        """
+        params = {
+            'contig_dict': self.CONTIGS,
+            'motif_list': [],
+            'max_break': 50,
+            'min_clip': 1,
+            'min_anchor': 0,
+            'return_counts': True,
+        }
+        params.update(kwargs)
+        return processSamlines(samfile=lines, **params)
+
+    def test_short_record_is_skipped_not_fatal(self, sample_sam_alignments):
+        """A record with too few fields is dropped and the run continues."""
+        lines = ['@HD\tVN:1.0'] + sample_sam_alignments + ['truncated\tline']
+
+        counts = self.run(lines)
+
+        assert counts['keepCount'] > 0
+
+    def test_non_integer_flag_is_skipped(self, sample_sam_alignments):
+        """
+        A FLAG that is not a number is dropped rather than raising ValueError.
+
+        This is what a corrupted or mis-delimited record looks like in
+        practice, and it used to abort the run with a bare traceback.
+        """
+        bad = 'readX\tNOTANUMBER\tcontig01\t1\t60\t20S100M\t*\t0\t0\tACGT\t*'
+        lines = ['@HD\tVN:1.0'] + sample_sam_alignments + [bad]
+
+        counts = self.run(lines)
+
+        assert counts['keepCount'] > 0
+
+    def test_non_integer_position_is_skipped(self, sample_sam_alignments):
+        """
+        An unparseable POS is caught where the coordinates are first read.
+
+        The field count and FLAG are both fine here, so this record gets past
+        the earlier checks and has to be handled at the point of use.
+        """
+        bad = 'readY\t0\tcontig01\tNOTAPOS\t60\t20S100M\t*\t0\t0\tACGT\t*'
+        lines = ['@HD\tVN:1.0'] + sample_sam_alignments + [bad]
+
+        counts = self.run(lines)
+
+        assert counts['keepCount'] > 0
+
+    def test_good_records_after_a_bad_one_are_still_processed(
+        self, sample_sam_alignments
+    ):
+        """
+        A bad record early in the stream does not cost the ones behind it.
+
+        This is the whole point of skipping rather than failing: on a large
+        alignment file, aborting part way through discards all the work done
+        so far.
+        """
+        lines = (
+            ['@HD\tVN:1.0']
+            + ['truncated\tline']
+            + sample_sam_alignments
+            + ['another\tbad\tone']
+        )
+
+        with_bad = self.run(lines)
+        without_bad = self.run(['@HD\tVN:1.0'] + sample_sam_alignments)
+
+        assert with_bad['keepCount'] == without_bad['keepCount']
+
+    def test_blank_lines_are_not_records(self, sample_sam_alignments):
+        """
+        Empty lines are ignored rather than counted or warned about.
+
+        A trailing newline at end of file is normal; treating it as a
+        malformed record would put a warning on almost every run.
+        """
+        lines = ['@HD\tVN:1.0'] + sample_sam_alignments + ['', '   ', '\n']
+
+        counts = self.run(lines)
+        baseline = self.run(['@HD\tVN:1.0'] + sample_sam_alignments)
+
+        assert counts['samlineCount'] == baseline['samlineCount']
+
+    def test_wholly_unparseable_input_is_an_error(self):
+        """
+        An input where no record parses raises rather than reporting zero.
+
+        "Kept 0 alignments" is also what a clean file with no overhangs
+        produces, so silently returning it would hide the wrong-file case
+        entirely.
+        """
+        lines = ['not sam at all', 'nor is this', 'or this']
+
+        with pytest.raises(
+            InputFormatError, match='None of the 3 records read could be parsed'
+        ):
+            self.run(lines)
+
+    def test_headers_alone_are_not_an_error(self):
+        """
+        A file of headers with no alignments is empty, not malformed.
+
+        `samtools view -h` on an empty region produces exactly this, and it is
+        a legitimate no-op rather than a broken input.
+        """
+        counts = self.run(['@HD\tVN:1.0', '@SQ\tSN:contig01\tLN:1000'])
+
+        assert counts['samlineCount'] == 0
+        assert counts['keepCount'] == 0
+
+    def test_per_record_warnings_are_capped(self, caplog):
+        """
+        A systematically broken file does not emit one warning per line.
+
+        Without a cap, a large mis-delimited file buries every other message
+        in the log, including the summary that would explain what happened.
+
+        Parameters
+        ----------
+        caplog : pytest.LogCaptureFixture
+            Pytest log capture fixture.
+        """
+        bad = 'readZ\t0\tcontig01\t1\t60\t20S100M\t*\t0\t0\tACGT\t*'
+        lines = (
+            ['@HD\tVN:1.0']
+            + ['truncated\tline'] * 40
+            + [bad]  # one good record, so the all-bad guard does not fire
+        )
+
+        with caplog.at_level(logging.WARNING):
+            self.run(lines)
+
+        listed = sum(
+            1 for r in caplog.records if 'Skipping malformed' in r.getMessage()
+        )
+        assert listed == MAX_MALFORMED_WARNINGS
+        assert any('Further malformed' in r.getMessage() for r in caplog.records)
+
+    def test_malformed_total_appears_in_the_summary(self, caplog):
+        """
+        The count of skipped records is reported even when not each is listed.
+
+        Parameters
+        ----------
+        caplog : pytest.LogCaptureFixture
+            Pytest log capture fixture.
+        """
+        bad = 'readZ\t0\tcontig01\t1\t60\t20S100M\t*\t0\t0\tACGT\t*'
+        lines = ['@HD\tVN:1.0'] + ['truncated\tline'] * 12 + [bad]
+
+        with caplog.at_level(logging.INFO):
+            self.run(lines)
+
+        assert 'Malformed records (skipped): 12' in caplog.text
+
+    def test_long_records_are_truncated_in_the_warning(self, caplog):
+        """
+        A very long bad line is excerpted rather than logged whole.
+
+        Parameters
+        ----------
+        caplog : pytest.LogCaptureFixture
+            Pytest log capture fixture.
+        """
+        bad = 'x' * 5000
+        good = 'readZ\t0\tcontig01\t1\t60\t20S100M\t*\t0\t0\tACGT\t*'
+
+        with caplog.at_level(logging.WARNING):
+            self.run(['@HD\tVN:1.0', bad, good])
+
+        message = next(
+            r.getMessage()
+            for r in caplog.records
+            if 'Skipping malformed' in r.getMessage()
+        )
+        assert len(message) < 300
+        assert '...' in message
