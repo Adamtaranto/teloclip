@@ -15,6 +15,7 @@ from teloclip.core.overhang import (
     ends_from_sam_fields,
 )
 from teloclip.core.seqops import isMotifInClip
+from teloclip.io.formats import iter_sam_lines
 from teloclip.report.text import histogram
 
 if TYPE_CHECKING:
@@ -118,8 +119,9 @@ def processSamlines(
     left_by_contig: Dict[str, int] = defaultdict(int)
     right_by_contig: Dict[str, int] = defaultdict(int)
 
-    # Read SAM from stdin
-    for line in samfile:
+    # Read SAM from stdin. iter_sam_lines converts a mid-stream decoding
+    # failure into a message naming BAM as the likely cause.
+    for line in iter_sam_lines(samfile, command='filter'):
         keepLine = False
         leftClip = False
         rightClip = False
@@ -442,7 +444,7 @@ class EnhancedStreamingSamFilter:
             - motif_counts: dict, motif occurrence counts (if patterns provided)
             - overhang_seq: str, overhanging sequence portion
         """
-        for line in self.samfile:
+        for line in iter_sam_lines(self.samfile, command='extract'):
             # Skip header rows
             if line.startswith('@'):
                 continue

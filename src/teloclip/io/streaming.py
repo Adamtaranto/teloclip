@@ -13,6 +13,8 @@ from Bio.Seq import Seq
 from Bio.SeqRecord import SeqRecord
 import pysam
 
+from .formats import InputFormatError, ensure_binary_bam
+
 
 class StreamingGenomeProcessor:
     """
@@ -286,6 +288,15 @@ def validate_indexed_files(
             False,
             f'FASTA index not found: {fai_path}. Create with: samtools faidx {fasta_path}',
         )
+
+    # Confirm the alignment file really is a BAM before looking for its index.
+    # Checked in this order deliberately: a SAM passed here has no .bai and
+    # never will, so reporting the missing index first would advise the user to
+    # run `samtools index` on a file that cannot be indexed.
+    try:
+        ensure_binary_bam(bam_path)
+    except InputFormatError as error:
+        return False, str(error)
 
     # Check BAM index exists
     bai_path = Path(str(bam_path) + '.bai')
