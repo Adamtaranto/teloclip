@@ -128,7 +128,7 @@ def plot_decay_families(out_path: str) -> None:
         cutoffs = (0.0, 10_000.0, 15_000.0, 20_000.0)
         for cutoff, color in zip(cutoffs, CUTOFF_COLORS):
             c = expected_relative_coverage(x, profile, min_length=cutoff)
-            label = 'no cutoff' if cutoff == 0 else f'cutoff ≥{cutoff / 1000:g} kb'
+            label = 'no cutoff' if cutoff == 0 else f'discard ≤{cutoff / 1000:g} kb'
             ax_a.plot(xk, c, color=color, label=label)
         ax_a.legend(loc='lower right')
         ax_a.set_xlabel('Distance from contig end (kb)')
@@ -157,7 +157,7 @@ def plot_decay_families(out_path: str) -> None:
             ax_b.plot(xk, c, color=color, linestyle=style, label=label)
         ax_b.set_xlabel('Distance from contig end (kb)')
         ax_b.set_title(
-            'b  Fragment lengths (cutoff ≥10 kb)', loc='left', fontweight='bold'
+            'b  Fragment lengths (discard ≤10 kb)', loc='left', fontweight='bold'
         )
         ax_b.legend(loc='lower right')
 
@@ -245,7 +245,7 @@ def plot_decay_with_ci(
         ax.set_ylim(0, None)
         ax.set_title(
             f'Lognormal fragments {profile.mean / 1000:g} ± {profile.sd / 1000:g} kb'
-            f' · cutoff ≥{cutoff / 1000:g} kb · depth {depth:g}×',
+            f' · discard ≤{cutoff / 1000:g} kb · depth {depth:g}×',
             loc='left',
             fontweight='bold',
         )
