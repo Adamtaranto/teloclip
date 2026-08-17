@@ -1,8 +1,8 @@
-"""Tests for the teloclip.motifs module."""
+"""Tests for the teloclip.core.motifs module."""
 
 import pytest
 
-from teloclip.motifs import (
+from teloclip.core.motifs import (
     check_sequence_for_patterns,
     construct_regex_pattern,
     count_continuous_runs,

@@ -7,7 +7,69 @@ import click
 from teloclip._version import __version__
 
 
+class _LazyGroup(click.Group):
+    """
+    Click group that registers its sub-commands on first use.
+
+    Registration used to run as an import side effect, which meant that merely
+    importing :mod:`teloclip.cli` pulled in pysam, pyfaidx and biopython and
+    mutated the group. Deferring it to the first ``get_command`` or
+    ``list_commands`` keeps the import cheap and side-effect free while leaving
+    the observable CLI behaviour unchanged.
+    """
+
+    # Class-level default. _ensure_registered shadows it with an instance
+    # attribute, which avoids overriding __init__ just to set a flag.
+    _registered = False
+
+    def _ensure_registered(self) -> None:
+        """Import and attach the sub-commands, at most once."""
+        if not self._registered:
+            # Set first: register_commands() adds to this group, and a failure
+            # part way through must not cause a second attempt to re-add the
+            # commands that did succeed.
+            self._registered = True
+            register_commands()
+
+    def get_command(self, ctx, cmd_name):
+        """
+        Look up a sub-command by name, registering the set if needed.
+
+        Parameters
+        ----------
+        ctx : click.Context
+            Click context object.
+        cmd_name : str
+            Name of the sub-command being resolved.
+
+        Returns
+        -------
+        click.Command or None
+            The command, or None if no sub-command has that name.
+        """
+        self._ensure_registered()
+        return super().get_command(ctx, cmd_name)
+
+    def list_commands(self, ctx):
+        """
+        List sub-command names, registering the set if needed.
+
+        Parameters
+        ----------
+        ctx : click.Context
+            Click context object.
+
+        Returns
+        -------
+        list of str
+            Sorted sub-command names.
+        """
+        self._ensure_registered()
+        return super().list_commands(ctx)
+
+
 @click.group(
+    cls=_LazyGroup,
     help='A tool for the recovery of unassembled telomeres from soft-clipped read alignments.',
     invoke_without_command=True,
 )
@@ -68,9 +130,4 @@ def register_commands():
 
 
 if __name__ == '__main__':
-    # Register commands before running CLI
-    register_commands()
     main()
-else:
-    # Register commands when module is imported
-    register_commands()

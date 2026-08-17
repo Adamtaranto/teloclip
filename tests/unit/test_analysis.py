@@ -1,5 +1,5 @@
 """
-Unit tests for teloclip.analysis module.
+Unit tests for teloclip.core.analysis module.
 
 Tests for overhang statistics collection, outlier detection,
 and homopolymer analysis functionality.
@@ -7,7 +7,7 @@ and homopolymer analysis functionality.
 
 import pytest
 
-from teloclip.analysis import (
+from teloclip.core.analysis import (
     ContigStats,
     OverhangInfo,
     calculate_overhang_statistics,
@@ -447,7 +447,7 @@ class TestDualEndOverhang:
 
     def setup_method(self):
         """Set up common test data."""
-        from teloclip.streaming_analysis import process_single_contig_extension
+        from teloclip.core.streaming_analysis import process_single_contig_extension
 
         self.process_extension = process_single_contig_extension
 

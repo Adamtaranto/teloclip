@@ -1,8 +1,8 @@
-"""Unit tests for the teloclip.reporting formatting helpers."""
+"""Unit tests for the teloclip.report.text formatting helpers."""
 
 import pytest
 
-from teloclip.reporting import fmt_delta, fmt_float, fmt_int, kv_table, md_table
+from teloclip.report.text import fmt_delta, fmt_float, fmt_int, kv_table, md_table
 
 
 def test_fmt_int_adds_thousands_separators():

@@ -8,8 +8,8 @@ alignment, so the offsets are pinned explicitly here.
 
 import re
 
-from teloclip.analysis import ContigStats, OverhangInfo
-from teloclip.html_report import render_contig_panels, render_html_report
+from teloclip.core.analysis import ContigStats, OverhangInfo
+from teloclip.report.html import render_contig_panels, render_html_report
 
 CONTIG_LEN = 1000
 

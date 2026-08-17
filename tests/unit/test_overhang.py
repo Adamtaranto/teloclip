@@ -9,7 +9,7 @@ precisely what this module exists to prevent.
 
 import pytest
 
-from teloclip.overhang import (
+from teloclip.core.overhang import (
     REASON_MAX_BREAK,
     REASON_MIN_ANCHOR,
     REASON_MIN_CLIP,

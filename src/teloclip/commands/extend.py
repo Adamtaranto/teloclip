@@ -20,23 +20,23 @@ import click
 import pyfaidx
 import pysam
 
-from ..analysis import (
+from ..core.analysis import (
     ContigStats,
     calculate_overhang_statistics,
     flag_anomalous_overhang_coverage,
 )
-from ..motifs import make_fuzzy_motif_regex, make_motif_regex
-from ..reporting import fmt_delta, fmt_float, fmt_int, histogram, kv_table, md_table
-from ..seqops import read_fai, revComp
-from ..streaming_analysis import (
+from ..core.motifs import make_fuzzy_motif_regex, make_motif_regex
+from ..core.seqops import read_fai, revComp
+from ..core.streaming_analysis import (
     process_single_contig_extension,
     stream_contigs_for_extension,
 )
-from ..streaming_io import (
+from ..io.streaming import (
     BufferedContigWriter,
     StreamingGenomeProcessor,
     validate_indexed_files,
 )
+from ..report.text import fmt_delta, fmt_float, fmt_int, histogram, kv_table, md_table
 
 
 def validate_output_directories(output_fasta: Path, stats_report: Path) -> None:
@@ -1526,7 +1526,7 @@ def extend(
                 )
 
             if html_report:
-                from ..html_report import render_contig_panels
+                from ..report.html import render_contig_panels
 
                 left_flags = set(anomalous['left_outliers'])
                 right_flags = set(anomalous['right_outliers'])
@@ -1633,7 +1633,7 @@ def extend(
 
         if html_report:
             from .._version import __version__
-            from ..html_report import render_html_report
+            from ..report.html import render_html_report
 
             logging.info(f'Writing HTML report to {html_report}...')
             html_report.parent.mkdir(parents=True, exist_ok=True)

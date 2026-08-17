@@ -1,10 +1,10 @@
-"""Unit tests for teloclip.samops module.
+"""Unit tests for teloclip.io.sam module.
 
 Tests SAM/BAM processing functions including CIGAR string parsing,
 anchor validation, soft clip detection, and terminal position analysis.
 """
 
-from teloclip.samops import (
+from teloclip.io.sam import (
     CIGARinfo,
     EnhancedStreamingSamFilter,
     SAMinfo,
@@ -213,7 +213,7 @@ class TestProcessSamlinesMaxBreakFilter:
     """Test max_break and min_clip filtering in processSamlines.
 
     Acceptance is symmetric across both contig ends, in 1-based inclusive
-    coordinates (see teloclip.overhang)::
+    coordinates (see teloclip.core.overhang)::
 
         aln_end  = POS + reference_span - 1
         gap      = aln_start - 1        (left)  /  contig_len - aln_end  (right)

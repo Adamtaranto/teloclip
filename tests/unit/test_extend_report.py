@@ -2,8 +2,8 @@
 
 import pytest
 
-from teloclip.analysis import ContigStats, OverhangInfo
 from teloclip.commands.extend import generate_extension_report
+from teloclip.core.analysis import ContigStats, OverhangInfo
 
 
 def make_overhang(length, is_left, contig='contig01', read='read1'):

@@ -9,10 +9,10 @@ from pathlib import Path
 
 import click
 
+from teloclip.core.motifs import make_fuzzy_motif_regex, make_motif_regex
+from teloclip.core.seqops import addRevComplement, read_fai
+from teloclip.io.sam import processSamlines
 from teloclip.logs import init_logging
-from teloclip.motifs import make_fuzzy_motif_regex, make_motif_regex
-from teloclip.samops import processSamlines
-from teloclip.seqops import addRevComplement, read_fai
 
 
 @click.command(

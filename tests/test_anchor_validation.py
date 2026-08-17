@@ -1,6 +1,6 @@
 """Tests for anchor validation functions in samops module."""
 
-from teloclip.samops import (
+from teloclip.io.sam import (
     calculate_aligned_bases,
     checkClips,
     lenCIGAR,

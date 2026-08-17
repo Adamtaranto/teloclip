@@ -7,7 +7,7 @@ are the ones a flat offset gets wrong: deletions, insertions, and insertions
 introduced by one read shifting every other row.
 """
 
-from teloclip.alignment_layout import (
+from teloclip.report.layout import (
     build_columns,
     place_read,
     render_reference,

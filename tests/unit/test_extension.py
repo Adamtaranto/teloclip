@@ -1,13 +1,13 @@
 """
-Unit tests for teloclip.extension module.
+Unit tests for teloclip.core.extension module.
 
 Tests for contig extension algorithms and position calculation.
 """
 
 import pytest
 
-from teloclip.analysis import OverhangInfo
-from teloclip.extension import (
+from teloclip.core.analysis import OverhangInfo
+from teloclip.core.extension import (
     apply_contig_extension,
     calculate_extension_position,
     extend_contig,

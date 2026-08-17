@@ -1,4 +1,4 @@
-"""Unit tests for teloclip.seqops module.
+"""Unit tests for teloclip.core.seqops module.
 
 Tests sequence operation functions including FASTA I/O,
 reverse complement, and sequence filtering utilities.
@@ -6,7 +6,7 @@ reverse complement, and sequence filtering utilities.
 
 from unittest.mock import mock_open, patch
 
-from teloclip.seqops import (
+from teloclip.core.seqops import (
     addRevComplement,
     filterList,
     isMotifInClip,
@@ -117,7 +117,7 @@ class TestRevComp:
 class TestReadFai:
     """Test FAI index file reading function."""
 
-    @patch('teloclip.seqops.isfile')
+    @patch('teloclip.core.seqops.isfile')
     @patch('builtins.open', new_callable=mock_open)
     def test_read_fai_simple(self, mock_file, mock_isfile):
         """Test reading simple FAI file."""
@@ -132,7 +132,7 @@ class TestReadFai:
         expected = {'chr1': 1000, 'chr2': 2000}
         assert result == expected
 
-    @patch('teloclip.seqops.isfile')
+    @patch('teloclip.core.seqops.isfile')
     @patch('builtins.open', new_callable=mock_open)
     def test_read_fai_empty(self, mock_file, mock_isfile):
         """Test reading empty FAI file."""
@@ -143,7 +143,7 @@ class TestReadFai:
 
         assert result == {}
 
-    @patch('teloclip.seqops.isfile')
+    @patch('teloclip.core.seqops.isfile')
     @patch('builtins.open', new_callable=mock_open)
     def test_read_fai_malformed_line(self, mock_file, mock_isfile):
         """Test reading FAI with malformed line."""

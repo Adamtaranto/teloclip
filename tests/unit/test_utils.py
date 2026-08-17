@@ -12,7 +12,7 @@ import click
 import pytest
 
 from teloclip.commands.extend import validate_output_directories
-from teloclip.extract_io import create_fasta_index
+from teloclip.io.extract import create_fasta_index
 from teloclip.utils import isfile
 
 

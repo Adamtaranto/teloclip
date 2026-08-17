@@ -1,7 +1,7 @@
 """
 Benchmarks for the canonical overhang predicate.
 
-``teloclip.overhang.classify`` runs once per alignment in every sub-command, so
+``teloclip.core.overhang.classify`` runs once per alignment in every sub-command, so
 it sits on the hottest path in the codebase. Its cost is dominated by CIGAR
 parsing, which is regex-driven, so the parsing helpers are measured separately
 to make a regression attributable.
@@ -9,7 +9,7 @@ to make a regression attributable.
 
 import pytest
 
-from teloclip.overhang import (
+from teloclip.core.overhang import (
     anchor_length,
     cigar_ops_from_string,
     cigar_ops_from_tuples,

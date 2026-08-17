@@ -1,9 +1,9 @@
-"""Unit tests for teloclip.motifs module.
+"""Unit tests for teloclip.core.motifs module.
 
 Tests motif pattern generation and sequence matching functions.
 """
 
-from teloclip.motifs import (
+from teloclip.core.motifs import (
     check_sequence_for_patterns,
     construct_regex_pattern,
     count_continuous_runs,

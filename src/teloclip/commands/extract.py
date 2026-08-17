@@ -6,14 +6,14 @@ from typing import Dict
 
 import click
 
-from ..extract_io import ExtractionStats
-from ..logs import init_logging
-from ..motifs import make_fuzzy_motif_regex, make_motif_regex
-from ..samops import (
+from ..core.motifs import make_fuzzy_motif_regex, make_motif_regex
+from ..core.seqops import read_fai, revComp
+from ..io.extract import ExtractionStats
+from ..io.sam import (
     EnhancedStreamingSamFilter,
     enhanced_streaming_split_by_contig,
 )
-from ..seqops import read_fai, revComp
+from ..logs import init_logging
 
 
 @click.command(

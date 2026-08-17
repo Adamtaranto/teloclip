@@ -1,4 +1,4 @@
-"""Unit tests for teloclip.streaming_io module.
+"""Unit tests for teloclip.io.streaming module.
 
 Tests file validation and streaming utilities.
 """
@@ -6,7 +6,7 @@ Tests file validation and streaming utilities.
 from pathlib import Path
 import tempfile
 
-from teloclip.streaming_io import validate_indexed_files
+from teloclip.io.streaming import validate_indexed_files
 
 
 class TestValidateIndexedFiles:

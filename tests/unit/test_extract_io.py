@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from teloclip.extract_io import (
+from teloclip.io.extract import (
     EfficientSequenceWriter,
     ExtractionStats,
     MultiFileSequenceWriter,
