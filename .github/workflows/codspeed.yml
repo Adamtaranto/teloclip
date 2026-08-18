@@ -25,7 +25,7 @@ jobs:
       - name: Install package and benchmark dependencies
         run: |
           python -m pip install --upgrade pip
-          pip install '.[bench]'
+          pip install '.[bench,model]'
       # Verify the benchmarks still run even when CodSpeed is not configured,
       # so a broken benchmark is caught rather than silently skipped along with
       # the upload.

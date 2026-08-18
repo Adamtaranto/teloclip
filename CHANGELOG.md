@@ -146,6 +146,26 @@ accepted:
   scatter of overhang depth against median overhang length, which separates the cases the
   one-dimensional charts cannot: deep but short, long but shallow, or high on both. Clicking any
   mark selects that contig in all three charts. Both ship the usual table view.
+- **A statistical model of terminal coverage decay**, in a new optional `teloclip.model`
+  subpackage (`pip install 'teloclip[model]'`, keeps the core install numpy-free). The core
+  problem teloclip addresses — coverage dying towards linear contig ends because size
+  selection discards the short fragments that would cover them — now has a closed-form
+  expected-coverage curve for fixed and lognormal fragment lengths under a lower-bound
+  cutoff, a generic quadrature path for arbitrary length distributions, a vectorised
+  Monte-Carlo fragmentation simulator, and bootstrap confidence bands. Covered by unit tests
+  that cross-check the closed form, the quadrature and the simulation against each other,
+  and by CodSpeed benchmarks.
+- **A "Why coverage dies at contig ends" documentation page** under *Interpreting results*:
+  the derivation (MathJax is now enabled site-wide via `pymdownx.arithmatex`), Nature-style
+  figures around a PacBio HiFi-like library (lognormal 15 ± 3 Kbp, discard ≤10 Kbp) showing
+  the decay shape, the yield cost of size selection against the unselected library, and a
+  simulated bootstrap band validating the analytic curve — regenerable with
+  `scripts/generate_model_figures.py` — plus practical guidance on depth planning and
+  read-length filters.
+- **An interactive coverage-decay explorer** embedded in that page: sliders for depth,
+  fragment-length distribution and cutoff drive a client-side evaluation of the analytic
+  curve (self-contained vanilla JS and inline SVG, no external libraries), styled with the
+  extend-report palette and following the site's light/dark theme.
 
 ### Internal
 

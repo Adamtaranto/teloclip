@@ -28,7 +28,7 @@ jobs:
         run: |
           conda install -y -c conda-forge -c bioconda minimap2 samtools pip
           python -m pip install --upgrade pip setuptools wheel
-          python -m pip install --retries 10 --timeout 180 --prefer-binary --progress-bar off --no-cache-dir '.[test]'
+          python -m pip install --retries 10 --timeout 180 --prefer-binary --progress-bar off --no-cache-dir '.[test,model]'
         shell: bash -l {0}
       # Verify pip installation
       - name: Verify Python/pip
