@@ -456,11 +456,15 @@ Teloclip has been used to recover and extend telomeric sequences in a wide varie
 
 - Jaiswal, R.K., Garibo Domingo, T., Grunchec, H., Singh, K., Pirooznia, M., Elhaik, E. and Cohn, M., **2025**. Subtelomeric elements provide stability to short telomeres in telomerase-negative cells of the budding yeast _Naumovozyma castellii_. Current Genetics, 71(1), p.19. 🍄
 
+- Liu, R., Yang, X., Zhang, Y., Bai, L., Ma, X., He, Z., Li, K., Wang, Q., Xu, L., Zheng, M. and Pan, Z., **2025**. A telomere-to-telomere pangenome reveals structural variations as key drivers of complex traits in chickens. 🐓 
+
 - Liu, Y., Chen, Y., Ren, Z. et al. Two haplotype-resolved telomere-to-telomere genome assemblies of _Xanthoceras sorbifolium_. Sci Data 12, 791 (**2025**). 🌿
 
 - Loos, A., Doykova, E., Qian, J., Kümmel, F., Ibrahim, H., Kiss, L., Panstruga, R. and Kusch, S., **2025**. Saprotrophic _Arachnopeziza_ Species as New Resources to Study the Obligate Biotrophic Lifestyle of Powdery Mildew Fungi. Molecular Ecology Resources, p.e70045. 🍄
 
 - Oberti, H., Sessa, L., Oliveira‐Rizzo, C., Di Paolo, A., Sanchez‐Vallet, A., Seidl, M.F. and Abreo, E., **2025**. Novel genomic features in entomopathogenic fungus _Beauveria bassiana_ ILB308: accessory genomic regions and putative virulence genes involved in the infection process of soybean pest _Piezodorus guildinii_. Pest Management Science, 81(4), pp.2323-2336. 🍄
+
+- Tian, Y., Li, K., Li, T., Gai, W., Zhou, J., Deng, X.W., Xue, Y., Deng, Y., He, H. and Zhang, X., **2025**. The near-complete genome assembly of pickling cucumber and its mutation library illuminate cucumber functional genomics and genetic improvement. Molecular Plant, 18(4), pp.551-554. 🥒
 
 - Wan, L., Deng, C., Liu, B. et al. Telomere-to-telomere genome assemblies of three silkworm strains with long-term pupal characteristics. Sci Data 12, 501 (**2025**). 🐛
 
