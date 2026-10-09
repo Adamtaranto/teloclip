@@ -10,8 +10,16 @@ updates:
     # Check for workflow files in the .github/workflows directory
     directory: "/"
     schedule:
-      interval: "monthly" # Check for updates every month
+      interval: "monthly"
+    groups:
+      monthly-batch:
+        patterns:
+          - "*"
   - package-ecosystem: "pre-commit"
     directory: "/"
     schedule:
-      interval: "weekly" # Choose daily, weekly, or monthly
+      interval: "monthly"
+    groups:
+      monthly-batch:
+        patterns:
+          - "*"
